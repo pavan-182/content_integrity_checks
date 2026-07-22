@@ -1,0 +1,98 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE article PUBLIC "-//NLM//DTD JATS (Z39.96) Journal Publishing DTD v1.3 20210610//EN" "JATS-journalpublishing1-3.dtd">
+<article xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xlink="http://www.w3.org/1999/xlink" dtd-version="1.3">
+  <front>
+    <journal-meta>
+      <journal-id journal-id-type="hwp">ascomtg</journal-id>
+      <journal-id journal-id-type="pmc">ascomtg</journal-id>
+      <journal-id journal-id-type="publisher-id">ASCOMTG</journal-id>
+      <journal-title-group>
+        <journal-title>Journal of Clinical Oncology</journal-title>
+        <abbrev-journal-title>ASCO MEETING ABSTRACTS</abbrev-journal-title>
+      </journal-title-group>
+      <issn pub-type="ppub">0732-183X</issn>
+      <issn pub-type="epub">1527-7755</issn>
+      <publisher>
+        <publisher-name>American Society of Clinical Oncology</publisher-name>
+      </publisher>
+    </journal-meta>
+    <article-meta>
+      <article-id pub-id-type="custom" custom-type="meeting-id">335</article-id>
+      <article-id pub-id-type="custom" custom-type="session-id">18004</article-id>
+      <article-id pub-id-type="custom" custom-type="session-participation-id">290018</article-id>
+      <article-id pub-id-type="custom" custom-type="temporary-abstract-id">900018</article-id>
+      <article-id pub-id-type="custom" custom-type="abstract-id">synT018</article-id>
+      <article-id pub-id-type="doi">10.1200/JCO.2026.44.16_suppl.synT018</article-id>
+      <article-categories>
+        <subj-group subj-group-type="heading">
+          <subject>Gastrointestinal Cancer—Colorectal</subject>
+        </subj-group>
+        <series-title>2026 ASCO Annual Meeting (May 29 - June 2, 2026)</series-title>
+        <series-text>Publication Only</series-text>
+      </article-categories>
+      <title-group>
+        <article-title>Longitudinal patient-reported neuropathy during oxaliplatin-based therapy for colorectal cancer.</article-title>
+      </title-group>
+      <contrib-group>
+        <contrib id="C900180" contrib-type="presenter">
+          <name>
+            <surname>Martins</surname>
+            <given-names>Lucas</given-names>
+          </name>
+          <xref ref-type="aff" rid="A900180"/>
+        </contrib>
+        <contrib id="C900181" contrib-type="author">
+          <name>
+            <surname>Nair</surname>
+            <given-names>Priya</given-names>
+          </name>
+          <xref ref-type="aff" rid="A900181"/>
+        </contrib>
+        <contrib id="C900182" contrib-type="author">
+          <name>
+            <surname>Lee</surname>
+            <given-names>Hannah</given-names>
+          </name>
+          <xref ref-type="aff" rid="A900182"/>
+        </contrib>
+        <aff id="A900180">Pacific Precision Medicine Institute, San Francisco, CA</aff>
+        <aff id="A900181">Great Lakes Cancer Consortium, Detroit, MI</aff>
+        <aff id="A900182">Northbridge Cancer Institute, Boston, MA</aff>
+      </contrib-group>
+      <author-notes>
+        <fn fn-type="conflict">
+          <p>
+            <ext-link ext-link-type="uri" xlink:href="https://coi.asco.org/Report/ViewAbstractCOI?id=900018">Abstract Disclosures</ext-link>
+          </p>
+        </fn>
+      </author-notes>
+      <pub-date pub-type="ppub">
+        <day/>
+        <month/>
+        <year/>
+      </pub-date>
+      <fpage>synT018</fpage>
+      <lpage>synT018</lpage>
+      <permissions>
+        <copyright-statement>© 2026 by American Society of Clinical Oncology</copyright-statement>
+        <copyright-year>2026</copyright-year>
+      </permissions>
+      <abstract>
+        <p>
+          <bold>synT018</bold>
+        </p>
+        <p><bold>Background: </bold>Patient-reported peripheral neuropathy is common among patients receiving oxaliplatin-based therapy for colorectal cancer, but its trajectory during and after treatment is not consistently captured in routine oncology practice. We characterized longitudinal symptom burden and factors associated with clinically meaningful worsening. <bold>Methods: </bold>Participants completed the EORTC QLQ-CIPN20 at baseline, cycle 4, end of treatment, and 3 months after treatment. Mixed-effects models evaluated change over time, and multivariable regression assessed baseline clinical and patient-reported predictors. A prespecified threshold was used to define clinically meaningful worsening from baseline. <bold>Results: </bold>The cohort included 188 patients. Mean symptom score was 6.4 at baseline, reached 32.7 at the period of greatest burden, and was 24.6 at the final assessment. Clinically meaningful worsening occurred in 42% of participants. In adjusted analysis, higher cumulative oxaliplatin dose was independently associated with worse longitudinal symptom scores (β=0.28, p=&lt;0.001). Completion rates exceeded 80% at each scheduled assessment. <bold>Conclusions: </bold>Peripheral neuropathy changed substantially over the treatment course among patients receiving oxaliplatin-based therapy for colorectal cancer. Routine longitudinal assessment may identify patients who would benefit from earlier supportive care, particularly those with higher cumulative oxaliplatin dose. Research Sponsor: Supportive Care Research Program.</p>
+      </abstract>
+      <kwd-group kwd-group-type="subject_thes_terms">
+        <kwd>283-217</kwd>
+        <kwd>261-492</kwd>
+        <kwd>3282-206</kwd>
+      </kwd-group>
+      <kwd-group kwd-group-type="subject_thes_hits">
+        <kwd>4</kwd>
+        <kwd>3</kwd>
+        <kwd>2</kwd>
+      </kwd-group>
+    </article-meta>
+  </front>
+</article>

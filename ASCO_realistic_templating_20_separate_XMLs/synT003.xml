@@ -1,0 +1,98 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE article PUBLIC "-//NLM//DTD JATS (Z39.96) Journal Publishing DTD v1.3 20210610//EN" "JATS-journalpublishing1-3.dtd">
+<article xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xlink="http://www.w3.org/1999/xlink" dtd-version="1.3">
+  <front>
+    <journal-meta>
+      <journal-id journal-id-type="hwp">ascomtg</journal-id>
+      <journal-id journal-id-type="pmc">ascomtg</journal-id>
+      <journal-id journal-id-type="publisher-id">ASCOMTG</journal-id>
+      <journal-title-group>
+        <journal-title>Journal of Clinical Oncology</journal-title>
+        <abbrev-journal-title>ASCO MEETING ABSTRACTS</abbrev-journal-title>
+      </journal-title-group>
+      <issn pub-type="ppub">0732-183X</issn>
+      <issn pub-type="epub">1527-7755</issn>
+      <publisher>
+        <publisher-name>American Society of Clinical Oncology</publisher-name>
+      </publisher>
+    </journal-meta>
+    <article-meta>
+      <article-id pub-id-type="custom" custom-type="meeting-id">335</article-id>
+      <article-id pub-id-type="custom" custom-type="session-id">18000</article-id>
+      <article-id pub-id-type="custom" custom-type="session-participation-id">290003</article-id>
+      <article-id pub-id-type="custom" custom-type="temporary-abstract-id">900003</article-id>
+      <article-id pub-id-type="custom" custom-type="abstract-id">synT003</article-id>
+      <article-id pub-id-type="doi">10.1200/JCO.2026.44.16_suppl.synT003</article-id>
+      <article-categories>
+        <subj-group subj-group-type="heading">
+          <subject>Gastrointestinal Cancer—Colorectal</subject>
+        </subj-group>
+        <series-title>2026 ASCO Annual Meeting (May 29 - June 2, 2026)</series-title>
+        <series-text>Publication Only</series-text>
+      </article-categories>
+      <title-group>
+        <article-title>Real-world effectiveness of cetuximab plus irinotecan in RAS wild-type metastatic colorectal cancer.</article-title>
+      </title-group>
+      <contrib-group>
+        <contrib id="C900030" contrib-type="presenter">
+          <name>
+            <surname>Torres</surname>
+            <given-names>Camila</given-names>
+          </name>
+          <xref ref-type="aff" rid="A900030"/>
+        </contrib>
+        <contrib id="C900031" contrib-type="author">
+          <name>
+            <surname>Farouk</surname>
+            <given-names>Leila</given-names>
+          </name>
+          <xref ref-type="aff" rid="A900031"/>
+        </contrib>
+        <contrib id="C900032" contrib-type="author">
+          <name>
+            <surname>Morgan</surname>
+            <given-names>Grace</given-names>
+          </name>
+          <xref ref-type="aff" rid="A900032"/>
+        </contrib>
+        <aff id="A900030">Westlake Comprehensive Cancer Center, Seattle, WA</aff>
+        <aff id="A900031">Harborview Institute of Oncology, San Diego, CA</aff>
+        <aff id="A900032">Midland Academic Medical Center, Columbus, OH</aff>
+      </contrib-group>
+      <author-notes>
+        <fn fn-type="conflict">
+          <p>
+            <ext-link ext-link-type="uri" xlink:href="https://coi.asco.org/Report/ViewAbstractCOI?id=900003">Abstract Disclosures</ext-link>
+          </p>
+        </fn>
+      </author-notes>
+      <pub-date pub-type="ppub">
+        <day/>
+        <month/>
+        <year/>
+      </pub-date>
+      <fpage>synT003</fpage>
+      <lpage>synT003</lpage>
+      <permissions>
+        <copyright-statement>© 2026 by American Society of Clinical Oncology</copyright-statement>
+        <copyright-year>2026</copyright-year>
+      </permissions>
+      <abstract>
+        <p>
+          <bold>synT003</bold>
+        </p>
+        <p><bold>Background: </bold>The effectiveness of cetuximab plus irinotecan outside clinical trials remains incompletely characterized for RAS wild-type metastatic colorectal cancer. We evaluated treatment patterns, clinical outcomes, and safety in a multi-institutional real-world cohort. <bold>Methods: </bold>We retrospectively identified consecutive adults with RAS wild-type metastatic colorectal cancer who initiated cetuximab plus irinotecan between 2019 and 2024 across six oncology centers. Demographic, clinicopathologic, treatment, and outcome data were abstracted from electronic records using a common data model. The primary endpoint was real-world progression-free survival (rwPFS); secondary endpoints included objective response rate (ORR), overall survival (OS), treatment duration, and grade 3 or higher adverse events. Time-to-event outcomes were estimated using Kaplan–Meier methods. <bold>Results: </bold>The analysis included 224 patients with a median age of 59 years; 46% were female and the median number of prior systemic treatment lines was three. After a median follow-up of 16.7 months, ORR was 32.6%, median rwPFS was 6.4 months, and median OS was 15.9 months. Grade 3 or higher treatment-related adverse events occurred in 29.9% of patients. Acneiform rash was documented in 14.7%. In exploratory subgroup analysis, patients with left-sided primary tumors had a median rwPFS of 7.5 months. <bold>Conclusions: </bold>In routine practice, cetuximab plus irinotecan demonstrated clinically meaningful activity in RAS wild-type metastatic colorectal cancer, with outcomes generally consistent with its established treatment role. Toxicity remained manageable, although monitoring for acneiform rash is warranted. These findings support continued real-world evaluation in broader and underrepresented patient populations. Research Sponsor: Institutional research fund.</p>
+      </abstract>
+      <kwd-group kwd-group-type="subject_thes_terms">
+        <kwd>283-217</kwd>
+        <kwd>261-492</kwd>
+        <kwd>3282-206</kwd>
+      </kwd-group>
+      <kwd-group kwd-group-type="subject_thes_hits">
+        <kwd>4</kwd>
+        <kwd>3</kwd>
+        <kwd>2</kwd>
+      </kwd-group>
+    </article-meta>
+  </front>
+</article>

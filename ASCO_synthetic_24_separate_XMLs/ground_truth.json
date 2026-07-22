@@ -1,0 +1,245 @@
+{
+  "dataset_name": "ASCO synthetic content-integrity test set",
+  "source_structure": "Breast_Cancer_Metastatic_publication.xml",
+  "warning": "All records are synthetic and intended only for detector development and evaluation.",
+  "counts": {
+    "total": 24,
+    "llm_response_trace": 6,
+    "tortured_phrase": 6,
+    "templating": 6,
+    "normal": 6
+  },
+  "records": [
+    {
+      "abstract_id": "syn90001",
+      "title": "Circulating tumor DNA kinetics during first-line endocrine therapy in metastatic breast cancer.",
+      "expected_category": "llm_response_trace",
+      "expected_signal": "conversational_revision_preface",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "Here is the revised abstract:"
+      ]
+    },
+    {
+      "abstract_id": "syn90002",
+      "title": "Patient-reported symptom trajectories after initiation of trastuzumab deruxtecan.",
+      "expected_category": "llm_response_trace",
+      "expected_signal": "ai_identity_disclaimer",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "As an AI language model, I cannot verify"
+      ]
+    },
+    {
+      "abstract_id": "syn90003",
+      "title": "Real-world treatment duration with oral selective estrogen receptor degraders.",
+      "expected_category": "llm_response_trace",
+      "expected_signal": "assistant_acknowledgement",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "Certainly! Below is"
+      ]
+    },
+    {
+      "abstract_id": "syn90004",
+      "title": "Association between baseline frailty and hospitalization during metastatic breast cancer therapy.",
+      "expected_category": "llm_response_trace",
+      "expected_signal": "assistant_followup_offer",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "Please let me know if you would like me to make this more concise or add references."
+      ]
+    },
+    {
+      "abstract_id": "syn90005",
+      "title": "Patterns of dose interruption during capecitabine treatment in older adults.",
+      "expected_category": "llm_response_trace",
+      "expected_signal": "markdown_and_response_note",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "### Key findings:",
+        "**Note:** This response can be adapted"
+      ]
+    },
+    {
+      "abstract_id": "syn90006",
+      "title": "Feasibility of remote blood pressure monitoring during antiangiogenic therapy.",
+      "expected_category": "llm_response_trace",
+      "expected_signal": "editing_meta_commentary",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "I have rewritten the text to improve clarity and academic tone.",
+        "The final answer is provided above."
+      ]
+    },
+    {
+      "abstract_id": "syn90007",
+      "title": "Counterfeit consciousness model for predicting progression in metastatic breast cancer.",
+      "expected_category": "tortured_phrase",
+      "expected_signal": "tortured_phrases",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "counterfeit consciousness",
+        "neural organization"
+      ]
+    },
+    {
+      "abstract_id": "syn90008",
+      "title": "Treatment sequencing in bosom malignant growth with liver metastases.",
+      "expected_category": "tortured_phrase",
+      "expected_signal": "tortured_phrases",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "bosom malignant growth"
+      ]
+    },
+    {
+      "abstract_id": "syn90009",
+      "title": "Profound learning identification of metastatic lesions on staging scans.",
+      "expected_category": "tortured_phrase",
+      "expected_signal": "tortured_phrases",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "profound learning"
+      ]
+    },
+    {
+      "abstract_id": "syn90010",
+      "title": "Huge information analysis of treatment patterns after CDK4/6 inhibitor progression.",
+      "expected_category": "tortured_phrase",
+      "expected_signal": "tortured_phrases",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "huge information"
+      ]
+    },
+    {
+      "abstract_id": "syn90011",
+      "title": "Lymph hub involvement and outcomes in oligometastatic breast cancer.",
+      "expected_category": "tortured_phrase",
+      "expected_signal": "tortured_phrases",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "lymph hub"
+      ]
+    },
+    {
+      "abstract_id": "syn90012",
+      "title": "Irregular cell demise after combination therapy in triple-negative breast cancer organoids.",
+      "expected_category": "tortured_phrase",
+      "expected_signal": "tortured_phrases",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "irregular cell demise"
+      ]
+    },
+    {
+      "abstract_id": "syn90013",
+      "title": "Real-world outcomes with trastuzumab deruxtecan in HER2-low metastatic breast cancer.",
+      "expected_category": "templating",
+      "expected_signal": "masked_near_duplicate",
+      "expected_template_cluster": "TPL-A",
+      "planted_evidence": [
+        "Shared wording and sentence sequence; variables changed: drug, subtype, sample size, centers, follow-up, outcomes."
+      ]
+    },
+    {
+      "abstract_id": "syn90014",
+      "title": "Real-world outcomes with sacituzumab govitecan in triple-negative metastatic breast cancer.",
+      "expected_category": "templating",
+      "expected_signal": "masked_near_duplicate",
+      "expected_template_cluster": "TPL-A",
+      "planted_evidence": [
+        "Shared wording and sentence sequence; variables changed: drug, subtype, sample size, centers, follow-up, outcomes."
+      ]
+    },
+    {
+      "abstract_id": "syn90015",
+      "title": "Real-world outcomes with elacestrant in ESR1-mutated hormone receptor-positive metastatic breast cancer.",
+      "expected_category": "templating",
+      "expected_signal": "masked_near_duplicate",
+      "expected_template_cluster": "TPL-A",
+      "planted_evidence": [
+        "Shared wording and sentence sequence; variables changed: drug, subtype, sample size, centers, follow-up, outcomes."
+      ]
+    },
+    {
+      "abstract_id": "syn90016",
+      "title": "Analytical validation of a multiplex digital PCR assay for ESR1 alterations.",
+      "expected_category": "templating",
+      "expected_signal": "masked_near_duplicate",
+      "expected_template_cluster": "TPL-B",
+      "planted_evidence": [
+        "Shared wording and sentence sequence; variables changed: gene, subtype, assay, sample size, analytical metrics."
+      ]
+    },
+    {
+      "abstract_id": "syn90017",
+      "title": "Analytical validation of a allele-specific PCR assay for PIK3CA alterations.",
+      "expected_category": "templating",
+      "expected_signal": "masked_near_duplicate",
+      "expected_template_cluster": "TPL-B",
+      "planted_evidence": [
+        "Shared wording and sentence sequence; variables changed: gene, subtype, assay, sample size, analytical metrics."
+      ]
+    },
+    {
+      "abstract_id": "syn90018",
+      "title": "Analytical validation of a targeted next-generation sequencing assay for ERBB2 alterations.",
+      "expected_category": "templating",
+      "expected_signal": "masked_near_duplicate",
+      "expected_template_cluster": "TPL-B",
+      "planted_evidence": [
+        "Shared wording and sentence sequence; variables changed: gene, subtype, assay, sample size, analytical metrics."
+      ]
+    },
+    {
+      "abstract_id": "syn90019",
+      "title": "Longitudinal changes in financial toxicity during metastatic breast cancer treatment.",
+      "expected_category": "normal",
+      "expected_signal": "none",
+      "expected_template_cluster": null,
+      "planted_evidence": []
+    },
+    {
+      "abstract_id": "syn90020",
+      "title": "Genomic evolution of brain metastases after systemic therapy in HER2-positive breast cancer.",
+      "expected_category": "normal",
+      "expected_signal": "none",
+      "expected_template_cluster": null,
+      "planted_evidence": []
+    },
+    {
+      "abstract_id": "syn90021",
+      "title": "Association of antibiotic exposure with outcomes during antibody-drug conjugate therapy.",
+      "expected_category": "normal",
+      "expected_signal": "none",
+      "expected_template_cluster": null,
+      "planted_evidence": []
+    },
+    {
+      "abstract_id": "syn90022",
+      "title": "Home-based exercise during endocrine therapy for metastatic breast cancer: A feasibility study.",
+      "expected_category": "normal",
+      "expected_signal": "none",
+      "expected_template_cluster": null,
+      "planted_evidence": []
+    },
+    {
+      "abstract_id": "syn90023",
+      "title": "Clinical impact of discordant hormone receptor status between primary and metastatic tumors.",
+      "expected_category": "normal",
+      "expected_signal": "none",
+      "expected_template_cluster": null,
+      "planted_evidence": []
+    },
+    {
+      "abstract_id": "syn90024",
+      "title": "Palliative care referral patterns after progression on second-line therapy.",
+      "expected_category": "normal",
+      "expected_signal": "none",
+      "expected_template_cluster": null,
+      "planted_evidence": []
+    }
+  ]
+}

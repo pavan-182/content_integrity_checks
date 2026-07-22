@@ -1,0 +1,238 @@
+{
+  "dataset": "ASCO synthetic content integrity samples",
+  "total_xml_files": 24,
+  "layout": "<category>/<abstract_id>_<category>.xml",
+  "records": [
+    {
+      "abstract_id": "syn90001",
+      "category": "llm_response_trace",
+      "file": "llm_response_trace/syn90001_llm_response_trace.xml",
+      "expected_signal": "conversational_revision_preface",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "Here is the revised abstract:"
+      ]
+    },
+    {
+      "abstract_id": "syn90002",
+      "category": "llm_response_trace",
+      "file": "llm_response_trace/syn90002_llm_response_trace.xml",
+      "expected_signal": "ai_identity_disclaimer",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "As an AI language model, I cannot verify"
+      ]
+    },
+    {
+      "abstract_id": "syn90003",
+      "category": "llm_response_trace",
+      "file": "llm_response_trace/syn90003_llm_response_trace.xml",
+      "expected_signal": "assistant_acknowledgement",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "Certainly! Below is"
+      ]
+    },
+    {
+      "abstract_id": "syn90004",
+      "category": "llm_response_trace",
+      "file": "llm_response_trace/syn90004_llm_response_trace.xml",
+      "expected_signal": "assistant_followup_offer",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "Please let me know if you would like me to make this more concise or add references."
+      ]
+    },
+    {
+      "abstract_id": "syn90005",
+      "category": "llm_response_trace",
+      "file": "llm_response_trace/syn90005_llm_response_trace.xml",
+      "expected_signal": "markdown_and_response_note",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "### Key findings:",
+        "**Note:** This response can be adapted"
+      ]
+    },
+    {
+      "abstract_id": "syn90006",
+      "category": "llm_response_trace",
+      "file": "llm_response_trace/syn90006_llm_response_trace.xml",
+      "expected_signal": "editing_meta_commentary",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "I have rewritten the text to improve clarity and academic tone.",
+        "The final answer is provided above."
+      ]
+    },
+    {
+      "abstract_id": "syn90007",
+      "category": "tortured_phrase",
+      "file": "tortured_phrase/syn90007_tortured_phrase.xml",
+      "expected_signal": "tortured_phrases",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "counterfeit consciousness",
+        "neural organization"
+      ]
+    },
+    {
+      "abstract_id": "syn90008",
+      "category": "tortured_phrase",
+      "file": "tortured_phrase/syn90008_tortured_phrase.xml",
+      "expected_signal": "tortured_phrases",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "bosom malignant growth"
+      ]
+    },
+    {
+      "abstract_id": "syn90009",
+      "category": "tortured_phrase",
+      "file": "tortured_phrase/syn90009_tortured_phrase.xml",
+      "expected_signal": "tortured_phrases",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "profound learning"
+      ]
+    },
+    {
+      "abstract_id": "syn90010",
+      "category": "tortured_phrase",
+      "file": "tortured_phrase/syn90010_tortured_phrase.xml",
+      "expected_signal": "tortured_phrases",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "huge information"
+      ]
+    },
+    {
+      "abstract_id": "syn90011",
+      "category": "tortured_phrase",
+      "file": "tortured_phrase/syn90011_tortured_phrase.xml",
+      "expected_signal": "tortured_phrases",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "lymph hub"
+      ]
+    },
+    {
+      "abstract_id": "syn90012",
+      "category": "tortured_phrase",
+      "file": "tortured_phrase/syn90012_tortured_phrase.xml",
+      "expected_signal": "tortured_phrases",
+      "expected_template_cluster": null,
+      "planted_evidence": [
+        "irregular cell demise"
+      ]
+    },
+    {
+      "abstract_id": "syn90013",
+      "category": "templating",
+      "file": "templating/syn90013_templating.xml",
+      "expected_signal": "masked_near_duplicate",
+      "expected_template_cluster": "TPL-A",
+      "planted_evidence": [
+        "Shared wording and sentence sequence; variables changed: drug, subtype, sample size, centers, follow-up, outcomes."
+      ]
+    },
+    {
+      "abstract_id": "syn90014",
+      "category": "templating",
+      "file": "templating/syn90014_templating.xml",
+      "expected_signal": "masked_near_duplicate",
+      "expected_template_cluster": "TPL-A",
+      "planted_evidence": [
+        "Shared wording and sentence sequence; variables changed: drug, subtype, sample size, centers, follow-up, outcomes."
+      ]
+    },
+    {
+      "abstract_id": "syn90015",
+      "category": "templating",
+      "file": "templating/syn90015_templating.xml",
+      "expected_signal": "masked_near_duplicate",
+      "expected_template_cluster": "TPL-A",
+      "planted_evidence": [
+        "Shared wording and sentence sequence; variables changed: drug, subtype, sample size, centers, follow-up, outcomes."
+      ]
+    },
+    {
+      "abstract_id": "syn90016",
+      "category": "templating",
+      "file": "templating/syn90016_templating.xml",
+      "expected_signal": "masked_near_duplicate",
+      "expected_template_cluster": "TPL-B",
+      "planted_evidence": [
+        "Shared wording and sentence sequence; variables changed: gene, subtype, assay, sample size, analytical metrics."
+      ]
+    },
+    {
+      "abstract_id": "syn90017",
+      "category": "templating",
+      "file": "templating/syn90017_templating.xml",
+      "expected_signal": "masked_near_duplicate",
+      "expected_template_cluster": "TPL-B",
+      "planted_evidence": [
+        "Shared wording and sentence sequence; variables changed: gene, subtype, assay, sample size, analytical metrics."
+      ]
+    },
+    {
+      "abstract_id": "syn90018",
+      "category": "templating",
+      "file": "templating/syn90018_templating.xml",
+      "expected_signal": "masked_near_duplicate",
+      "expected_template_cluster": "TPL-B",
+      "planted_evidence": [
+        "Shared wording and sentence sequence; variables changed: gene, subtype, assay, sample size, analytical metrics."
+      ]
+    },
+    {
+      "abstract_id": "syn90019",
+      "category": "normal",
+      "file": "normal/syn90019_normal.xml",
+      "expected_signal": "none",
+      "expected_template_cluster": null,
+      "planted_evidence": []
+    },
+    {
+      "abstract_id": "syn90020",
+      "category": "normal",
+      "file": "normal/syn90020_normal.xml",
+      "expected_signal": "none",
+      "expected_template_cluster": null,
+      "planted_evidence": []
+    },
+    {
+      "abstract_id": "syn90021",
+      "category": "normal",
+      "file": "normal/syn90021_normal.xml",
+      "expected_signal": "none",
+      "expected_template_cluster": null,
+      "planted_evidence": []
+    },
+    {
+      "abstract_id": "syn90022",
+      "category": "normal",
+      "file": "normal/syn90022_normal.xml",
+      "expected_signal": "none",
+      "expected_template_cluster": null,
+      "planted_evidence": []
+    },
+    {
+      "abstract_id": "syn90023",
+      "category": "normal",
+      "file": "normal/syn90023_normal.xml",
+      "expected_signal": "none",
+      "expected_template_cluster": null,
+      "planted_evidence": []
+    },
+    {
+      "abstract_id": "syn90024",
+      "category": "normal",
+      "file": "normal/syn90024_normal.xml",
+      "expected_signal": "none",
+      "expected_template_cluster": null,
+      "planted_evidence": []
+    }
+  ]
+}

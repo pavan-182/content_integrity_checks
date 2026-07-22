@@ -1,0 +1,15 @@
+.env
+.venv/
+outputs/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.agents/
+.codex/
+.DS_Store
+.~lock*#
+WILEY_LIVE_PREFLIGHT_metadata_files/

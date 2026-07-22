@@ -1,0 +1,14 @@
+{"key": "run_date_utc", "value": "2026-07-22T06:43:00.535209+00:00"}
+{"key": "input_folder", "value": "ASCO_realistic_templating_20_separate_XMLs"}
+{"key": "output_folder", "value": "/tmp/asco_realistic_templating_20_run_final"}
+{"key": "total_files", "value": 20}
+{"key": "parsed_successfully", "value": 20}
+{"key": "parsed_with_warnings", "value": 0}
+{"key": "failed_files", "value": 0}
+{"key": "llm_rule_count", "value": 20}
+{"key": "tortured_rule_count", "value": 8248}
+{"key": "dictionary_version", "value": "wiley_tortured_seed_v1"}
+{"key": "tortured_dictionary_path", "value": "🤷_tortured.csv"}
+{"key": "similarity_threshold", "value": 0.88}
+{"key": "limitations", "value": "Deterministic POC that flags explicit LLM response traces, known tortured phrases, and repeated abstract skeletons; it does not detect AI-generated authorship."}
+{"key": "excluded_scope", "value": "AI-generated text detection"}
