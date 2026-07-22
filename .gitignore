@@ -1,6 +1,16 @@
 .env
 .venv/
 outputs/
+*output*/
+*.xml
+content_integrity_screening_poc.xlsx
+integrity_findings.csv
+parse_warnings.csv
+parsed_records.csv
+parsed_records.jsonl
+pattern_dictionary.csv
+run_metadata.jsonl
+template_clusters.csv
 __pycache__/
 *.pyc
 *.pyo
