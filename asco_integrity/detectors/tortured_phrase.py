@@ -183,7 +183,6 @@ def detect_tortured_phrases(
 ) -> list[Finding]:
     index = rule_index if rule_index is not None else build_tortured_rule_index(rules)
     findings: list[Finding] = []
-    seen: set[tuple[str, str, int, int]] = set()
     for field_name, field_text in (("title", record.title), ("abstract_text", record.abstract_text)):
         if not field_text:
             continue
@@ -193,10 +192,6 @@ def detect_tortured_phrases(
             if any(pattern.search(field_text) for pattern in rule.excluded):
                 continue
             for match in rule.compiled.finditer(field_text):
-                key = (rule.rule_id, field_name, match.start(), match.end())
-                if key in seen:
-                    continue
-                seen.add(key)
                 findings.append(
                     Finding(
                         finding_id="",

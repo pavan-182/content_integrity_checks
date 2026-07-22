@@ -268,7 +268,6 @@ def _findings_rows(findings: list[Finding]) -> list[dict[str, Any]]:
         if not finding.finding_id:
             finding.finding_id = f"FND-{index:05d}"
         item = finding.to_dict()
-        item["signal_strength"] = round(finding.signal_strength, 3)
         item["confidence"] = round(finding.confidence, 3)
         rows.append(item)
     return rows
@@ -308,10 +307,6 @@ def _template_finding_rows(clusters: list[TemplateClusterMember]) -> list[dict[s
                 "weighted_section_similarity": cluster.weighted_section_similarity,
                 "section_similarities": cluster.section_similarities,
                 "variable_substitutions": cluster.variable_substitutions,
-                "cluster_cohesion": cluster.cluster_cohesion,
-                "cluster_edge_density": cluster.cluster_edge_density,
-                "supporting_connections": cluster.supporting_connections,
-                "review_explanation": cluster.review_explanation,
                 "exclusion_reason": cluster.exclusion_reason,
             }
         )
@@ -384,14 +379,10 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
 
     if config.validate_llm and ordered_findings:
         validator = ContextValidator(client=build_gpt_oss_client())
-        record_lookup = {record.record_id: record for record in records}
         for finding in ordered_findings:
             if finding.detector_type not in validator.applies_to:
                 continue
-            record = record_lookup.get(finding.record_id)
-            if record is None:
-                continue
-            result = validator.validate(finding, record)
+            result = validator.validate(finding)
             finding.validation_status = result.status
             finding.validation_reason = result.reason
             finding.validated_by = f"{result.model_id}:{result.prompt_version}"
@@ -486,10 +477,6 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
             "weighted_section_similarity",
             "section_similarities",
             "variable_substitutions",
-            "cluster_cohesion",
-            "cluster_edge_density",
-            "supporting_connections",
-            "review_explanation",
             "exclusion_reason",
             "title",
             "journal",

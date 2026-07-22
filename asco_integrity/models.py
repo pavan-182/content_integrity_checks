@@ -88,15 +88,8 @@ class Finding:
     validation_reason: str = ""
     validated_by: str = ""
 
-    @property
-    def signal_strength(self) -> float:
-        """Heuristic rule score; not a calibrated probability."""
-        return self.confidence
-
     def to_dict(self) -> dict[str, Any]:
-        data = asdict(self)
-        data["signal_strength"] = self.signal_strength
-        return data
+        return asdict(self)
 
 
 @dataclass(slots=True)
@@ -117,10 +110,6 @@ class TemplateClusterMember:
     weighted_section_similarity: float = 0.0
     section_similarities: str = ""
     variable_substitutions: str = ""
-    cluster_cohesion: float = 0.0
-    cluster_edge_density: float = 0.0
-    supporting_connections: int = 0
-    review_explanation: str = ""
     exclusion_reason: str = ""
 
     def to_dict(self) -> dict[str, Any]:

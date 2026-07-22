@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from .llm_trace import AI_CONTEXT_TERMS, LLMRule, built_in_llm_rules, detect_llm_trace
-from .template_cluster import cluster_templates
+from ..template_detection import cluster_templates
+from .llm_trace import LLMRule, built_in_llm_rules, detect_llm_trace
 from .tortured_phrase import (
     TorturedRule,
     build_tortured_rule_index,
@@ -10,7 +10,6 @@ from .tortured_phrase import (
 )
 
 __all__ = [
-    "AI_CONTEXT_TERMS",
     "LLMRule",
     "TorturedRule",
     "built_in_llm_rules",

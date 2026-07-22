@@ -15,6 +15,7 @@ from asco_integrity.models import Finding, ParsedRecord
 from asco_integrity.pipeline import run_default_pipeline
 from asco_integrity.template_detection import _candidate_pairs, _content_class, _similarity, build_normalized_text, build_skeleton_text, cluster_templates
 from asco_integrity.validators import ContextValidator
+from asco_integrity.validators.context_validator import _parse_validator_payload
 from asco_integrity.xml_parser import parse_wiley_xml, parse_wiley_xml_records
 from asco_integrity.utils import dedupe_records
 
@@ -208,6 +209,20 @@ class PipelineTests(unittest.TestCase):
         findings = detect_llm_trace(record, built_in_llm_rules())
         self.assertTrue(any(finding.rule_id == "LLM-001" for finding in findings))
         self.assertTrue(any(finding.rule_id == "LLM-007" for finding in findings))
+
+    def test_llm_trace_detector_finds_research_backed_weak_residue(self) -> None:
+        record = ParsedRecord(
+            source_file="sample.xml",
+            record_id="TEST-WEAK",
+            abstract_text=(
+                "It is essential to note that the user requested a revision. "
+                "### Revised abstract ---"
+            ),
+        )
+
+        rule_ids = {finding.rule_id for finding in detect_llm_trace(record, built_in_llm_rules())}
+
+        self.assertTrue({"LLM-025", "LLM-026", "LLM-027", "LLM-028"} <= rule_ids)
 
     def test_tortured_phrase_detector_finds_synthetic_phrase(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir_str:
@@ -407,7 +422,7 @@ class PipelineTests(unittest.TestCase):
             self.assertTrue(result.output_paths["parsed_jsonl"].exists())
             self.assertTrue(result.output_paths["findings_csv"].exists())
 
-    def test_validator_fails_closed_on_bad_json(self) -> None:
+    def test_validator_marks_bad_json_uncertain(self) -> None:
         class BrokenClient:
             def complete(self, *, system: str, user: str, max_tokens: int = 150, temperature: float = 0.0) -> str:
                 return "not-json"
@@ -427,13 +442,15 @@ class PipelineTests(unittest.TestCase):
             rule_id="TP-00001",
             expected_term="neural network",
         )
-        record = ParsedRecord(source_file="sample.xml", record_id="REC-1")
+        result = validator.validate(finding)
 
-        result = validator.validate(finding, record)
-
-        self.assertEqual(result.status, "fail")
+        self.assertEqual(result.status, "uncertain")
         self.assertEqual(result.reason, "Validator response could not be parsed.")
         self.assertEqual(result.finding_id, "FND-00001")
+
+    def test_validator_parses_wrapped_json(self) -> None:
+        parsed = _parse_validator_payload('Result: {"status":"confirmed","reason":"Trace confirmed."} done')
+        self.assertEqual(parsed["status"], "confirmed")
 
     def test_pipeline_validation_flag_populates_finding_metadata(self) -> None:
         class StubClient:
@@ -442,7 +459,7 @@ class PipelineTests(unittest.TestCase):
 
             def complete(self, *, system: str, user: str, max_tokens: int = 150, temperature: float = 0.0) -> str:
                 self.max_tokens_requested = max_tokens
-                payload = {"status": "pass", "reason": "Standard terminology, not a plausible substitution."}
+                payload = {"status": "rejected", "reason": "Standard terminology, not a plausible substitution."}
                 return f"```json\n{json.dumps(payload)}\n```"
 
         with tempfile.TemporaryDirectory() as temp_dir_str:
@@ -485,7 +502,7 @@ class PipelineTests(unittest.TestCase):
             tortured_findings = [finding for finding in result.findings if finding.detector_type == "tortured_phrase"]
             self.assertTrue(tortured_findings)
             self.assertEqual(stub_client.max_tokens_requested, 2048)
-            self.assertEqual(tortured_findings[0].validation_status, "pass")
+            self.assertEqual(tortured_findings[0].validation_status, "rejected")
             self.assertEqual(
                 tortured_findings[0].validated_by,
                 "gpt-oss-20b:context_validator_v2",

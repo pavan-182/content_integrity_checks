@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 from hashlib import blake2b
 from itertools import combinations
-from statistics import median
 from typing import Iterable
 
 from .models import ParsedRecord, TemplateClusterMember
@@ -52,23 +51,6 @@ def _entity_shape_key(skeleton: str, bucket_size: int = 5) -> str:
     return ":".join(bucketed) if bucketed else "NOPLACEHOLDER"
 
 
-def _informational_content_ratio(skeleton: str) -> float:
-    tokens = text_tokens(BOILERPLATE_RE.sub(" ", normalize_for_matching(skeleton)))
-    if not tokens:
-        return 0.0
-    return sum(token not in PLACEHOLDER_TOKENS for token in tokens) / len(tokens)
-
-
-def is_low_content_skeleton(
-    skeleton: str,
-    min_content_tokens: int = 25,
-    min_ratio: float = 0.35,
-) -> bool:
-    tokens = text_tokens(BOILERPLATE_RE.sub(" ", normalize_for_matching(skeleton)))
-    content_token_count = sum(token not in PLACEHOLDER_TOKENS for token in tokens)
-    return content_token_count < min_content_tokens or _informational_content_ratio(skeleton) < min_ratio
-
-
 def _sentence_split(text: str) -> list[str]:
     pieces = re.split(r"(?<=[.!?])\s+", normalize_whitespace(text))
     return [piece.strip() for piece in pieces if piece and piece.strip()]
@@ -97,11 +79,7 @@ def build_skeleton_text(record: ParsedRecord) -> str:
         source = record.title or ""
     if not source.strip() and record.raw_text.strip():
         source = record.raw_text
-    masked = _mask_variables(source)
-    sentences = [_mask_variables(sentence) for sentence in _sentence_split(masked)]
-    if not sentences and masked:
-        sentences = [masked]
-    return " ".join(sentence for sentence in sentences if sentence).strip()
+    return _mask_variables(source)
 
 
 def build_normalized_text(record: ParsedRecord) -> str:
@@ -118,7 +96,7 @@ def _content_class(record: ParsedRecord, skeleton: str) -> str:
     content_count = sum(token not in PLACEHOLDER_TOKENS for token in tokens)
     if not tokens or content_count == 0:
         return "empty_or_unusable"
-    if content_count < 5 or _informational_content_ratio(skeleton) < 0.35:
+    if content_count < 5 or content_count / len(tokens) < 0.35:
         return "administrative_boilerplate"
     return "valid_short" if content_count < 25 else "comparable"
 
@@ -384,10 +362,6 @@ def cluster_templates(
         cluster_id = f"TPL-{cluster_index:04d}"
         medoid = max(verified_members, key=lambda candidate: sum(evidence(candidate, other).score for other in verified_members if other != candidate))
         shared_excerpt = _shared_excerpt([skeletons[record_id] for record_id in verified_members])
-        cluster_pairs = list(combinations(verified_members, 2))
-        cohesion = median(evidence(left, right).score for left, right in cluster_pairs)
-        strong_pairs = {pair for pair in cluster_pairs if _is_match(evidence(*pair), similarity_threshold)}
-        edge_density = len(strong_pairs) / len(cluster_pairs)
         for member in verified_members:
             reference = medoid if member != medoid else max(
                 (other for other in verified_members if other != member),
@@ -404,7 +378,6 @@ def cluster_templates(
             elif substitutions and pair_evidence.masked - pair_evidence.original >= 0.03:
                 pattern_type = "entity_value_substitution"
             cluster_size = len(verified_members)
-            support_count = sum(member in pair for pair in strong_pairs)
             clusters.append(
                 TemplateClusterMember(
                     template_cluster_id=cluster_id,
@@ -423,10 +396,6 @@ def cluster_templates(
                     weighted_section_similarity=round(pair_evidence.weighted_section, 3),
                     section_similarities="; ".join(f"{section}={score:.3f}" for section, score in sorted(section_scores.items())),
                     variable_substitutions=substitutions,
-                    cluster_cohesion=round(cohesion, 3),
-                    cluster_edge_density=round(edge_density, 3),
-                    supporting_connections=support_count,
-                    review_explanation=f"{pattern_type.replace('_', ' ').title()} candidate; masked={pair_evidence.masked:.3f}, original={pair_evidence.original:.3f}, ngram={pair_evidence.ngram:.3f}, weighted_sections={pair_evidence.weighted_section:.3f}, median_cluster_similarity={cohesion:.3f}, edge_density={edge_density:.3f}.",
                 )
             )
 
