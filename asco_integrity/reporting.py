@@ -28,6 +28,7 @@ FINDINGS_COLUMNS = [
     "evidence_snippet",
     "section_or_field",
     "severity",
+    "signal_strength",
     "confidence",
     "validation_status",
     "validation_reason",

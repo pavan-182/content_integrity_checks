@@ -25,7 +25,7 @@ Add a **Validator** layer that wraps detector output. It never generates finding
 
 **Model:** GPT-OSS 20B (self-hosted, already in use for the AI-generated-text detection module — see `docs/research.md`).
 
-**Risk-adjustment behavior — Option A (annotate-only):** The validator never changes an existing finding's risk level. `overall_content_risk` is computed by `_risk_from_signals` exactly as today, from raw rule output only. `validation_status` (`confirmed` / `rejected` / `uncertain`) is written as an additional, independently filterable column. Editors can filter to hide likely-noise rows, but nothing is auto-suppressed or hidden by default. This was chosen over letting the validator downgrade risk because silent downgrades mean an editor never sees a row to catch a validator mistake — which conflicts with PRD §8 and the reviewer-influence risk named in PRD §13. `uncertain` is a first-class, visible status — not merged into `confirmed` or `rejected` — so an editor can distinguish "checked and fine" from "checked and unclear" from "checked and likely noise."
+**Risk-adjustment behavior — Option A (annotate-only):** The validator never changes an existing finding's risk level. `overall_content_risk` is computed by `_risk_from_signals` exactly as today, from raw rule output only. `validation_status` (`pass` / `fail`) is written as an additional, independently filterable column. `pass` means the finding is likely a false positive; `fail` means it remains an integrity concern. Validator errors fail closed as `fail`. Editors can filter likely-noise rows, but nothing is auto-suppressed or hidden by default.
 
 ## 3. Requirement → Module Map
 
@@ -47,7 +47,7 @@ Add a **Validator** layer that wraps detector output. It never generates finding
 @dataclass(slots=True)
 class ValidationResult:
     finding_id: str
-    status: str            # "confirmed" | "rejected" | "uncertain"
+    status: str            # "pass" | "fail"
     reason: str             # one sentence, shown to editor
     model_id: str
     prompt_version: str
@@ -98,7 +98,7 @@ class Finding:
 
 ```json
 {
-  "status": "confirmed | rejected | uncertain",
+  "status": "pass | fail",
   "reason": "one sentence, editor-facing, no jargon"
 }
 ```
@@ -112,12 +112,11 @@ what the rule-based system expected it to be a substitution for (if applicable),
 surrounding sentence, and which section it came from.
 
 Decide:
-- "confirmed": the flag is a plausible integrity concern — the phrase reads as an odd or
+- "fail": the flag is a plausible integrity concern — the phrase reads as an odd or
   distorted substitution, or as genuine leftover chatbot/AI-assistant text.
-- "rejected": the flag is very likely a false positive — e.g. a proper noun, a standard
+- "pass": the flag is very likely a false positive — e.g. a proper noun, a standard
   domain term that only superficially overlaps the pattern, an implausible synonym pairing,
   or coincidental phrasing with no plausible link to AI-generated residue.
-- "uncertain": you cannot confidently decide either way from the given context.
 
 Respond with strict JSON only: {"status": "...", "reason": "..."}
 The reason must be one plain sentence an editor with no technical background can read directly.

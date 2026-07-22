@@ -243,6 +243,41 @@ class PipelineTests(unittest.TestCase):
             self.assertTrue(any(finding.matched_text.lower() == "nervous network" for finding in findings))
             self.assertTrue(any(finding.matched_text.lower() == "mechanical learning" for finding in findings))
 
+    def test_tortured_phrase_detector_honors_dictionary_queries_and_sentence_boundaries(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir_str:
+            dictionary_path = _write_temp_file(
+                Path(temp_dir_str),
+                "tortured.csv",
+                '''
+                Fingerprint - Tortured Phrase,Expected Text,Nb Retrieved Papers
+                """surface region"" AND ""surface area""","surface area","1"
+                """corridor impact"" AND (""magnetic"" OR ""voltage"")","Hall effect","1"
+                """magnetic cell separation"" NOT ""with MACS""","magnetic-activated cell sorting","1"
+                """very long tortured phrase""","expected phrase","1"
+                """multi token tortured phrase""","expected phrase","1"
+                ''',
+            )
+            rules = load_tortured_rules(dictionary_path)
+            record = ParsedRecord(
+                source_file="sample.xml",
+                record_id="REC-1",
+                title="A corridor impact from a voltage sensor",
+                abstract_text=(
+                    "The surface region was measured without the required context. "
+                    "Magnetic cell separation with MACS was used. "
+                    "A very long tortured. Phrase must not cross a sentence. "
+                    "This multi-token tortured phrase must still be retrieved."
+                ),
+            )
+
+            findings = detect_tortured_phrases(record, rules, build_tortured_rule_index(rules))
+
+            self.assertEqual(
+                [finding.matched_text.lower() for finding in findings],
+                ["corridor impact", "multi-token tortured phrase"],
+            )
+            self.assertTrue(all(rule.rule_id.startswith("TP-") and len(rule.rule_id) == 15 for rule in rules))
+
     def test_template_detection_clusters_synthetic_abstracts(self) -> None:
         record_a = parse_wiley_xml(
             self._temp_xml(
@@ -396,7 +431,7 @@ class PipelineTests(unittest.TestCase):
 
         result = validator.validate(finding, record)
 
-        self.assertEqual(result.status, "uncertain")
+        self.assertEqual(result.status, "fail")
         self.assertEqual(result.reason, "Validator response could not be parsed.")
         self.assertEqual(result.finding_id, "FND-00001")
 
@@ -407,7 +442,7 @@ class PipelineTests(unittest.TestCase):
 
             def complete(self, *, system: str, user: str, max_tokens: int = 150, temperature: float = 0.0) -> str:
                 self.max_tokens_requested = max_tokens
-                payload = {"status": "rejected", "reason": "Standard terminology, not a plausible substitution."}
+                payload = {"status": "pass", "reason": "Standard terminology, not a plausible substitution."}
                 return f"```json\n{json.dumps(payload)}\n```"
 
         with tempfile.TemporaryDirectory() as temp_dir_str:
@@ -450,10 +485,10 @@ class PipelineTests(unittest.TestCase):
             tortured_findings = [finding for finding in result.findings if finding.detector_type == "tortured_phrase"]
             self.assertTrue(tortured_findings)
             self.assertEqual(stub_client.max_tokens_requested, 2048)
-            self.assertEqual(tortured_findings[0].validation_status, "rejected")
+            self.assertEqual(tortured_findings[0].validation_status, "pass")
             self.assertEqual(
                 tortured_findings[0].validated_by,
-                "gpt-oss-20b:context_validator_v1",
+                "gpt-oss-20b:context_validator_v2",
             )
 
             workbook = load_workbook(result.output_paths["workbook"], read_only=True)

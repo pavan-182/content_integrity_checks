@@ -88,8 +88,15 @@ class Finding:
     validation_reason: str = ""
     validated_by: str = ""
 
+    @property
+    def signal_strength(self) -> float:
+        """Heuristic rule score; not a calibrated probability."""
+        return self.confidence
+
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        data = asdict(self)
+        data["signal_strength"] = self.signal_strength
+        return data
 
 
 @dataclass(slots=True)

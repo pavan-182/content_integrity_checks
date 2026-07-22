@@ -268,6 +268,7 @@ def _findings_rows(findings: list[Finding]) -> list[dict[str, Any]]:
         if not finding.finding_id:
             finding.finding_id = f"FND-{index:05d}"
         item = finding.to_dict()
+        item["signal_strength"] = round(finding.signal_strength, 3)
         item["confidence"] = round(finding.confidence, 3)
         rows.append(item)
     return rows
