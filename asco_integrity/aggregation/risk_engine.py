@@ -21,6 +21,7 @@ def _risk_from_signals(
         return "High"
     if severity_rank(highest_signal_severity) == 2:
         return "Medium"
+    # Includes nonsense_candidate: multiple low-severity findings use the existing Medium rule.
     if severity_rank(highest_signal_severity) == 1:
         return "Medium" if total_finding_count > 1 else "Low"
     if template_cluster_flag:

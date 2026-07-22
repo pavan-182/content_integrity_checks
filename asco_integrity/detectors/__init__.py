@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ..template_detection import cluster_templates
 from .llm_trace import LLMRule, built_in_llm_rules, detect_llm_trace
+from .nonsense_candidate import NonsenseCandidateDetector
 from .tortured_phrase import (
     TorturedRule,
     build_tortured_rule_index,
@@ -11,6 +12,7 @@ from .tortured_phrase import (
 
 __all__ = [
     "LLMRule",
+    "NonsenseCandidateDetector",
     "TorturedRule",
     "built_in_llm_rules",
     "build_tortured_rule_index",

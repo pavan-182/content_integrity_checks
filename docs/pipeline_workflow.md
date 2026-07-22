@@ -6,11 +6,12 @@
 
 ## 1. Purpose and boundary
 
-The pipeline screens a batch of Wiley/ASCO XML abstracts for three explainable content-integrity signals:
+The pipeline screens a batch of Wiley/ASCO XML abstracts for four explainable content-integrity signals:
 
 1. explicit LLM or chatbot response residue;
 2. known tortured phrases from a supplied dictionary; and
-3. repeated abstract templates within the current batch.
+3. repeated abstract templates within the current batch; and
+4. optional low-severity nonsense candidates missed by the phrase dictionary.
 
 It produces record-level data, detailed evidence, risk summaries, audit metadata, and one consolidated Excel workbook for editorial review. It is a triage system: a finding means **manual review is recommended**, not that misconduct, AI authorship, or a publication decision has been established.
 
@@ -26,8 +27,11 @@ flowchart TD
     D --> E1[LLM trace detector]
     D --> E2[Tortured phrase detector]
     D --> E3[Cross-record template detector]
+    D --> E4{--detect-nonsense-candidates?}
     E1 --> F[Deterministic findings]
     E2 --> F
+    E4 -- Yes --> N[GPT-OSS sentence review]
+    N --> F
     F --> G{--validate-llm?}
     G -- Yes --> H[GPT-OSS context validation]
     G -- No --> I[Leave validation fields blank]
@@ -39,7 +43,7 @@ flowchart TD
     L --> M[Write JSONL, CSV, and Excel reports]
 ```
 
-The default path is deterministic and local. Network access occurs only when `--validate-llm` enables the optional context validator.
+The default path is deterministic and local. Network access occurs only when `--validate-llm` or `--detect-nonsense-candidates` enables an optional GPT-OSS step.
 
 ## 3. Inputs and configuration
 
@@ -52,6 +56,7 @@ The command-line interface accepts:
 | `--output-dir` | `outputs` | Destination for all generated artifacts |
 | `--similarity-threshold` | `0.88` | Structural similarity threshold used by template matching |
 | `--validate-llm` | disabled | Enables per-finding GPT-OSS context validation |
+| `--detect-nonsense-candidates` | disabled | Enables sentence-level GPT-OSS review for dictionary misses |
 
 Run the default pipeline with:
 
@@ -103,7 +108,7 @@ Each XML item becomes a `ParsedRecord` with:
 - abstract sections and a structured/unstructured flag;
 - keywords, authors, and affiliations;
 - journal, article type, and publication year;
-- combined raw detector text;
+- combined raw detector text and an audit list of excluded content blocks;
 - parse status and warnings.
 
 Namespace-independent XPath expressions and ordered fallbacks handle field-name differences between the supported XML shapes. The record ID falls back through manuscript/submission identifiers, abstract ID, DOI, and finally the filename stem.
@@ -116,7 +121,7 @@ The parser:
 - otherwise recognizes common structured headings such as Background, Methods, Results, and Conclusions;
 - falls back to one `Abstract` section for unstructured text;
 - normalizes whitespace; and
-- excludes `table-wrap` content from abstract text.
+- excludes author, affiliation, reference, citation-block, and `table-wrap` content from detector text while recording the excluded categories.
 
 Missing expected fields produce warnings and set the record status to `parsed_with_warnings`. The expected fields are record ID, title, abstract text, journal, article type, and publication year.
 
@@ -173,7 +178,13 @@ This detector identifies explicit residue only. It does not infer that otherwise
 
 The detector retrieves candidate rules from the token index, verifies all required context groups, rejects excluded context, and then records each actual phrase match. Findings also carry the dictionary's expected scientific term.
 
-All deterministic findings receive stable run-local IDs (`FND-00001`, `FND-00002`, and so on) after sorting by record, detector, rule, field, and severity.
+All findings receive stable run-local IDs (`FND-00001`, `FND-00002`, and so on) after sorting by record, detector, rule, field, and severity. Abstract matches retain their parsed section label for dashboard grouping.
+
+### 7.3 Optional nonsense candidates
+
+`--detect-nonsense-candidates` runs after Level A tortured-phrase matching. Sentences with a Level A match, fewer than eight tokens, heading-only/boilerplate text, or no gene-and-drug pattern co-occurrence are skipped locally. Each surviving sentence is reviewed by GPT-OSS using the same IntelliHub client and strict-JSON parsing as context validation.
+
+Only a model response marking the sentence not understandable creates a `nonsense_candidate` finding. It quotes the suspected phrase, preserves the full sentence as evidence, records the explanation/model/prompt version, and always has low severity. The check is sentence-level and candidate-only; it does not classify the abstract or infer authorship. Invalid model responses create no candidate.
 
 ## 8. Stage 5 — Optional context validation
 
@@ -239,7 +250,7 @@ The output includes peer IDs, component scores, section scores, changed variable
 
 ## 10. Stage 7 — Risk aggregation
 
-Risk is computed once per record from unvalidated deterministic findings plus non-excluded template-cluster membership.
+Risk is computed once per record from rule findings, optional low-severity nonsense candidates, and non-excluded template-cluster membership. Context-validation annotations do not affect it.
 
 | Condition | Overall risk |
 |---|---|
@@ -268,15 +279,16 @@ Every run creates these files in the configured output directory:
 | `run_metadata.jsonl` | Input/output paths, counts, thresholds, dictionary version, and scope notes |
 | `content_integrity_screening_poc.xlsx` | Consolidated editorial workbook |
 
-The workbook contains seven filterable sheets:
+The workbook contains eight sheets:
 
-1. **Data Inventory** — parse totals, XML roots, and field coverage;
-2. **Abstract Summary** — one row per retained record with flags, counts, risk, and review status;
-3. **Integrity Findings** — one row per rule or template finding with exact evidence;
-4. **Template Clusters** — detailed cross-record comparison data;
-5. **Pattern Dictionary** — rules used for the run;
-6. **Parse Warnings** — ingestion and data-quality issues; and
-7. **Run Metadata** — configuration and audit context.
+1. **Dashboard** — review priority, check, cluster, warning, and section counts;
+2. **Data Inventory** — parse totals, XML roots, and field coverage;
+3. **Abstract Summary** — one row per retained record with flags, counts, risk, and review status;
+4. **Integrity Findings** — one row per rule or template finding with exact evidence;
+5. **Template Clusters** — detailed cross-record comparison data;
+6. **Pattern Dictionary** — rules used for the run;
+7. **Parse Warnings** — ingestion and data-quality issues; and
+8. **Run Metadata** — configuration and audit context.
 
 The summary includes every retained record, including records with no findings.
 
@@ -286,6 +298,7 @@ The summary includes every retained record, including records with no findings.
 - Missing metadata is reported rather than silently discarded.
 - Duplicate IDs are resolved before detectors and reports create joins.
 - Validator response or request failures are recorded as `uncertain` per finding.
+- Nonsense-review failures create no candidate finding; the feature is opt-in and candidate-only.
 - Enabling validation without an API key stops at validator initialization with a configuration error.
 - Output files are rewritten in the selected output directory on each run.
 - Detection and validation are currently sequential; no queue, database, or persistent reference corpus is involved.
@@ -306,15 +319,15 @@ Deterministic results are reproducible for the same code, inputs, dictionary, an
 
 ## 14. Current limitations
 
-- The tortured-phrase detector can find only patterns represented by the supplied dictionary.
+- Level A recall is limited to the supplied dictionary; Level B considers only sentences passing its narrow gene/drug co-occurrence gate.
 - The LLM detector recognizes explicit residue patterns, not general AI authorship.
-- Template weights and thresholds are transparent heuristics awaiting calibration on labelled ASCO data.
+- Template weights and thresholds are transparent heuristics; the synthetic sweep does not replace calibration on labelled ASCO data.
 - Validator output can vary because it is model-generated, but it cannot alter deterministic risk in the current design.
 - Records from unexpected XML roots retain raw text but do not receive full schema-specific metadata extraction.
 
 ## 15. Verification
 
-The test suite covers supported XML shapes, bundled sub-articles, table removal, record deduplication, tortured-query semantics, LLM residue, template matching, risk-report integration, workbook creation, and validator response handling.
+The test suite covers supported XML shapes, bundled sub-articles, excluded author/reference content, record deduplication, tortured-query semantics, LLM residue, nonsense candidates, template matching, dashboard reconciliation, risk-report integration, workbook creation, and validator response handling.
 
 Run it with:
 
@@ -330,6 +343,7 @@ python -m unittest discover -s tests -v
 | `asco_integrity/xml_parser.py` | XML discovery, schema-specific extraction, abstract normalization, warnings |
 | `asco_integrity/detectors/llm_trace.py` | Built-in LLM residue rules and matching |
 | `asco_integrity/detectors/tortured_phrase.py` | Dictionary loading, query interpretation, indexing, and matching |
+| `asco_integrity/detectors/nonsense_candidate.py` | Opt-in sentence prefiltering and GPT-OSS candidate annotation |
 | `asco_integrity/template_detection.py` | Masking, candidate generation, similarity, and clustering |
 | `asco_integrity/validators/context_validator.py` | Optional IntelliHub/GPT-OSS finding validation |
 | `asco_integrity/aggregation/risk_engine.py` | Record-level risk rules |

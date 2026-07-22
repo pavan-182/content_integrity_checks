@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+from collections import Counter
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,7 @@ FINDINGS_COLUMNS = [
     "record_id",
     "source_file",
     "detector_type",
+    "check_type",
     "category",
     "matched_text",
     "expected_term",
@@ -132,6 +134,111 @@ def _auto_size_columns(ws, max_width: int = 60) -> None:
         ws.column_dimensions[column_letter].width = max(12, min(width + 2, max_width))
 
 
+def _dashboard_block(ws, title: str, rows: list[dict[str, Any]], columns: list[str], start_row: int) -> int:
+    ws.cell(row=start_row, column=1, value=title).font = Font(bold=True, size=12)
+    end_row, _ = _write_table(ws, rows, columns, start_row=start_row + 1, auto_filter=False)
+    return end_row + 2
+
+
+def _dashboard_section(value: Any) -> str:
+    section = normalize_whitespace(str(value)).lower()
+    if section == "title":
+        return "Title"
+    for label in ("background", "methods", "results", "conclusions"):
+        if label.rstrip("s") in section:
+            return label.title()
+    if section == "cross_document":
+        return "Cross-document"
+    return "Abstract"
+
+
+def _write_dashboard(
+    workbook: Workbook,
+    abstract_summary_rows: list[dict[str, Any]],
+    findings_rows: list[dict[str, Any]],
+    cluster_rows: list[dict[str, Any]],
+    parse_warning_rows: list[dict[str, Any]],
+) -> None:
+    ws = workbook.create_sheet("Dashboard")
+    row = 1
+
+    priority_counts = Counter(row["overall_content_risk"] for row in abstract_summary_rows)
+    row = _dashboard_block(
+        ws,
+        "Abstracts by review priority",
+        [{"review_priority": priority, "count": priority_counts[priority]} for priority in ("High", "Medium", "Low", "None")],
+        ["review_priority", "count"],
+        row,
+    )
+
+    check_names = {
+        "llm_response_trace": "llm_trace",
+        "tortured_phrase": "tortured_phrase",
+        "template_cluster": "template",
+        "nonsense_candidate": "nonsense_candidate",
+    }
+    check_counts = Counter(item.get("check_type") or check_names.get(item.get("detector_type", ""), item.get("detector_type", "")) for item in findings_rows)
+    row = _dashboard_block(
+        ws,
+        "Findings by check type",
+        [{"check_type": check_type, "count": count} for check_type, count in sorted(check_counts.items())],
+        ["check_type", "count"],
+        row,
+    )
+
+    clusters: dict[str, tuple[int, str]] = {}
+    for item in cluster_rows:
+        cluster_id = str(item.get("template_cluster_id", ""))
+        if not cluster_id or item.get("cluster_severity") == "excluded":
+            continue
+        size = int(item.get("cluster_size") or 0)
+        representative = str(item.get("record_id", ""))
+        current = clusters.get(cluster_id)
+        clusters[cluster_id] = (max(size, current[0] if current else 0), min(representative, current[1]) if current else representative)
+    size_counts = Counter("5+" if size >= 5 else str(size) for size, _ in clusters.values())
+    row = _dashboard_block(
+        ws,
+        "Template cluster summary",
+        [
+            {"metric": "total_clusters", "count": len(clusters)},
+            *({"metric": f"size_{bucket}", "count": size_counts[bucket]} for bucket in ("2", "3", "4", "5+")),
+        ],
+        ["metric", "count"],
+        row,
+    )
+    row = _dashboard_block(
+        ws,
+        "Largest 10 template clusters",
+        [
+            {"template_cluster_id": cluster_id, "cluster_size": size, "representative_record_id": representative}
+            for cluster_id, (size, representative) in sorted(clusters.items(), key=lambda item: (-item[1][0], item[0]))[:10]
+        ],
+        ["template_cluster_id", "cluster_size", "representative_record_id"],
+        row,
+    )
+
+    warning_counts = Counter(str(item.get("warning_code", "")) for item in parse_warning_rows)
+    row = _dashboard_block(
+        ws,
+        "Parse failures and warnings by type",
+        [{"warning_type": warning_type, "count": count} for warning_type, count in sorted(warning_counts.items())]
+        or [{"warning_type": "NONE", "count": 0}],
+        ["warning_type", "count"],
+        row,
+    )
+
+    section_counts = Counter(_dashboard_section(item.get("section_or_field", "")) for item in findings_rows)
+    _dashboard_block(
+        ws,
+        "Findings by abstract section",
+        [{"section": section, "count": count} for section, count in sorted(section_counts.items())],
+        ["section", "count"],
+        row,
+    )
+    ws.freeze_panes = "A3"
+    _auto_size_columns(ws)
+
+
 def write_jsonl(path: str | Path, rows: Iterable[dict[str, Any]]) -> Path:
     resolved = ensure_parent_dir(path)
     with resolved.open("w", encoding="utf-8") as handle:
@@ -167,6 +274,8 @@ def write_workbook(
     workbook = Workbook()
     default_sheet = workbook.active
     workbook.remove(default_sheet)
+
+    _write_dashboard(workbook, abstract_summary_rows, findings_rows, cluster_rows, parse_warning_rows)
 
     # Data Inventory sheet
     ws = workbook.create_sheet("Data Inventory")
@@ -225,9 +334,11 @@ def write_workbook(
         "parse_warnings",
         "llm_trace_flag",
         "tortured_phrase_flag",
+        "nonsense_candidate_flag",
         "template_cluster_flag",
         "llm_trace_count",
         "tortured_phrase_count",
+        "nonsense_candidate_count",
         "template_cluster_id",
         "template_cluster_size",
         "template_cluster_similarity_score",

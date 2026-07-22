@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Iterable
 
 from ..models import Finding, ParsedRecord
-from ..utils import evidence_snippet
+from ..utils import evidence_snippet, section_for_match
 
 
 @dataclass(slots=True)
@@ -89,10 +89,11 @@ def detect_llm_trace(record: ParsedRecord, rules: Iterable[LLMRule]) -> list[Fin
                         category=rule.category,
                         matched_text=match.group(0),
                         evidence_snippet=evidence_snippet(field_text, match.start(), match.end()),
-                        section_or_field=field_name,
+                        section_or_field=section_for_match(record, field_name, match.group(0)),
                         severity=rule.severity,
                         confidence=rule.confidence,
                         rule_id=rule.rule_id,
+                        check_type="llm_trace",
                     )
                 )
     return findings

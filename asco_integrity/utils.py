@@ -111,6 +111,16 @@ def evidence_snippet(text: str, start: int, end: int, window: int = 80) -> str:
     return normalize_whitespace(snippet)
 
 
+def section_for_match(record: "ParsedRecord", field_name: str, matched_text: str) -> str:
+    if field_name == "title":
+        return "Title"
+    needle = lowercase_normalize(matched_text)
+    for section in record.abstract_sections:
+        if needle and needle in lowercase_normalize(section.get("text", "")):
+            return normalize_label(section.get("section", "")) or "Abstract"
+    return "Abstract"
+
+
 def dedupe_sequence(items: Iterable[str]) -> list[str]:
     return unique_preserve_order(items)
 

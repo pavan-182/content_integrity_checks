@@ -48,6 +48,19 @@ STRUCTURED_SECTION_LABELS = [
     "Key Points",
 ]
 
+EXCLUDED_TEXT_TAGS = {
+    "aff": "affiliations",
+    "affiliation": "affiliations",
+    "author-list": "authors",
+    "author_list": "authors",
+    "contrib-group": "authors",
+    "ref": "references",
+    "ref-list": "references",
+    "reference": "references",
+    "references": "references",
+    "table-wrap": "tables",
+}
+
 
 def _local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1] if "}" in tag else tag
@@ -105,26 +118,38 @@ def _all_nodes(root: etree._Element, xpaths: list[str]) -> list[etree._Element]:
     return nodes
 
 
-def _paragraph_texts(abstract_node: etree._Element) -> list[str]:
+def _paragraph_texts(abstract_node: etree._Element, excluded_sections: set[str] | None = None) -> list[str]:
     paragraphs: list[str] = []
     for child in abstract_node.iterchildren():
         if _local_name(child.tag) == "p":
-            text = _text_without_tables(child)
+            text = _text_without_excluded_blocks(child, excluded_sections)
             if text and not re.fullmatch(r"e\d+", text, re.IGNORECASE):
                 paragraphs.append(text)
     if paragraphs:
         return paragraphs
-    text = _text_without_tables(abstract_node)
+    text = _text_without_excluded_blocks(abstract_node, excluded_sections)
     return [text] if text else []
 
 
-def _text_without_tables(node: etree._Element) -> str:
+def _text_without_excluded_blocks(node: etree._Element, excluded_sections: set[str] | None = None) -> str:
     parts = [node.text or ""]
     for child in node:
-        if _local_name(child.tag) != "table-wrap":
-            parts.append(_text_without_tables(child))
+        excluded_name = EXCLUDED_TEXT_TAGS.get(_local_name(child.tag))
+        if excluded_name:
+            if excluded_sections is not None:
+                excluded_sections.add(excluded_name)
+        else:
+            parts.append(_text_without_excluded_blocks(child, excluded_sections))
         parts.append(child.tail or "")
     return normalize_whitespace("".join(parts))
+
+
+def _excluded_sections_present(root: etree._Element) -> set[str]:
+    return {
+        excluded_name
+        for node in root.iter()
+        if (excluded_name := EXCLUDED_TEXT_TAGS.get(_local_name(node.tag)))
+    }
 
 
 def _canonical_label(label: str) -> str:
@@ -179,7 +204,11 @@ def _merge_sections(sections: list[dict[str, str]]) -> list[dict[str, str]]:
     return merged
 
 
-def extract_abstract_sections(abstract_node: etree._Element | None, fallback_text: str) -> tuple[list[dict[str, str]], bool, str]:
+def extract_abstract_sections(
+    abstract_node: etree._Element | None,
+    fallback_text: str,
+    excluded_sections: set[str] | None = None,
+) -> tuple[list[dict[str, str]], bool, str]:
     if abstract_node is None:
         cleaned = normalize_whitespace(fallback_text)
         if not cleaned:
@@ -197,7 +226,7 @@ def extract_abstract_sections(abstract_node: etree._Element | None, fallback_tex
                     if title:
                         break
             section_name = _canonical_label(title or "Section")
-            section_text = _text_without_tables(sec)
+            section_text = _text_without_excluded_blocks(sec, excluded_sections)
             if title and section_text.lower().startswith(title.lower()):
                 section_text = normalize_whitespace(section_text[len(title) :])
             explicit_sections.append({"section": section_name, "text": section_text})
@@ -205,7 +234,7 @@ def extract_abstract_sections(abstract_node: etree._Element | None, fallback_tex
         full_text = normalize_whitespace(" ".join(item["text"] for item in explicit_sections))
         return explicit_sections, True, full_text
 
-    paragraphs = _paragraph_texts(abstract_node)
+    paragraphs = _paragraph_texts(abstract_node, excluded_sections)
     collected_sections: list[dict[str, str]] = []
     structured = False
     for paragraph in paragraphs:
@@ -297,7 +326,8 @@ def _extract_article_root(tree: etree._ElementTree | etree._Element, source_file
         _string_from_xpath(metadata_root, ".//*[local-name()='article-title'][1]"),
     )
     abstract_node = _first_node(metadata_root, [".//*[local-name()='abstract'][1]"])
-    abstract_sections, structured, abstract_text = extract_abstract_sections(abstract_node, "")
+    excluded_sections = _excluded_sections_present(root)
+    abstract_sections, structured, abstract_text = extract_abstract_sections(abstract_node, "", excluded_sections)
     keywords = _extract_keywords(metadata_root)
     author_nodes = _all_nodes(metadata_root, [".//*[local-name()='contrib-group'][1]/*[local-name()='contrib'][@contrib-type='author' or @contrib-type='presenter']", ".//*[local-name()='author'][@contrib-type='author']"])
     authors = unique_preserve_order(_format_author_node(node) for node in author_nodes)
@@ -356,6 +386,7 @@ def _extract_article_root(tree: etree._ElementTree | etree._Element, source_file
         article_type=article_type,
         publication_year=publication_year,
         raw_text=raw_text,
+        excluded_sections=sorted(excluded_sections),
         parse_status=parse_status,
         parse_warnings=warnings,
     )
@@ -385,7 +416,8 @@ def _extract_article_set_root(tree: etree._ElementTree, source_file: str) -> Par
     doi = _string_from_xpath(article, ".//*[local-name()='article_id_list'][1]/*[local-name()='article_id'][@id_type='doi'][1]")
     title = _string_from_xpath(article, ".//*[local-name()='article_title'][1]")
     abstract_node = _first_node(article, [".//*[local-name()='abstract'][1]"])
-    abstract_sections, structured, abstract_text = extract_abstract_sections(abstract_node, "")
+    excluded_sections = _excluded_sections_present(article)
+    abstract_sections, structured, abstract_text = extract_abstract_sections(abstract_node, "", excluded_sections)
     keywords = _extract_keywords(article)
     author_nodes = _all_nodes(article, [".//*[local-name()='author_list'][1]/*[local-name()='author']", ".//*[local-name()='contrib-group'][1]/*[local-name()='contrib'][@contrib-type='author']"])
     authors = unique_preserve_order(_format_author_node(node) for node in author_nodes)
@@ -446,6 +478,7 @@ def _extract_article_set_root(tree: etree._ElementTree, source_file: str) -> Par
         article_type=article_type,
         publication_year=publication_year,
         raw_text=raw_text,
+        excluded_sections=sorted(excluded_sections),
         parse_status=parse_status,
         parse_warnings=warnings,
     )
@@ -488,12 +521,14 @@ def parse_wiley_xml_records(path: str | Path) -> list[ParsedRecord]:
 
     # Fallback for unexpected XML root types.
     record_id = path_stem(source_file)
-    text = normalize_whitespace("".join(root.itertext()))
+    excluded_sections = _excluded_sections_present(root)
+    text = _text_without_excluded_blocks(root, excluded_sections)
     return [ParsedRecord(
         source_file=source_file,
         schema_type=schema,
         record_id=record_id,
         raw_text=text,
+        excluded_sections=sorted(excluded_sections),
         parse_status="parsed_with_warnings",
         parse_warnings=[
             ParseWarning(

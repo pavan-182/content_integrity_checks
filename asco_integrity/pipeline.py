@@ -13,6 +13,7 @@ from .detectors import (
     build_tortured_rule_index,
     cluster_templates,
     detect_llm_trace,
+    NonsenseCandidateDetector,
     detect_tortured_phrases,
     load_tortured_rules,
 )
@@ -31,6 +32,7 @@ class PipelineConfig:
     similarity_threshold: float = 0.88
     dictionary_version: str = "wiley_tortured_seed_v1"
     validate_llm: bool = False
+    detect_nonsense_candidates: bool = False
 
 
 @dataclass(slots=True)
@@ -206,6 +208,7 @@ def _aggregate_findings(
         record_findings = finding_map.get(record.record_id, [])
         llm_findings = [finding for finding in record_findings if finding.detector_type == "llm_response_trace"]
         tortured_findings = [finding for finding in record_findings if finding.detector_type == "tortured_phrase"]
+        nonsense_findings = [finding for finding in record_findings if finding.detector_type == "nonsense_candidate"]
         cluster_row = cluster_map.get(record.record_id)
         cluster_flag = cluster_row is not None and cluster_row.cluster_severity != "excluded"
         detector_types = {finding.detector_type for finding in record_findings}
@@ -246,9 +249,11 @@ def _aggregate_findings(
                 "parse_warnings": to_pipe_string([warning.warning_code for warning in record.parse_warnings]),
                 "llm_trace_flag": "Yes" if llm_findings else "No",
                 "tortured_phrase_flag": "Yes" if tortured_findings else "No",
+                "nonsense_candidate_flag": "Yes" if nonsense_findings else "No",
                 "template_cluster_flag": "Yes" if cluster_flag else "No",
                 "llm_trace_count": len(llm_findings),
                 "tortured_phrase_count": len(tortured_findings),
+                "nonsense_candidate_count": len(nonsense_findings),
                 "template_cluster_id": cluster_row.template_cluster_id if cluster_row else "",
                 "template_cluster_size": cluster_row.cluster_size if cluster_row else 0,
                 "template_cluster_similarity_score": cluster_row.similarity_score if cluster_row else "",
@@ -282,6 +287,7 @@ def _template_finding_rows(clusters: list[TemplateClusterMember]) -> list[dict[s
                 "record_id": cluster.record_id,
                 "source_file": cluster.source_file,
                 "detector_type": "template_cluster",
+                "check_type": "template",
                 "category": "template_cluster",
                 "matched_text": cluster.template_pattern_type,
                 "expected_term": "",
@@ -364,6 +370,8 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     llm_rules = built_in_llm_rules()
     tortured_rules = load_tortured_rules(config.tortured_dictionary_path)
     tortured_index = build_tortured_rule_index(tortured_rules)
+    llm_client = build_gpt_oss_client() if config.detect_nonsense_candidates else None
+    nonsense_detector = NonsenseCandidateDetector(llm_client) if config.detect_nonsense_candidates else None
 
     findings: list[Finding] = []
     for record in records:
@@ -371,6 +379,8 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         tortured_findings = detect_tortured_phrases(record, tortured_rules, tortured_index)
         findings.extend(llm_findings)
         findings.extend(tortured_findings)
+        if nonsense_detector:
+            findings.extend(nonsense_detector.detect(record, tortured_findings))
 
     ordered_findings = sorted(findings, key=_finding_sort_key)
     for index, finding in enumerate(ordered_findings, start=1):
@@ -378,7 +388,9 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
             finding.finding_id = f"FND-{index:05d}"
 
     if config.validate_llm and ordered_findings:
-        validator = ContextValidator(client=build_gpt_oss_client())
+        if llm_client is None:
+            llm_client = build_gpt_oss_client()
+        validator = ContextValidator(client=llm_client)
         for finding in ordered_findings:
             if finding.detector_type not in validator.applies_to:
                 continue
@@ -423,7 +435,8 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         ("dictionary_version", config.dictionary_version),
         ("tortured_dictionary_path", str(config.tortured_dictionary_path)),
         ("similarity_threshold", config.similarity_threshold),
-        ("limitations", "Deterministic POC that flags explicit LLM response traces, known tortured phrases, and repeated abstract skeletons; it does not detect AI-generated authorship."),
+        ("nonsense_candidate_detection", "enabled" if config.detect_nonsense_candidates else "disabled"),
+        ("limitations", "Rule-based screening flags explicit LLM response traces, known tortured phrases, and repeated abstract skeletons; optional GPT-OSS stages only annotate candidates, and the pipeline does not detect AI-generated authorship."),
         ("excluded_scope", "AI-generated text detection"),
     ]
 
@@ -448,6 +461,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
             "article_type",
             "publication_year",
             "raw_text",
+            "excluded_sections",
             "parse_status",
             "parse_warnings",
         ],
@@ -547,6 +561,7 @@ def run_default_pipeline(
     output_dir: str | Path = "outputs",
     similarity_threshold: float = 0.88,
     validate_llm: bool = False,
+    detect_nonsense_candidates: bool = False,
 ) -> PipelineResult:
     config = PipelineConfig(
         input_dir=Path(input_dir),
@@ -554,6 +569,7 @@ def run_default_pipeline(
         tortured_dictionary_path=Path(tortured_dictionary_path),
         similarity_threshold=similarity_threshold,
         validate_llm=validate_llm,
+        detect_nonsense_candidates=detect_nonsense_candidates,
     )
     return run_pipeline(config)
 
@@ -571,6 +587,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Run the GPT-OSS 20B context validator on tortured_phrase and llm_response_trace findings.",
     )
+    parser.add_argument(
+        "--detect-nonsense-candidates",
+        action="store_true",
+        help="Run the opt-in GPT-OSS sentence-level nonsense candidate detector.",
+    )
     args = parser.parse_args(argv)
 
     result = run_default_pipeline(
@@ -579,6 +600,7 @@ def main(argv: list[str] | None = None) -> int:
         output_dir=args.output_dir,
         similarity_threshold=args.similarity_threshold,
         validate_llm=args.validate_llm,
+        detect_nonsense_candidates=args.detect_nonsense_candidates,
     )
     print(json.dumps({key: str(value) for key, value in result.output_paths.items()}, ensure_ascii=False, indent=2))
     return 0

@@ -34,6 +34,7 @@ class ParsedRecord:
     article_type: str = ""
     publication_year: str = ""
     raw_text: str = ""
+    excluded_sections: list[str] = field(default_factory=list)
     parse_status: str = "parsed"
     parse_warnings: list[ParseWarning] = field(default_factory=list)
 
@@ -83,6 +84,7 @@ class Finding:
     severity: str
     confidence: float
     rule_id: str
+    check_type: str = ""
     expected_term: str = ""
     validation_status: str = ""
     validation_reason: str = ""

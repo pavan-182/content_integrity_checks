@@ -13,6 +13,7 @@ from ..utils import (
     normalize_for_matching,
     normalize_whitespace,
     safe_int,
+    section_for_match,
     strip_outer_quotes,
 )
 
@@ -201,10 +202,11 @@ def detect_tortured_phrases(
                         category="tortured_phrase",
                         matched_text=match.group(0),
                         evidence_snippet=evidence_snippet(field_text, match.start(), match.end()),
-                        section_or_field=field_name,
+                        section_or_field=section_for_match(record, field_name, match.group(0)),
                         severity=rule.severity,
                         confidence=rule.confidence,
                         rule_id=rule.rule_id,
+                        check_type="tortured_phrase",
                         expected_term=rule.expected_term,
                     )
                 )
