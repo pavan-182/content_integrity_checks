@@ -1,0 +1,60 @@
+sequenceDiagram
+    autonumber
+    actor Editor as Editorial operator
+    participant CLI as run_pipeline.py
+    participant Pipeline as Pipeline orchestrator
+    participant Parser as XML parser
+    participant Rules as Rule detectors
+    participant GPT as IntelliHub / GPT-OSS
+    participant Templates as Template detector
+    participant Risk as Risk engine
+    participant Reports as Report writer
+
+    Editor->>CLI: Start batch with input, dictionary, output, and flags
+    CLI->>Pipeline: Build PipelineConfig and run
+    Pipeline->>Parser: Discover sorted XML files recursively
+
+    loop Every XML file
+        Parser->>Parser: Parse supported schema and split sub-articles
+        Parser->>Parser: Normalize metadata and abstract sections
+        Parser->>Parser: Exclude author, affiliation, reference, and table blocks
+        Parser-->>Pipeline: ParsedRecord plus warnings and exclusion audit
+    end
+
+    Pipeline->>Pipeline: Remove exact duplicates and disambiguate ID collisions
+    Pipeline->>Rules: Compile built-in LLM rules and tortured-phrase dictionary
+
+    loop Every retained record
+        par Deterministic checks
+            Pipeline->>Rules: Detect explicit LLM response traces
+        and
+            Pipeline->>Rules: Detect known tortured phrases
+        end
+        Rules-->>Pipeline: Evidence-backed deterministic findings
+
+        opt --detect-nonsense-candidates
+            Pipeline->>Pipeline: Keep unmatched sentences passing local prefilters
+            Pipeline->>GPT: Review one candidate sentence as untrusted text
+            GPT-->>Pipeline: Strict JSON sentence verdict
+            Pipeline->>Pipeline: Add low-severity candidate only when not understandable
+        end
+    end
+
+    Pipeline->>Pipeline: Sort findings and assign run-local finding IDs
+
+    opt --validate-llm
+        loop Every LLM-trace or tortured-phrase finding
+            Pipeline->>GPT: Validate matched phrase in its evidence context
+            GPT-->>Pipeline: confirmed, rejected, or uncertain plus reason
+            Pipeline->>Pipeline: Annotate finding without suppressing it
+        end
+    end
+
+    Pipeline->>Templates: Compare all retained records within the current batch
+    Templates-->>Pipeline: Candidate clusters, scores, peers, and exclusions
+    Pipeline->>Risk: Aggregate raw findings plus template membership per record
+    Risk-->>Pipeline: None, Low, Medium, or High plus review flag
+    Pipeline->>Reports: Supply records, findings, clusters, warnings, and metadata
+    Reports-->>Editor: JSONL, CSV files, and consolidated Excel workbook
+
+    Note over GPT,Risk: GPT validation annotations never alter deterministic risk

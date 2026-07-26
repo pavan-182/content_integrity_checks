@@ -4,6 +4,8 @@
 **Purpose:** Technical description of the batch workflow implemented in `asco_integrity`  
 **Primary entry point:** `scripts/run_pipeline.py`
 
+**Diagram set:** [`docs/PIPELINE_DIAGRAMS.md`](PIPELINE_DIAGRAMS.md)
+
 ## 1. Purpose and boundary
 
 The pipeline screens a batch of Wiley/ASCO XML abstracts for four explainable content-integrity signals:

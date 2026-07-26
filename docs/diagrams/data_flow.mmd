@@ -1,0 +1,83 @@
+flowchart TD
+    XML[("XML files")]
+    CSV[("Tortured-phrase CSV")]
+    Config["PipelineConfig"]
+
+    Discover["Discover and sort *.xml paths"]
+    Parse["Schema-aware parse and section extraction"]
+    Parsed["ParsedRecord[]<br/>metadata, sections, raw text,<br/>excluded_sections, parse_warnings"]
+    Dedupe["Deduplicate and rewrite colliding IDs"]
+    Records["Unique ParsedRecord[]"]
+
+    Compile["Compile and index rules"]
+    RuleIndex["LLMRule[] plus TorturedRule index"]
+    RuleDetect["Title and abstract rule matching"]
+    RawFindings["Finding[]<br/>match, evidence, section,<br/>severity, confidence, rule ID"]
+
+    Prefilter["Optional Level B sentence prefilter<br/>no Level A match, 8+ tokens,<br/>not heading/boilerplate, gene plus drug"]
+    SentenceReview["GPT-OSS sentence review"]
+    CandidateFindings["Low-severity nonsense_candidate Finding[]"]
+
+    Validation["Optional GPT-OSS context validation"]
+    Annotated["Finding[] with optional<br/>validation status, reason, model and prompt"]
+
+    Mask["Normalize and mask variable values"]
+    Pair["Generate candidates and score pairs"]
+    Clusters["TemplateClusterMember[]<br/>cluster, peers, similarities,<br/>substitutions, metadata, exclusions"]
+
+    Aggregate["Aggregate by record ID"]
+    Summary["Abstract Summary rows<br/>signal flags, counts, risk,<br/>review recommendation"]
+    Inventory["Inventory, warning, dictionary,<br/>and run-metadata rows"]
+    FindingsRows["Unified Integrity Findings rows<br/>rules plus template findings"]
+
+    JSONL[("parsed_records.jsonl<br/>run_metadata.jsonl")]
+    FlatFiles[("parsed_records.csv<br/>integrity_findings.csv<br/>template_clusters.csv<br/>pattern_dictionary.csv<br/>parse_warnings.csv")]
+    Excel[("content_integrity_screening_poc.xlsx<br/>Dashboard and seven detail sheets")]
+
+    XML --> Discover --> Parse --> Parsed --> Dedupe --> Records
+    CSV --> Compile --> RuleIndex
+    Config --> Discover
+    Config --> Pair
+    Config -. "feature flags" .-> Prefilter
+    Config -. "feature flags" .-> Validation
+
+    Records --> RuleDetect
+    RuleIndex --> RuleDetect --> RawFindings
+    Records -. "candidate sentences" .-> Prefilter
+    RawFindings -. "Level A exclusions" .-> Prefilter
+    Prefilter -. "surviving sentences only" .-> SentenceReview --> CandidateFindings
+    RawFindings --> Annotated
+    RawFindings -. "when validation is enabled" .-> Validation
+    Validation -. "annotations only" .-> Annotated
+    CandidateFindings --> Annotated
+
+    Records --> Mask --> Pair --> Clusters
+    Records --> Aggregate
+    Annotated --> Aggregate
+    Clusters --> Aggregate --> Summary
+
+    Parsed --> Inventory
+    RuleIndex --> Inventory
+    Config --> Inventory
+    Annotated --> FindingsRows
+    Clusters --> FindingsRows
+
+    Records --> JSONL
+    Inventory --> JSONL
+    Records --> FlatFiles
+    Inventory --> FlatFiles
+    FindingsRows --> FlatFiles
+    Clusters --> FlatFiles
+    Summary --> Excel
+    Inventory --> Excel
+    FindingsRows --> Excel
+    Clusters --> Excel
+
+    classDef source fill:#e8f1fb,stroke:#2563a6,color:#102a43;
+    classDef contract fill:#eaf7ef,stroke:#238636,color:#12351e;
+    classDef optional fill:#fff4dd,stroke:#b7791f,color:#4a2d00,stroke-dasharray:5 3;
+    classDef output fill:#f4eefe,stroke:#7c3aed,color:#2e1065;
+    class XML,CSV,Config source;
+    class Parsed,Records,RuleIndex,RawFindings,CandidateFindings,Annotated,Clusters,Summary,Inventory,FindingsRows contract;
+    class Prefilter,SentenceReview,Validation optional;
+    class JSONL,FlatFiles,Excel output;

@@ -1,0 +1,63 @@
+flowchart TD
+    Start(["Retained ParsedRecord"])
+
+    subgraph Signals["Signal decisions"]
+        LLM{"Explicit LLM-trace<br/>rule matched?"}
+        AddLLM["Add llm_trace finding<br/>configured severity"]
+        TP{"Known tortured phrase<br/>and context matched?"}
+        AddTP["Add tortured_phrase finding<br/>medium or high severity"]
+        NCFlag{"Nonsense candidate<br/>flag enabled?"}
+        Prefilters{"Unmatched sentence passes<br/>length, content, and entity filters?"}
+        Understandable{"GPT-OSS says sentence<br/>is understandable?"}
+        AddNC["Add nonsense_candidate finding<br/>always low severity"]
+        Cluster{"Member of a non-excluded<br/>template cluster?"}
+        AddTemplate["Add template_cluster signal<br/>candidate severity"]
+    end
+
+    Start --> LLM
+    LLM -- Yes --> AddLLM --> TP
+    LLM -- No --> TP
+    TP -- Yes --> AddTP --> NCFlag
+    TP -- No --> NCFlag
+    NCFlag -- No --> Cluster
+    NCFlag -- Yes --> Prefilters
+    Prefilters -- No --> Cluster
+    Prefilters -- Yes --> Understandable
+    Understandable -- Yes or invalid response --> Cluster
+    Understandable -- No --> AddNC --> Cluster
+    Cluster -- Yes --> AddTemplate --> Collect
+    Cluster -- No --> Collect
+
+    Collect["Collect record signals<br/>and optional validation annotations"]
+    IgnoreValidation["Risk ignores confirmed, rejected,<br/>uncertain, and candidate annotations"]
+    Collect --> IgnoreValidation --> Any{"No findings and<br/>no template cluster?"}
+
+    subgraph Priority["Risk precedence"]
+        Any -- Yes --> None(["None<br/>review_required = No"])
+        Any -- No --> Multi{"Two or more<br/>detector types?"}
+        Multi -- Yes --> High(["High<br/>review_required = Yes"])
+        Multi -- No --> HighSeverity{"Highest severity<br/>is High?"}
+        HighSeverity -- Yes --> High
+        HighSeverity -- No --> MediumSeverity{"Highest severity<br/>is Medium?"}
+        MediumSeverity -- Yes --> Medium(["Medium<br/>review_required = Yes"])
+        MediumSeverity -- No --> LowSeverity{"Highest severity<br/>is Low?"}
+        LowSeverity -- Yes --> LowCount{"More than one<br/>finding?"}
+        LowCount -- Yes --> Medium
+        LowCount -- No --> Low(["Low<br/>review_required = Yes"])
+        LowSeverity -- No --> TemplateOnly{"Template cluster<br/>present?"}
+        TemplateOnly -- Yes --> Medium
+        TemplateOnly -- No --> None
+    end
+
+    classDef decision fill:#fff4dd,stroke:#b7791f,color:#4a2d00;
+    classDef signal fill:#e8f1fb,stroke:#2563a6,color:#102a43;
+    classDef high fill:#fee2e2,stroke:#dc2626,color:#7f1d1d;
+    classDef medium fill:#ffedd5,stroke:#ea580c,color:#7c2d12;
+    classDef low fill:#fef9c3,stroke:#ca8a04,color:#713f12;
+    classDef none fill:#dcfce7,stroke:#16a34a,color:#14532d;
+    class LLM,TP,NCFlag,Prefilters,Understandable,Cluster,Any,Multi,HighSeverity,MediumSeverity,LowSeverity,LowCount,TemplateOnly decision;
+    class AddLLM,AddTP,AddNC,AddTemplate,Collect,IgnoreValidation signal;
+    class High high;
+    class Medium medium;
+    class Low low;
+    class None none;

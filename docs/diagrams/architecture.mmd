@@ -1,0 +1,81 @@
+flowchart LR
+    subgraph Inputs["Input and configuration boundary"]
+        XML[("Wiley / ASCO XML batch")]
+        Dictionary[("Tortured-phrase CSV")]
+        Flags["CLI flags and thresholds"]
+        Secrets["IntelliHub environment settings"]
+    end
+
+    subgraph Application["Application layer"]
+        CLI["scripts/run_pipeline.py<br/>CLI adapter"]
+        Orchestrator["pipeline.py<br/>batch orchestration"]
+    end
+
+    subgraph Domain["Domain processing"]
+        Parser["xml_parser.py<br/>parse, normalize, exclude"]
+        Dedupe["utils.py<br/>record identity and deduplication"]
+
+        subgraph Detection["Detection"]
+            LLMTrace["llm_trace.py<br/>explicit residue rules"]
+            Tortured["tortured_phrase.py<br/>Level A dictionary rules"]
+            Nonsense["nonsense_candidate.py<br/>optional Level B candidates"]
+            Template["template_detection.py<br/>batch similarity clusters"]
+        end
+
+        Risk["risk_engine.py<br/>record-level priority"]
+        Models["models.py<br/>ParsedRecord, Finding,<br/>TemplateClusterMember"]
+    end
+
+    subgraph Integration["External integration"]
+        Client["context_validator.py<br/>shared client, retry, strict JSON"]
+        Gateway[["IntelliHub GPT-OSS 20B"]]
+    end
+
+    subgraph Presentation["Reporting layer"]
+        Reporting["reporting.py<br/>tables and workbook"]
+        Files[("JSONL and CSV artifacts")]
+        Workbook[("Excel workbook<br/>Dashboard plus detail sheets")]
+    end
+
+    XML --> Parser
+    Dictionary --> Tortured
+    Flags --> CLI --> Orchestrator
+    Secrets -. "only for enabled GPT paths" .-> Client
+
+    Orchestrator --> Parser --> Dedupe
+    Dedupe --> LLMTrace
+    Dedupe --> Tortured
+    Dedupe --> Nonsense
+    Dedupe --> Template
+    Tortured --> Nonsense
+
+    Nonsense -. "sentence review" .-> Client
+    LLMTrace -. "optional finding validation" .-> Client
+    Tortured -. "optional finding validation" .-> Client
+    Client <--> Gateway
+
+    LLMTrace --> Risk
+    Tortured --> Risk
+    Nonsense --> Risk
+    Template --> Risk
+    Risk --> Reporting
+    Dedupe --> Reporting
+    Reporting --> Files
+    Reporting --> Workbook
+
+    Models -. "shared data contracts" .-> Parser
+    Models -.-> LLMTrace
+    Models -.-> Tortured
+    Models -.-> Nonsense
+    Models -.-> Template
+    Models -.-> Risk
+    Models -.-> Reporting
+
+    classDef input fill:#e8f1fb,stroke:#2563a6,color:#102a43;
+    classDef domain fill:#eaf7ef,stroke:#238636,color:#12351e;
+    classDef external fill:#fff4dd,stroke:#b7791f,color:#4a2d00;
+    classDef output fill:#f4eefe,stroke:#7c3aed,color:#2e1065;
+    class XML,Dictionary,Flags,Secrets input;
+    class Parser,Dedupe,LLMTrace,Tortured,Nonsense,Template,Risk,Models domain;
+    class Client,Gateway external;
+    class Reporting,Files,Workbook output;
