@@ -58,13 +58,13 @@ def _sentence_split(text: str) -> list[str]:
 
 def _mask_variables(text: str) -> str:
     masked = normalize_whitespace(text)
+    masked = TRIAL_PATTERN.sub("<TRIAL_ID>", masked)
     masked = GENE_PATTERN.sub("<GENE>", masked)
-    masked = masked.lower().replace("<gene>", "<GENE>")
+    masked = masked.lower().replace("<trial_id>", "<TRIAL_ID>").replace("<gene>", "<GENE>")
     masked = URL_PATTERN.sub("<URL>", masked)
     masked = EMAIL_PATTERN.sub("<EMAIL>", masked)
     for pattern in DATE_PATTERNS:
         masked = pattern.sub("<DATE>", masked)
-    masked = TRIAL_PATTERN.sub("<TRIAL_ID>", masked)
     masked = PVAL_PATTERN.sub("<PVAL>", masked)
     masked = PERCENT_PATTERN.sub("<PCT>", masked)
     masked = DRUG_SUFFIX_PATTERN.sub("<DRUG>", masked)

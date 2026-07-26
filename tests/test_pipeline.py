@@ -115,6 +115,10 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(_content_class(short, build_skeleton_text(short)), "valid_short")
         self.assertEqual(_content_class(boilerplate, build_skeleton_text(boilerplate)), "empty_or_unusable")
 
+    def test_trial_ids_are_masked_before_gene_names(self) -> None:
+        record = ParsedRecord("trial.xml", abstract_text="NCT12345678 evaluated BRCA1.")
+        self.assertEqual(build_skeleton_text(record), "<TRIAL_ID> evaluated <GENE>.")
+
     def test_dedupe_keeps_distinct_content_from_same_source(self) -> None:
         records, warnings = dedupe_records([
             ParsedRecord("bundle.xml", record_id="same", abstract_text="First abstract"),
