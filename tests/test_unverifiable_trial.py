@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
 import urllib.error
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 from asco_integrity.detectors.unverifiable_trial import (
@@ -179,9 +180,16 @@ class UnverifiableTrialTests(unittest.TestCase):
         self.assertIn("network_error", result.operational_error)
 
     def test_malformed_registry_response_is_operational(self) -> None:
+        calls = 0
+
+        def malformed(_url: str, _timeout: float) -> tuple[int, bytes]:
+            nonlocal calls
+            calls += 1
+            return 200, b'{"unexpected": true}'
+
         client = ClinicalTrialsGovClient(
-            max_retries=0,
-            transport=lambda _url, _timeout: (200, b'{"unexpected": true}'),
+            max_retries=3,
+            transport=malformed,
         )
         result = detect_unverifiable_trials(
             [_record("Registered as NCT01234567.")],
@@ -190,6 +198,222 @@ class UnverifiableTrialTests(unittest.TestCase):
         self.assertFalse(result.check_triggered)
         self.assertEqual(result.lookup_status, "lookup_failed")
         self.assertIn("invalid_response", result.operational_error)
+        self.assertEqual(calls, 1)
+
+    def test_returned_registry_identifier_must_match_request(self) -> None:
+        client = ClinicalTrialsGovClient(
+            transport=lambda _url, _timeout: (200, _api_payload("NCT87654321")),
+        )
+        result = detect_unverifiable_trials(
+            [_record("Registered as NCT01234567.")],
+            registry_clients={CLINICAL_TRIALS_GOV: client},
+        )[0]
+        self.assertFalse(result.check_triggered)
+        self.assertEqual(result.lookup_status, "lookup_failed")
+        self.assertIn("registry_identifier_mismatch", result.operational_error)
+        self.assertEqual(result.matched_source_type, "none")
+        self.assertEqual(result.matched_source_id, "")
+        self.assertEqual(result.external_record_id, "")
+
+    def test_missing_returned_registry_identifier_is_operational(self) -> None:
+        payload = json.loads(_api_payload())
+        del payload["protocolSection"]["identificationModule"]["nctId"]
+        result = ClinicalTrialsGovClient(
+            transport=lambda _url, _timeout: (200, json.dumps(payload).encode()),
+        ).lookup("NCT01234567")
+        self.assertEqual(result.lookup_status, "lookup_failed")
+        self.assertEqual(result.error_type, "invalid_response")
+
+    def test_injected_registry_result_invariants(self) -> None:
+        cases = (
+            replace(_verified(), found=False),
+            replace(_verified(), external_record_id=""),
+            replace(_verified(), queried_trial_id="NCT87654321"),
+            replace(_verified(), registry_name="Wrong registry"),
+            replace(_not_found(), found=True),
+            {"lookup_status": "verified"},
+        )
+        for client_result in cases:
+            with self.subTest(client_result=client_result):
+                result = detect_unverifiable_trials(
+                    [_record("Registered as NCT01234567.")],
+                    registry_clients={
+                        CLINICAL_TRIALS_GOV: FakeClient({
+                            "NCT01234567": client_result,
+                        })
+                    },
+                )[0]
+                self.assertFalse(result.check_triggered)
+                self.assertEqual(result.lookup_status, "lookup_failed")
+                self.assertIn("invalid_registry_client_result", result.operational_error)
+                self.assertEqual(result.external_record_id, "")
+                self.assertEqual(result.matched_source_id, "")
+
+    def test_non_nct_format_precedes_unsupported_registry(self) -> None:
+        cases = (
+            ("ISRCTN1234", "ISRCTN", "ISRCTN followed by exactly eight digits"),
+            (
+                "ACTRN123",
+                "ANZCTR",
+                "ACTRN followed by the expected fourteen-digit registration number",
+            ),
+            (
+                "EUCTR2020-123",
+                "EU Clinical Trials Register",
+                "recognised EUCTR or EudraCT",
+            ),
+            (
+                "EudraCT2020-123",
+                "EU Clinical Trials Register",
+                "recognised EUCTR or EudraCT",
+            ),
+            (
+                "ChiCTR123",
+                "Chinese Clinical Trial Registry",
+                "recognised ChiCTR",
+            ),
+        )
+        for trial_id, registry, expected_format in cases:
+            with self.subTest(trial_id=trial_id):
+                result = detect_unverifiable_trials([
+                    _record(f"Registered as {trial_id}.")
+                ])[0]
+                self.assertEqual(result.finding_type, "invalid_trial_id_format")
+                self.assertEqual(result.lookup_status, "invalid_format")
+                self.assertEqual(result.registry_name, registry)
+                self.assertIn(trial_id, result.evidence)
+                self.assertIn(registry, result.evidence)
+                self.assertIn(expected_format, result.evidence)
+
+    def test_valid_non_nct_ids_remain_unsupported(self) -> None:
+        for trial_id in ("ISRCTN12345678", "ACTRN12623000000000"):
+            with self.subTest(trial_id=trial_id):
+                result = detect_unverifiable_trials([
+                    _record(f"Registered as {trial_id}.")
+                ])[0]
+                self.assertEqual(
+                    result.finding_type,
+                    "unsupported_registry_manual_verification",
+                )
+                self.assertEqual(result.lookup_status, "unsupported_registry")
+
+    def test_cache_write_failures_are_best_effort(self) -> None:
+        for status in ("verified", "not_found"):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as directory:
+                blocked_cache = Path(directory) / "not-a-directory"
+                blocked_cache.write_text("blocked", encoding="utf-8")
+                calls = 0
+
+                def transport(_url: str, _timeout: float) -> tuple[int, bytes]:
+                    nonlocal calls
+                    calls += 1
+                    return (200, _api_payload()) if status == "verified" else (404, b"")
+
+                client = ClinicalTrialsGovClient(
+                    cache_dir=blocked_cache,
+                    max_retries=3,
+                    transport=transport,
+                )
+                lookup = client.lookup("NCT01234567")
+                self.assertEqual(lookup.lookup_status, status)
+                self.assertEqual(calls, 1)
+                result = detect_unverifiable_trials(
+                    [_record("Registered as NCT01234567.")],
+                    registry_clients={CLINICAL_TRIALS_GOV: FakeClient({
+                        "NCT01234567": lookup,
+                    })},
+                )[0]
+                self.assertEqual(result.check_triggered, status == "not_found")
+
+    def test_valid_not_found_cache_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            first = ClinicalTrialsGovClient(
+                cache_dir=directory,
+                transport=lambda _url, _timeout: (404, b""),
+            ).lookup("NCT01234567")
+            second = ClinicalTrialsGovClient(
+                cache_dir=directory,
+                offline_cache_only=True,
+            ).lookup("NCT01234567")
+            self.assertEqual(first.lookup_status, "not_found")
+            self.assertEqual(second.lookup_status, "not_found")
+            self.assertTrue(second.cache_hit)
+
+    def test_invalid_cache_falls_back_online(self) -> None:
+        cache_payloads = (
+            "{not-json",
+            json.dumps(asdict(replace(_verified(), found=False))),
+            json.dumps(asdict(replace(
+                _verified(),
+                external_record_id="NCT87654321",
+            ))),
+        )
+        for payload in cache_payloads:
+            with self.subTest(payload=payload), tempfile.TemporaryDirectory() as directory:
+                cache_path = Path(directory) / "NCT01234567.json"
+                cache_path.write_text(payload, encoding="utf-8")
+                calls = 0
+
+                def transport(_url: str, _timeout: float) -> tuple[int, bytes]:
+                    nonlocal calls
+                    calls += 1
+                    return 200, _api_payload()
+
+                result = ClinicalTrialsGovClient(
+                    cache_dir=directory,
+                    transport=transport,
+                ).lookup("NCT01234567")
+                self.assertEqual(result.lookup_status, "verified")
+                self.assertFalse(result.cache_hit)
+                self.assertEqual(calls, 1)
+
+    def test_invalid_cache_fails_safely_offline(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / "NCT01234567.json").write_text(
+                json.dumps(asdict(replace(
+                    _verified(),
+                    queried_trial_id="NCT87654321",
+                ))),
+                encoding="utf-8",
+            )
+            result = ClinicalTrialsGovClient(
+                cache_dir=directory,
+                offline_cache_only=True,
+            ).lookup("NCT01234567")
+            self.assertEqual(result.lookup_status, "lookup_failed")
+            self.assertEqual(result.error_type, "invalid_cache_entry")
+            self.assertFalse(result.found)
+
+    def test_expired_cache_falls_back_or_fails_offline(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            cache_path = Path(directory) / "NCT01234567.json"
+            cache_path.write_text(
+                json.dumps(asdict(_verified())),
+                encoding="utf-8",
+            )
+            os.utime(cache_path, (1, 1))
+            calls = 0
+
+            def transport(_url: str, _timeout: float) -> tuple[int, bytes]:
+                nonlocal calls
+                calls += 1
+                return 200, _api_payload()
+
+            online = ClinicalTrialsGovClient(
+                cache_dir=directory,
+                max_cache_age_seconds=1,
+                transport=transport,
+            ).lookup("NCT01234567")
+            self.assertEqual(online.lookup_status, "verified")
+            self.assertEqual(calls, 1)
+            os.utime(cache_path, (1, 1))
+            offline = ClinicalTrialsGovClient(
+                cache_dir=directory,
+                max_cache_age_seconds=1,
+                offline_cache_only=True,
+            ).lookup("NCT01234567")
+            self.assertEqual(offline.lookup_status, "lookup_failed")
+            self.assertEqual(offline.error_type, "expired_cache_entry")
 
     def test_temporary_http_errors_are_retried(self) -> None:
         for temporary_status in (429, 503):
@@ -213,6 +437,22 @@ class UnverifiableTrialTests(unittest.TestCase):
                 self.assertEqual(result.lookup_status, "verified")
                 self.assertEqual(calls, 2)
 
+    def test_timeout_retries_are_bounded(self) -> None:
+        calls = 0
+
+        def timeout(_url: str, _timeout: float) -> tuple[int, bytes]:
+            nonlocal calls
+            calls += 1
+            raise TimeoutError
+
+        result = ClinicalTrialsGovClient(
+            max_retries=2,
+            transport=timeout,
+            sleep=lambda _seconds: None,
+        ).lookup("NCT01234567")
+        self.assertEqual(result.lookup_status, "lookup_failed")
+        self.assertEqual(calls, 3)
+
     def test_permanent_not_found_is_not_retried(self) -> None:
         calls = 0
 
@@ -227,6 +467,23 @@ class UnverifiableTrialTests(unittest.TestCase):
             sleep=lambda _seconds: None,
         ).lookup("NCT01234567")
         self.assertEqual(result.lookup_status, "not_found")
+        self.assertEqual(calls, 1)
+
+    def test_permanent_client_error_is_not_retried(self) -> None:
+        calls = 0
+
+        def transport(url: str, _timeout: float) -> tuple[int, bytes]:
+            nonlocal calls
+            calls += 1
+            raise urllib.error.HTTPError(url, 400, "bad request", None, None)
+
+        result = ClinicalTrialsGovClient(
+            max_retries=3,
+            transport=transport,
+            sleep=lambda _seconds: None,
+        ).lookup("NCT01234567")
+        self.assertEqual(result.lookup_status, "lookup_failed")
+        self.assertEqual(result.error_type, "http_error")
         self.assertEqual(calls, 1)
 
     def test_multiple_and_duplicate_ids(self) -> None:
@@ -258,6 +515,28 @@ class UnverifiableTrialTests(unittest.TestCase):
         self.assertEqual(len(results), 2)
         self.assertEqual(client.calls, ["NCT01234567"])
 
+    def test_one_failed_identifier_does_not_affect_verified_identifier(self) -> None:
+        client = FakeClient({
+            "NCT01234567": _verified(),
+            "NCT87654321": RegistryLookupResult(
+                registry_name=CLINICAL_TRIALS_GOV,
+                queried_trial_id="NCT87654321",
+                lookup_status="lookup_failed",
+                found=False,
+                error_type="network_error",
+                error_message="TimeoutError",
+            ),
+        })
+        results = detect_unverifiable_trials(
+            [_record("Trials NCT01234567 and NCT87654321 were reported.")],
+            registry_clients={CLINICAL_TRIALS_GOV: client},
+        )
+        by_id = {result.normalized_trial_id: result for result in results}
+        self.assertEqual(by_id["NCT01234567"].lookup_status, "verified")
+        self.assertFalse(by_id["NCT01234567"].check_triggered)
+        self.assertEqual(by_id["NCT87654321"].lookup_status, "lookup_failed")
+        self.assertFalse(by_id["NCT87654321"].check_triggered)
+
     def test_cache_hit_avoids_external_request(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             calls = 0
@@ -281,7 +560,7 @@ class UnverifiableTrialTests(unittest.TestCase):
             self.assertEqual(calls, 1)
 
     def test_withdrawn_or_terminated_record_is_still_verified(self) -> None:
-        for status in ("WITHDRAWN", "TERMINATED"):
+        for status in ("WITHDRAWN", "TERMINATED", "SUSPENDED", "COMPLETED", "UNKNOWN"):
             with self.subTest(status=status):
                 result = detect_unverifiable_trials(
                     [_record("Registered as NCT01234567.")],

@@ -58,6 +58,13 @@ REGISTRY_NAMES = {
     "EUDRACT": "EU Clinical Trials Register",
     "CHICTR": "Chinese Clinical Trial Registry",
 }
+REGISTRY_FORMAT_DESCRIPTIONS = {
+    CLINICAL_TRIALS_GOV: "NCT followed by exactly eight digits",
+    "ISRCTN": "ISRCTN followed by exactly eight digits",
+    "ANZCTR": "ACTRN followed by the expected fourteen-digit registration number",
+    "EU Clinical Trials Register": "a recognised EUCTR or EudraCT registration format",
+    "Chinese Clinical Trial Registry": "a recognised ChiCTR registration format",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,6 +154,116 @@ class RegistryClient(Protocol):
 Transport = Callable[[str, float], tuple[int, bytes]]
 
 
+def _canonical_registry_id(value: str, registry_name: str) -> str:
+    canonical = normalize_whitespace(value).upper()
+    if registry_name == CLINICAL_TRIALS_GOV:
+        canonical = re.sub(r"[\s\-_:]", "", canonical)
+    return canonical
+
+
+def _failed_result(
+    trial_id: str,
+    registry_name: str,
+    *,
+    error_type: str,
+    error_message: str,
+    http_status: int | None = None,
+) -> RegistryLookupResult:
+    return RegistryLookupResult(
+        registry_name=registry_name,
+        queried_trial_id=trial_id,
+        lookup_status="lookup_failed",
+        found=False,
+        http_status=http_status,
+        error_type=error_type,
+        error_message=error_message,
+    )
+
+
+def _validate_registry_result(
+    result: Any,
+    requested_trial_id: str,
+    expected_registry_name: str,
+) -> RegistryLookupResult:
+    if not isinstance(result, RegistryLookupResult):
+        return _failed_result(
+            requested_trial_id,
+            expected_registry_name,
+            error_type="invalid_registry_client_result",
+            error_message="Registry client did not return RegistryLookupResult.",
+        )
+    requested = _canonical_registry_id(requested_trial_id, expected_registry_name)
+    queried = _canonical_registry_id(result.queried_trial_id, expected_registry_name)
+    if result.registry_name != expected_registry_name or queried != requested:
+        return _failed_result(
+            requested_trial_id,
+            expected_registry_name,
+            error_type="invalid_registry_client_result",
+            error_message="Registry name or queried identifier did not match the selected adapter.",
+            http_status=result.http_status,
+        )
+    if result.lookup_status == "verified":
+        if not result.found or not result.external_record_id:
+            return _failed_result(
+                requested_trial_id,
+                expected_registry_name,
+                error_type="invalid_registry_client_result",
+                error_message="Verified registry result was missing required existence fields.",
+                http_status=result.http_status,
+            )
+        external = _canonical_registry_id(result.external_record_id, expected_registry_name)
+        if external != requested:
+            return _failed_result(
+                requested_trial_id,
+                expected_registry_name,
+                error_type="registry_identifier_mismatch",
+                error_message=(
+                    f"Registry returned {result.external_record_id} for requested "
+                    f"{requested_trial_id}."
+                ),
+                http_status=result.http_status,
+            )
+        return replace(result, external_record_id=external)
+    if result.lookup_status == "not_found":
+        if result.found or result.external_record_id:
+            return _failed_result(
+                requested_trial_id,
+                expected_registry_name,
+                error_type="invalid_registry_client_result",
+                error_message="Not-found registry result contained contradictory existence fields.",
+                http_status=result.http_status,
+            )
+        return result
+    if result.lookup_status == "lookup_failed":
+        if result.found or result.external_record_id:
+            return _failed_result(
+                requested_trial_id,
+                expected_registry_name,
+                error_type="invalid_registry_client_result",
+                error_message="Failed registry result exposed a matched external record.",
+                http_status=result.http_status,
+            )
+        return replace(
+            result,
+            external_record_id="",
+            external_title="",
+            study_type="",
+            phase="",
+            recruitment_status="",
+            conditions=(),
+            interventions=(),
+            enrollment=None,
+            source_record_url="",
+        )
+    return _failed_result(
+        requested_trial_id,
+        expected_registry_name,
+        error_type="invalid_registry_client_result",
+        error_message=f"Unsupported registry lookup status: {result.lookup_status}.",
+        http_status=result.http_status,
+    )
+
+
 def _default_transport(url: str, timeout_seconds: float) -> tuple[int, bytes]:
     request = urllib.request.Request(
         url,
@@ -167,6 +284,7 @@ class ClinicalTrialsGovClient:
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         max_retries: int = DEFAULT_MAX_RETRIES,
         offline_cache_only: bool = False,
+        max_cache_age_seconds: float | None = None,
         transport: Transport = _default_transport,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
@@ -174,45 +292,81 @@ class ClinicalTrialsGovClient:
             raise ValueError("timeout_seconds must be positive")
         if max_retries < 0:
             raise ValueError("max_retries must be non-negative")
+        if max_cache_age_seconds is not None and max_cache_age_seconds < 0:
+            raise ValueError("max_cache_age_seconds must be non-negative")
         self.cache_dir = Path(cache_dir) if cache_dir is not None else None
         self.timeout_seconds = timeout_seconds
         self.max_retries = max_retries
         self.offline_cache_only = offline_cache_only
+        self.max_cache_age_seconds = max_cache_age_seconds
         self.transport = transport
         self.sleep = sleep
 
     def _cache_path(self, trial_id: str) -> Path | None:
         return self.cache_dir / f"{trial_id}.json" if self.cache_dir is not None else None
 
-    def _read_cache(self, trial_id: str) -> RegistryLookupResult | None:
+    def _read_cache(
+        self,
+        trial_id: str,
+    ) -> tuple[RegistryLookupResult | None, str, str]:
         path = self._cache_path(trial_id)
-        if path is None or not path.is_file():
-            return None
+        if path is None:
+            return None, "", ""
         try:
+            if not path.is_file():
+                return None, "", ""
+            if (
+                self.max_cache_age_seconds is not None
+                and time.time() - path.stat().st_mtime > self.max_cache_age_seconds
+            ):
+                return (
+                    None,
+                    "expired_cache_entry",
+                    "Cached registry response exceeded the configured maximum age.",
+                )
             data = json.loads(path.read_text(encoding="utf-8"))
             data["conditions"] = tuple(data.get("conditions", ()))
             data["interventions"] = tuple(data.get("interventions", ()))
-            return replace(RegistryLookupResult(**data), cache_hit=True)
-        except (OSError, TypeError, ValueError, json.JSONDecodeError):
-            return None
+            raw_result = RegistryLookupResult(**data)
+            if raw_result.lookup_status not in {"verified", "not_found"}:
+                raise ValueError("cache contained a non-cacheable lookup status")
+            validated = _validate_registry_result(
+                raw_result,
+                trial_id,
+                CLINICAL_TRIALS_GOV,
+            )
+            if validated.lookup_status == "lookup_failed":
+                raise ValueError(validated.error_message)
+            return replace(validated, cache_hit=True), "", ""
+        except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            return (
+                None,
+                "invalid_cache_entry",
+                f"Cached registry response was rejected: {normalize_whitespace(str(exc))}",
+            )
 
     def _write_cache(self, result: RegistryLookupResult) -> None:
         path = self._cache_path(result.queried_trial_id)
         if path is None or result.lookup_status not in {"verified", "not_found"}:
             return
-        path.parent.mkdir(parents=True, exist_ok=True)
-        payload = json.dumps(asdict(result), ensure_ascii=False, sort_keys=True)
         temporary_name = ""
         try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            payload = json.dumps(asdict(result), ensure_ascii=False, sort_keys=True)
             with tempfile.NamedTemporaryFile(
                 "w", encoding="utf-8", dir=path.parent, delete=False
             ) as handle:
                 handle.write(payload)
                 temporary_name = handle.name
             os.replace(temporary_name, path)
+        except (OSError, TypeError, ValueError):
+            return
         finally:
-            if temporary_name and os.path.exists(temporary_name):
-                os.unlink(temporary_name)
+            try:
+                if temporary_name and os.path.exists(temporary_name):
+                    os.unlink(temporary_name)
+            except OSError:
+                pass
 
     @staticmethod
     def _failed(
@@ -222,14 +376,12 @@ class ClinicalTrialsGovClient:
         error_message: str,
         http_status: int | None = None,
     ) -> RegistryLookupResult:
-        return RegistryLookupResult(
-            registry_name=CLINICAL_TRIALS_GOV,
-            queried_trial_id=trial_id,
-            lookup_status="lookup_failed",
-            found=False,
-            http_status=http_status,
+        return _failed_result(
+            trial_id,
+            CLINICAL_TRIALS_GOV,
             error_type=error_type,
             error_message=error_message,
+            http_status=http_status,
         )
 
     @staticmethod
@@ -285,14 +437,17 @@ class ClinicalTrialsGovClient:
         )
 
     def lookup(self, normalized_trial_id: str) -> RegistryLookupResult:
-        cached = self._read_cache(normalized_trial_id)
+        cached, cache_error_type, cache_error_message = self._read_cache(
+            normalized_trial_id
+        )
         if cached is not None:
             return cached
         if self.offline_cache_only:
             return self._failed(
                 normalized_trial_id,
-                error_type="offline_cache_miss",
-                error_message="No cached authoritative registry response is available.",
+                error_type=cache_error_type or "offline_cache_miss",
+                error_message=cache_error_message
+                or "No cached authoritative registry response is available.",
             )
 
         url = f"{CLINICAL_TRIALS_GOV_API}/{normalized_trial_id}"
@@ -324,6 +479,11 @@ class ClinicalTrialsGovClient:
                 if not isinstance(payload, dict):
                     raise ValueError("registry response was not a JSON object")
                 result = self._parse_record(normalized_trial_id, payload, status)
+                result = _validate_registry_result(
+                    result,
+                    normalized_trial_id,
+                    CLINICAL_TRIALS_GOV,
+                )
                 self._write_cache(result)
                 return result
             except urllib.error.HTTPError as exc:
@@ -537,10 +697,10 @@ def _local_lookup(claim: TrialReferenceClaim) -> RegistryLookupResult:
         status = "placeholder_id"
     elif claim.claim_type == "registration_claim_without_id":
         status = "registration_claim_without_id"
-    elif claim.registry_name != CLINICAL_TRIALS_GOV:
-        status = "unsupported_registry"
-    else:
+    elif not claim.format_valid:
         status = "invalid_format"
+    else:
+        status = "unsupported_registry"
     return RegistryLookupResult(
         registry_name=claim.registry_name,
         queried_trial_id=claim.normalized_trial_id,
@@ -569,13 +729,16 @@ def _lookup_unique_ids(
             results[key] = _local_lookup(claim)
             continue
         try:
-            results[key] = clients[claim.registry_name].lookup(claim.normalized_trial_id)
+            raw_result = clients[claim.registry_name].lookup(claim.normalized_trial_id)
+            results[key] = _validate_registry_result(
+                raw_result,
+                claim.normalized_trial_id,
+                claim.registry_name,
+            )
         except Exception as exc:  # Registry adapters are an operational trust boundary.
-            results[key] = RegistryLookupResult(
-                registry_name=claim.registry_name,
-                queried_trial_id=claim.normalized_trial_id,
-                lookup_status="lookup_failed",
-                found=False,
+            results[key] = _failed_result(
+                claim.normalized_trial_id,
+                claim.registry_name,
                 error_type="client_error",
                 error_message=type(exc).__name__,
             )
@@ -607,14 +770,18 @@ def _classification(
             "Confirm the reported identifier and registration record before publication.",
         )
     if status == "invalid_format":
+        expected_format = REGISTRY_FORMAT_DESCRIPTIONS.get(
+            claim.registry_name,
+            "the recognised registry-specific identifier format",
+        )
         return (
             True,
             "invalid_trial_id_format",
             "medium",
             "very_high",
-            f"The abstract reports {claim.raw_trial_id}, which does not match the required "
-            "ClinicalTrials.gov format of NCT followed by eight digits.",
-            "Check whether the registration identifier was entered correctly.",
+            f"The abstract reports {claim.raw_trial_id} for {claim.registry_name}, which "
+            f"does not match the expected format: {expected_format}.",
+            f"Check the {claim.registry_name} registration identifier and correct its format.",
         )
     if status == "registration_claim_without_id":
         return (

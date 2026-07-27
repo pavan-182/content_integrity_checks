@@ -52,6 +52,12 @@ def main() -> int:
     )
     parser.add_argument("--max-retries", type=int, default=DEFAULT_MAX_RETRIES)
     parser.add_argument(
+        "--max-cache-age-seconds",
+        type=float,
+        default=None,
+        help="Optional cache age limit; the default keeps valid entries indefinitely.",
+    )
+    parser.add_argument(
         "--offline-cache-only",
         action="store_true",
         help="Never access the network; uncached IDs are reported as operational lookup failures.",
@@ -66,6 +72,8 @@ def main() -> int:
         parser.error("--timeout-seconds must be positive")
     if args.max_retries < 0:
         parser.error("--max-retries must be non-negative")
+    if args.max_cache_age_seconds is not None and args.max_cache_age_seconds < 0:
+        parser.error("--max-cache-age-seconds must be non-negative")
 
     xml_files = discover_xml_files(args.input_dir)
     if not xml_files:
@@ -83,6 +91,7 @@ def main() -> int:
         timeout_seconds=args.timeout_seconds,
         max_retries=args.max_retries,
         offline_cache_only=args.offline_cache_only,
+        max_cache_age_seconds=args.max_cache_age_seconds,
     )
     results = detect_unverifiable_trials(
         comparable,
