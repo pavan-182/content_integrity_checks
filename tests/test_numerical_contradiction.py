@@ -175,6 +175,40 @@ class NumericalContradictionTests(unittest.TestCase):
             with self.subTest(sentence=sentence):
                 self.assertEqual(detect_numerical_contradictions([_record(sentence)]), [])
 
+    def test_ranges_dates_ratings_and_decimal_comma_are_tokenized_safely(self) -> None:
+        sentences = (
+            "Response rates ranged from 25-50%.",
+            "Among patients assessed on 07/01/2021, the response rate was 40%.",
+            "Among patients, 266/1,100 responded.",
+            "Patients rated symptoms 3.7/5.",
+            "The objective response rate was 81,1%.",
+        )
+        for sentence in sentences:
+            with self.subTest(sentence=sentence):
+                self.assertEqual(detect_numerical_contradictions([_record(sentence)]), [])
+                self.assertNotIn(
+                    "count_fraction",
+                    {claim.extraction_method for claim in extract_numerical_claims(_record(sentence))},
+                )
+
+        percentages = [
+            claim.reported_percentage
+            for sentence in sentences
+            for claim in extract_numerical_claims(_record(sentence))
+            if claim.claim_type == "percentage"
+        ]
+        self.assertNotIn(-50.0, percentages)
+        self.assertIn(81.1, percentages)
+
+    def test_range_and_count_percentage_punctuation_is_not_negative(self) -> None:
+        for sentence in (
+            "The response rate was 97% (range: 95%-100%).",
+            "The morbidity profile included grade IV-5% and grade V-2%.",
+            "The common cancers were breast (n = 570,25%) and gynaecologic (n = 297,13%).",
+        ):
+            with self.subTest(sentence=sentence):
+                self.assertEqual(detect_numerical_contradictions([_record(sentence)]), [])
+
     def test_out_of_range_percentage_takes_precedence(self) -> None:
         findings = detect_numerical_contradictions([
             _record("8 of 20 patients responded (135%).")

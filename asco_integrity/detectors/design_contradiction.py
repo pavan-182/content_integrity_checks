@@ -140,8 +140,20 @@ def _pattern(
 
 
 PATTERNS: tuple[PatternSpec, ...] = (
-    _pattern("time_direction", "prospective", r"\bprospective(?:ly)?\b"),
-    _pattern("time_direction", "retrospective", r"\bretrospective(?:ly)?\b"),
+    _pattern(
+        "time_direction", "prospective",
+        r"\b(?:prospective(?:\s+[a-z-]+){0,10}\s+(?:stud(?:y|ies)|trials?|cohorts?)|"
+        r"prospectively\s+(?:enrolled|collected|randomi[sz]ed)|"
+        r"(?:data|samples?|patients?|participants?|subjects?)\s+(?:were\s+)?"
+        r"(?:enrolled|collected)\s+prospectively)\b",
+    ),
+    _pattern(
+        "time_direction", "retrospective",
+        r"\b(?:retrospective(?:\s+[a-z-]+){0,10}\s+"
+        r"(?:stud(?:y|ies)|reviews?|cohorts?|analys(?:is|es))|"
+        r"retrospectively\s+(?:reviewed|analy[sz]ed)|"
+        r"(?:reviewed|analy[sz]ed)(?:\s+[a-z-]+){0,4}\s+retrospectively)\b",
+    ),
     _pattern("study_type", "observational", r"\bobservational\b"),
     _pattern(
         "study_type", "interventional",
@@ -192,7 +204,19 @@ FUTURE_DESIGN_RE = re.compile(
     r"\b(?:stud(?:y|ies)|trials?|research|validation|designs?|evaluation)\b|"
     r"\b(?:stud(?:y|ies)|trials?|research|validation|designs?|evaluation)\b.*"
     r"\b(?:planned|proposed|warranted|required|recommended|needed|"
-    r"should be (?:conducted|performed)|remains? to be evaluated)\b",
+    r"essential|should be (?:conducted|performed)|remains? to be evaluated)\b|"
+    r"\b(?:need for|warrant|warrants|support|supports|require|requires)\s+"
+    r"(?:prospective\s+)?(?:stud(?:y|ies)|trials?|research|investigation|"
+    r"validation|evaluation)\b|"
+    r"\b(?:underway|ongoing)\b.*\b(?:validat(?:e|ion)|evaluat(?:e|ion))\b|"
+    r"\bto\s+(?:validate|evaluate)\b",
+    re.IGNORECASE,
+)
+REVIEW_SOURCE_CONTEXT_RE = re.compile(
+    r"\b(?:systematic(?:\s+literature)?\s+(?:review|search)|meta-?analysis|"
+    r"literature\s+search|systematically\s+searched|"
+    r"searched\b.{0,80}\b(?:pubmed|embase|scopus|cochrane)|"
+    r"(?:studies|trials|cohorts)\b.{0,160}\bincluded\b|risk\s+of\s+bias)\b",
     re.IGNORECASE,
 )
 FUTURE_DESIGN_VALUES = {
@@ -286,6 +310,15 @@ COMPONENT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("observational_followup", r"\bobservational (?:long[- ]term )?follow[- ]up\b"),
         ("discovery_cohort", r"\bdiscovery cohort\b"),
         ("validation_cohort", r"\bvalidation cohort\b"),
+        ("source_studies", r"\b(?:systematic review|meta-analysis|source studies|included studies)\b"),
+        ("prior_evidence", r"\b(?:prior|previous|existing) (?:evidence|studies|trials?|research)\b"),
+        ("future_work", r"\b(?:future work|future|further|warranted|required|needed|planned)\b"),
+        ("retrospective_dataset", r"\b(?:retrospective (?:data ?set|database|cohort)|modeling cohort)\b"),
+        (
+            "prospective_validation_cohort",
+            r"\b(?:prospective|prospectively collected)\b.{0,30}\bvalidation cohort\b|"
+            r"\bvalidation cohort\b.{0,30}\bprospectively collected\b",
+        ),
         ("historical_control", r"\bhistorical control\b"),
         ("external_control", r"\bexternal control\b"),
         ("part_a", r"\bpart A\b"),
@@ -392,6 +425,9 @@ def _suppressed(
     left: StudyDesignClaim,
     right: StudyDesignClaim,
 ) -> bool:
+    non_current_components = {"source_studies", "prior_evidence", "future_work"}
+    if {_component(left), _component(right)} & non_current_components:
+        return True
     if not _same_component(left, right):
         return True
     pair_text = f"{left.sentence} {right.sentence}"
@@ -405,6 +441,8 @@ def _suppressed(
     if contradiction_type in analysis_types and PRIOR_TRIAL_ANALYSIS_RE.search(pair_text):
         return True
     if contradiction_type in analysis_types and DERIVED_ANALYSIS_RE.search(pair_text):
+        return True
+    if REVIEW_SOURCE_CONTEXT_RE.search(pair_text):
         return True
     if contradiction_type in analysis_types and PARENT_TRIAL_FOLLOWUP_RE.search(pair_text):
         return True

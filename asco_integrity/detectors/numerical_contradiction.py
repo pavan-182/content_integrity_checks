@@ -13,6 +13,7 @@ from ..utils import normalize_label, normalize_whitespace
 
 PERCENTAGE_TOLERANCE = 1.0
 NUMBER = r"-?\d+(?:\.\d+)?"
+PERCENT_NUMBER = r"-?\d+(?:[.,]\d+)?"
 POPULATION = r"patients?|participants?|subjects?|cases?"
 UNIT = r"%|years?|months?|weeks?|days?|hours?|minutes?|mg|g|kg|ml|mm|cm"
 
@@ -22,24 +23,25 @@ COUNT_PERCENT_PATTERNS = (
             rf"\b(?P<numerator>\d+)\s+(?:of|out of)\s+(?P<denominator>\d+)"
             rf"(?:\s+(?P<unit>(?:evaluable\s+)?{POPULATION}))?\s*"
             rf"(?:\(|,?\s*(?:representing|corresponding to|reported as|responded|or|=)\s*\(?)?"
-            rf"(?P<percentage>\d+(?:\.\d+)?)\s*%\)?",
+            rf"(?P<percentage>\d+(?:[.,]\d+)?)\s*%\)?",
             re.IGNORECASE,
         ),
         "count_of_denominator_with_percentage",
     ),
     (
         re.compile(
-            rf"\b(?P<numerator>\d+)\s*/\s*(?P<denominator>\d+)"
+            rf"(?<![\d.])\b(?P<numerator>\d+)\s*/\s*(?P<denominator>\d+)"
+            rf"(?![\d,]|\s*/)"
             rf"(?:\s+(?P<unit>{POPULATION}))?\s*"
             rf"(?:\(|,?\s*(?:representing|corresponding to|reported as|responded|or|=)\s*\(?)?"
-            rf"(?P<percentage>\d+(?:\.\d+)?)\s*%\)?",
+            rf"(?P<percentage>\d+(?:[.,]\d+)?)\s*%\)?",
             re.IGNORECASE,
         ),
         "fraction_with_percentage",
     ),
     (
         re.compile(
-            rf"\b(?P<percentage>\d+(?:\.\d+)?)\s*%\s*"
+            rf"\b(?P<percentage>\d+(?:[.,]\d+)?)\s*%\s*"
             rf"\(\s*(?P<numerator>\d+)\s*/\s*(?P<denominator>\d+)\s*\)",
             re.IGNORECASE,
         ),
@@ -48,15 +50,18 @@ COUNT_PERCENT_PATTERNS = (
 )
 COUNT_PERCENT_WITHOUT_DENOMINATOR_RE = re.compile(
     rf"\b(?P<numerator>\d+)\s+(?P<unit>{POPULATION})\s*"
-    rf"\(\s*(?P<percentage>\d+(?:\.\d+)?)\s*%\s*\)",
+    rf"\(\s*(?P<percentage>\d+(?:[.,]\d+)?)\s*%\s*\)",
     re.IGNORECASE,
 )
 COUNT_OF_RE = re.compile(
-    rf"\b(?P<numerator>\d+)\s+(?:of|out of)\s+(?P<denominator>\d+)"
+    rf"\b(?P<numerator>\d+)\s+(?:of|out of)\s+(?P<denominator>\d+)(?![\d,])"
     rf"(?:\s+(?P<unit>(?:evaluable\s+)?{POPULATION}))?",
     re.IGNORECASE,
 )
-FRACTION_RE = re.compile(r"\b(?P<numerator>\d+)\s*/\s*(?P<denominator>\d+)\b")
+FRACTION_RE = re.compile(
+    r"(?<![\d.])\b(?P<numerator>\d+)\s*/\s*(?P<denominator>\d+)"
+    r"(?![\d,]|\s*/)"
+)
 OUTCOME_AMONG_RE = re.compile(
     rf"\b(?P<numerator>\d+)\s+"
     rf"(?P<label>(?:{POPULATION})\s+(?:with|who had)\s+[A-Za-z][A-Za-z -]{{0,30}}?|"
@@ -66,7 +71,7 @@ OUTCOME_AMONG_RE = re.compile(
     rf"(?P<unit>(?:evaluable\s+|treated\s+|enrolled\s+)?{POPULATION})\b",
     re.IGNORECASE,
 )
-PERCENT_RE = re.compile(rf"(?P<percentage>{NUMBER})\s*%")
+PERCENT_RE = re.compile(rf"(?<![\d.,])(?P<percentage>{PERCENT_NUMBER})\s*%")
 RELATIVE_PERCENT_RE = re.compile(
     r"\b(?:relative|increase[sd]?|increasing|change[sd]?|improve(?:ment|d)?|"
     r"reduction|reduced|decreas(?:e|ed|ing)|higher|growth|rose|gain(?:ed)?|"
@@ -172,7 +177,7 @@ class NumericalContradictionFinding:
 
 
 def _float(value: str | None) -> float | None:
-    return float(value) if value is not None else None
+    return float(value.replace(",", ".")) if value is not None else None
 
 
 def _unit(value: str | None) -> str:
@@ -281,6 +286,21 @@ def extract_numerical_claims(record: ParsedRecord) -> list[NumericalClaim]:
                     ))
 
         for match in PERCENT_RE.finditer(sentence):
+            # A hyphen between an alphanumeric token and a percentage is range
+            # or label punctuation (25-50%, grade IV-5%), not a negative sign.
+            if (
+                match.group("percentage").startswith("-")
+                and match.start() > 0
+                and sentence[match.start()] in "-–—"
+                and not sentence[match.start() - 1].isspace()
+            ):
+                continue
+            # In malformed abstract prose, ``n = 570,25%`` means count 570
+            # followed by 25%, not a decimal-comma percentage.
+            if "," in match.group("percentage") and re.search(
+                r"\bn\s*=\s*$", sentence[:match.start()], re.IGNORECASE
+            ):
+                continue
             claims.append(_claim(
                 record, section, sentence, "percentage", "explicit_percentage",
                 label=_label_before(sentence, match.start()),

@@ -156,6 +156,17 @@ class UnverifiableTrialTests(unittest.TestCase):
             [],
         )
 
+    def test_registry_as_data_source_is_not_registration_claim(self) -> None:
+        self.assertEqual(
+            detect_unverifiable_trials([
+                _record(
+                    "We analyzed public data sources including interventional studies "
+                    "registered on ClinicalTrials.gov."
+                )
+            ]),
+            [],
+        )
+
     def test_unsupported_registry_requires_manual_verification(self) -> None:
         result = detect_unverifiable_trials([
             _record("The trial was registered as ISRCTN12345678.")

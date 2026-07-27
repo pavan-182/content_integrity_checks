@@ -115,6 +115,22 @@ class DesignContradictionTests(unittest.TestCase):
             [],
         )
 
+    def test_review_source_studies_are_not_current_design_contradictions(self) -> None:
+        self.assertEqual(
+            detect_design_contradictions([
+                _record("Randomized controlled trials and retrospective cohort studies were included.")
+            ]),
+            [],
+        )
+
+    def test_future_validation_study_is_not_current_design(self) -> None:
+        self.assertEqual(
+            detect_design_contradictions([
+                _record("The retrospective analysis was completed; a prospective phase II study is underway to validate these findings.")
+            ]),
+            [],
+        )
+
     def test_title_and_methods_contradiction(self) -> None:
         finding = detect_design_contradictions([
             _record(
@@ -273,6 +289,61 @@ class DesignContradictionTests(unittest.TestCase):
             (
                 "This was a single-arm uncontrolled study.",
                 "A placebo-controlled trial is planned.",
+            ),
+        )
+        for sentences in examples:
+            with self.subTest(sentences=sentences):
+                self.assertEqual(detect_design_contradictions([_record(*sentences)]), [])
+
+    def test_non_design_uses_of_prospective_are_not_extracted(self) -> None:
+        for phrase in (
+            "prospective application",
+            "prospective database",
+            "prospectively processed",
+            "prospective implications",
+        ):
+            with self.subTest(phrase=phrase):
+                claims = extract_study_design_claims(_record(f"We discussed the {phrase}."))
+                self.assertNotIn(
+                    "prospective",
+                    {claim.value for claim in claims if claim.attribute == "time_direction"},
+                )
+
+    def test_expanded_future_work_phrases_are_not_current_design(self) -> None:
+        for sentence in (
+            "There is a need for prospective studies.",
+            "Prospective trials are essential.",
+            "These findings warrant prospective validation.",
+            "The results support prospective investigation.",
+            "This requires prospective evaluation.",
+        ):
+            with self.subTest(sentence=sentence):
+                self.assertEqual(
+                    detect_design_contradictions([
+                        _record("This was a retrospective cohort study.", sentence)
+                    ]),
+                    [],
+                )
+
+    def test_source_evidence_and_separate_datasets_are_not_current_conflicts(self) -> None:
+        source_record = _record(
+            "This retrospective systematic review included prospective studies."
+        )
+        self.assertEqual(
+            {
+                claim.value
+                for claim in extract_study_design_claims(source_record)
+                if claim.attribute == "time_direction"
+            },
+            {"prospective", "retrospective"},
+        )
+        examples = (
+            (
+                "This retrospective systematic review included prospective studies.",
+            ),
+            (
+                "We analyzed a retrospective dataset.",
+                "A prospective validation cohort confirmed the result.",
             ),
         )
         for sentences in examples:

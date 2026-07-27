@@ -47,6 +47,11 @@ REGISTRATION_WITHOUT_ID_RE = re.compile(
     r"(?:was\s+)?(?:not provided|unavailable|omitted))\b",
     re.IGNORECASE,
 )
+REGISTRY_DATA_SOURCE_RE = re.compile(
+    r"\b(?:data\s+sources?|source\s+data|landscape\s+analysis|"
+    r"indexed\s+in|public\s+data)\b",
+    re.IGNORECASE,
+)
 NCT_VALID_RE = re.compile(r"^NCT\d{8}$")
 PLACEHOLDER_ID_RE = re.compile(r"(?:X{2,}|PENDING|TBD|TOBEADDED|TOFOLLOW)", re.IGNORECASE)
 
@@ -653,6 +658,8 @@ def extract_trial_reference_claims(record: ParsedRecord) -> list[TrialReferenceC
                 "placeholder_trial_id",
             ))
         elif match := REGISTRATION_WITHOUT_ID_RE.search(sentence):
+            if REGISTRY_DATA_SOURCE_RE.search(sentence):
+                continue
             registry = (
                 CLINICAL_TRIALS_GOV
                 if "clinicaltrials.gov" in match.group(0).lower()
