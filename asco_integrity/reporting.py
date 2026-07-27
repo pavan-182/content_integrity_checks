@@ -10,7 +10,6 @@ from typing import Any
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 
-from .models import Finding, ParsedRecord, TemplateClusterMember
 from .utils import ensure_parent_dir, normalize_whitespace, to_pipe_string
 
 
@@ -52,6 +51,10 @@ FINDINGS_COLUMNS = [
     "exclusion_reason",
     "pair_id",
     "matched_record_id",
+    "matched_source_file",
+    "title",
+    "matched_title",
+    "primary_match_type",
     "supporting_match_types",
     "matched_sections",
     "matched_sentence_count",
@@ -59,6 +62,128 @@ FINDINGS_COLUMNS = [
     "high_value_section_similarity",
     "relationship_context",
     "review_status",
+]
+
+PAIR_COLUMNS = [
+    "pair_id",
+    "record_id",
+    "matched_record_id",
+    "source_file",
+    "matched_source_file",
+    "title",
+    "matched_title",
+    "primary_match_type",
+    "supporting_match_types",
+    "confidence",
+    "severity",
+    "matched_sections",
+    "matched_sentence_count",
+    "shared_text_coverage",
+    "original_text_similarity",
+    "masked_skeleton_similarity",
+    "ngram_similarity",
+    "high_value_section_similarity",
+    "weighted_section_similarity",
+    "variable_substitutions",
+    "relationship_context",
+    "evidence_excerpt",
+    "review_status",
+]
+
+FAMILY_COLUMNS = [
+    "template_family_id",
+    "member_count",
+    "family_confidence",
+    "representative_record_id",
+    "template_pattern_type",
+    "matched_sections",
+    "edge_density",
+    "median_pair_confidence",
+    "changed_entity_types",
+    "member_ids",
+    "shared_skeleton_excerpt",
+    "medoid_verification_passed",
+]
+
+DICTIONARY_COLUMNS = [
+    "detector_type",
+    "rule_id",
+    "category",
+    "pattern",
+    "matched_phrase",
+    "expected_term",
+    "severity",
+    "confidence",
+    "retrieved_papers",
+    "source",
+]
+
+WARNING_COLUMNS = [
+    "source_file",
+    "record_id",
+    "warning_code",
+    "warning_message",
+    "field_name",
+    "severity",
+    "evidence_snippet",
+    "schema_type",
+]
+
+ABSTRACT_SUMMARY_COLUMNS = [
+    "record_id",
+    "source_file",
+    "schema_type",
+    "title",
+    "doi",
+    "journal",
+    "publication_year",
+    "article_type",
+    "authors",
+    "affiliations",
+    "keywords",
+    "abstract_section_count",
+    "structured_abstract",
+    "parse_status",
+    "parse_warnings",
+    "llm_trace_flag",
+    "tortured_phrase_flag",
+    "nonsense_candidate_flag",
+    "template_flag",
+    "template_confidence",
+    "template_review_priority",
+    "matched_abstract_count",
+    "strongest_matched_record_id",
+    "strongest_matched_source_file",
+    "strongest_matched_title",
+    "strongest_match_pair_id",
+    "strongest_match_supporting_types",
+    "strongest_match_sections",
+    "strongest_match_sentence_count",
+    "strongest_match_shared_text_coverage",
+    "strongest_match_original_text_similarity",
+    "strongest_match_masked_skeleton_similarity",
+    "strongest_match_ngram_similarity",
+    "strongest_match_high_value_section_similarity",
+    "strongest_match_weighted_section_similarity",
+    "strongest_match_variable_substitutions",
+    "strongest_match_relationship_context",
+    "strongest_match_evidence_excerpt",
+    "strongest_match_review_status",
+    "primary_template_pattern",
+    "matched_sections",
+    "template_cluster_flag",
+    "template_family_id",
+    "template_family_size",
+    "template_family_confidence",
+    "template_evidence_summary",
+    "llm_trace_count",
+    "tortured_phrase_count",
+    "nonsense_candidate_count",
+    "total_finding_count",
+    "highest_severity",
+    "overall_content_risk",
+    "review_required",
+    "review_reason",
 ]
 
 
@@ -197,11 +322,11 @@ def _write_dashboard(
 
     clusters: dict[str, tuple[int, str]] = {}
     for item in cluster_rows:
-        cluster_id = str(item.get("template_cluster_id", ""))
-        if not cluster_id or item.get("cluster_severity") == "excluded":
+        cluster_id = str(item.get("template_family_id", ""))
+        if not cluster_id:
             continue
-        size = int(item.get("cluster_size") or 0)
-        representative = str(item.get("record_id", ""))
+        size = int(item.get("member_count") or 0)
+        representative = str(item.get("representative_record_id", ""))
         current = clusters.get(cluster_id)
         clusters[cluster_id] = (max(size, current[0] if current else 0), min(representative, current[1]) if current else representative)
     size_counts = Counter("5+" if size >= 5 else str(size) for size, _ in clusters.values())
@@ -274,6 +399,7 @@ def write_workbook(
     root_summary_rows: list[dict[str, Any]],
     abstract_summary_rows: list[dict[str, Any]],
     findings_rows: list[dict[str, Any]],
+    pair_rows: list[dict[str, Any]],
     cluster_rows: list[dict[str, Any]],
     dictionary_rows: list[dict[str, Any]],
     parse_warning_rows: list[dict[str, Any]],
@@ -325,49 +451,7 @@ def write_workbook(
 
     # Abstract Summary
     ws = workbook.create_sheet("Abstract Summary")
-    summary_columns = [
-        "record_id",
-        "source_file",
-        "schema_type",
-        "title",
-        "doi",
-        "journal",
-        "publication_year",
-        "article_type",
-        "authors",
-        "affiliations",
-        "keywords",
-        "abstract_section_count",
-        "structured_abstract",
-        "parse_status",
-        "parse_warnings",
-        "llm_trace_flag",
-        "tortured_phrase_flag",
-        "nonsense_candidate_flag",
-        "template_cluster_flag",
-        "llm_trace_count",
-        "tortured_phrase_count",
-        "nonsense_candidate_count",
-        "template_cluster_id",
-        "template_cluster_size",
-        "template_cluster_similarity_score",
-        "template_flag",
-        "template_confidence",
-        "template_review_priority",
-        "matched_abstract_count",
-        "strongest_matched_record_id",
-        "primary_template_pattern",
-        "matched_sections",
-        "template_family_id",
-        "template_family_size",
-        "template_evidence_summary",
-        "total_finding_count",
-        "highest_severity",
-        "overall_content_risk",
-        "review_required",
-        "review_reason",
-    ]
-    _write_table(ws, abstract_summary_rows, summary_columns, start_row=1)
+    _write_table(ws, abstract_summary_rows, ABSTRACT_SUMMARY_COLUMNS, start_row=1)
     ws.freeze_panes = "A2"
     _auto_size_columns(ws)
 
@@ -408,71 +492,27 @@ def write_workbook(
     ws.freeze_panes = "A2"
     _auto_size_columns(ws)
 
+    # Template Pair Evidence
+    ws = workbook.create_sheet("Template Pairs")
+    _write_table(ws, pair_rows, PAIR_COLUMNS, start_row=1)
+    ws.freeze_panes = "A2"
+    _auto_size_columns(ws)
+
     # Template Clusters
     ws = workbook.create_sheet("Template Clusters")
-    cluster_columns = [
-        "template_cluster_id",
-        "cluster_size",
-        "record_id",
-        "source_file",
-        "similar_record_ids",
-        "similarity_score",
-        "cluster_severity",
-        "shared_skeleton_excerpt",
-        "metadata_context",
-        "template_pattern_type",
-        "original_text_similarity",
-        "masked_skeleton_similarity",
-        "ngram_similarity",
-        "weighted_section_similarity",
-        "section_similarities",
-        "variable_substitutions",
-        "exclusion_reason",
-        "title",
-        "journal",
-        "publication_year",
-        "article_type",
-        "representative_record_id",
-        "edge_density",
-        "median_pair_strength",
-        "matched_sections",
-        "changed_entity_types",
-    ]
-    _write_table(ws, cluster_rows or [{"template_cluster_id": "", "cluster_size": "", "record_id": "", "source_file": "", "similar_record_ids": "", "similarity_score": "", "cluster_severity": "", "shared_skeleton_excerpt": "No template clusters detected in this run.", "metadata_context": "", "title": "", "journal": "", "publication_year": "", "article_type": ""}], cluster_columns, start_row=1)
+    _write_table(ws, cluster_rows, FAMILY_COLUMNS, start_row=1)
     ws.freeze_panes = "A2"
     _auto_size_columns(ws)
 
     # Pattern Dictionary
     ws = workbook.create_sheet("Pattern Dictionary")
-    dictionary_columns = [
-        "detector_type",
-        "rule_id",
-        "category",
-        "pattern",
-        "matched_phrase",
-        "expected_term",
-        "severity",
-        "confidence",
-        "retrieved_papers",
-        "source",
-    ]
-    _write_table(ws, dictionary_rows, dictionary_columns, start_row=1)
+    _write_table(ws, dictionary_rows, DICTIONARY_COLUMNS, start_row=1)
     ws.freeze_panes = "A2"
     _auto_size_columns(ws)
 
     # Parse Warnings
     ws = workbook.create_sheet("Parse Warnings")
-    warning_columns = [
-        "source_file",
-        "record_id",
-        "warning_code",
-        "warning_message",
-        "field_name",
-        "severity",
-        "evidence_snippet",
-        "schema_type",
-    ]
-    _write_table(ws, parse_warning_rows or [{"source_file": "", "record_id": "", "warning_code": "NONE", "warning_message": "No parse warnings observed in this run.", "field_name": "", "severity": "info", "evidence_snippet": "", "schema_type": ""}], warning_columns, start_row=1)
+    _write_table(ws, parse_warning_rows, WARNING_COLUMNS, start_row=1)
     ws.freeze_panes = "A2"
     _auto_size_columns(ws)
 

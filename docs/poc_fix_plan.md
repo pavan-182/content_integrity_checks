@@ -35,7 +35,7 @@ tests/fixtures/eval_corpus/
 - Runs the pipeline against `tests/fixtures/eval_corpus/` only.
 - Compares output against `labels.json`.
 - Reports per-detector precision/recall/false-positive list (not just pass/fail) — print abstract IDs that were wrongly flagged or wrongly missed.
-- Sweeps `--similarity-threshold` over `{0.75, 0.80, 0.85, 0.88, 0.90, 0.93}` and prints a small table of cluster precision/recall at each, so the current `0.88` default is a documented choice, not a guess.
+- Evaluates the production pair findings, visible families, and abstract flags directly. `--legacy-similarity-threshold` applies only to the temporary legacy comparison.
 
 **Acceptance:**
 - `python scripts/run_eval.py` runs clean, prints a report.

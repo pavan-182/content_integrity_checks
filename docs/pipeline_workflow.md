@@ -56,7 +56,7 @@ The command-line interface accepts:
 | `--input-dir` | `WILEY_LIVE_PREFLIGHT_metadata_files` | Root directory searched recursively for `*.xml` files |
 | `--tortured-dictionary` | `🤷_tortured.csv` | CSV containing tortured-phrase rules and expected terms |
 | `--output-dir` | `outputs` | Destination for all generated artifacts |
-| `--similarity-threshold` | `0.88` | Structural similarity threshold used by template matching |
+| `--legacy-similarity-threshold` | `0.88` | Legacy-only threshold used with `--compare-legacy-template-clustering` |
 | `--validate-llm` | disabled | Enables per-finding GPT-OSS context validation |
 | `--detect-nonsense-candidates` | disabled | Enables sentence-level GPT-OSS review for dictionary misses |
 
@@ -73,7 +73,8 @@ python scripts/run_pipeline.py \
   --input-dir WILEY_LIVE_PREFLIGHT_metadata_files \
   --tortured-dictionary '🤷_tortured.csv' \
   --output-dir outputs \
-  --similarity-threshold 0.88
+  --compare-legacy-template-clustering \
+  --legacy-similarity-threshold 0.88
 ```
 
 The optional validator reads these settings from the environment or `.env`:
@@ -202,67 +203,27 @@ The expected response is strict JSON with a status of `confirmed`, `rejected`, o
 
 Validation is **annotate-only**. It populates `validation_status`, `validation_reason`, and `validated_by`; it does not suppress findings, validate template clusters, or change risk scoring. Without `--validate-llm`, these fields remain blank.
 
-## 9. Stage 6 — Batch template detection
+## 9. Stage 6 — Pair-first template detection
 
-Template matching compares records only within the current input batch.
+`exact_text_reuse` and `entity_normalized_template` independently produce pair evidence. Results for the same canonical pair are merged once, with ranked confidence and both detector signals retained. Exact numeric similarities remain separate.
 
-### 9.1 Text representations
+Accepted high/very-high pairs, plus independently supported medium pairs, become graph edges. Connected groups are verified against a medoid. Two-member groups remain pair findings; only verified groups of three or more appear as template families.
 
-For each record, the detector builds:
-
-- normalized original text; and
-- a masked skeleton where dates, trial IDs, p-values, percentages, numbers, genes, drug-like names, URLs, and email addresses become placeholders.
-
-Empty/unusable and administrative-boilerplate records are excluded and reported with an exclusion reason. Valid short abstracts remain eligible.
-
-### 9.2 Candidate generation
-
-Candidate pairs are generated from inexpensive blocking keys rather than comparing every record with every other record. Blocks include:
-
-- similar length and opening tokens;
-- placeholder shape;
-- exact original or masked hashes;
-- exact section hashes; and
-- shared five-token shingles, with a frequency cap for common boilerplate.
-
-### 9.3 Similarity and clustering
-
-Candidate pairs are evaluated using:
-
-- symmetric token-sequence similarity on original text;
-- symmetric token-sequence similarity on masked text;
-- five-token shingle containment;
-- similarity of high-value Results/Conclusion sections; and
-- weighted section similarity using Background 0.1, Methods 0.2, Results 0.4, and Conclusions 0.3.
-
-A pair matches when it has either:
-
-- original similarity of at least `0.55` and structural similarity at or above the configured threshold; or
-- original similarity of at least `0.65` and shingle containment of at least `0.50`.
-
-Matching pairs are joined with union-find, then verified around a representative medoid to reduce chained false matches. Groups require at least two records. Each member is classified as one of:
-
-- `exact_duplicate`;
-- `masked_near_duplicate`;
-- `shared_section`;
-- `reordered_or_partial_template`; or
-- `entity_value_substitution`.
-
-The output includes peer IDs, component scores, section scores, changed variable values, shared text, and metadata context. Cluster severity is currently `candidate`, which deliberately asks an editor to assess whether the similarity is legitimate.
+The temporary legacy implementation runs only with `--compare-legacy-template-clustering`. Its threshold is `--legacy-similarity-threshold`, and its JSONL output never enters production findings, summaries, risk, counts, or workbook sheets.
 
 ## 10. Stage 7 — Risk aggregation
 
-Risk is computed once per record from rule findings, optional low-severity nonsense candidates, and non-excluded template-cluster membership. Context-validation annotations do not affect it.
+Risk is computed once per record from rule findings, optional low-severity nonsense candidates, and one template concern regardless of how many pair signals or family memberships support it. Context-validation annotations do not affect it.
 
 | Condition | Overall risk |
 |---|---|
-| No findings and no template cluster | `None` |
+| No findings and no template pair | `None` |
 | Signals from two or more detector types | `High` |
 | Any high-severity finding | `High` |
 | Any medium-severity finding | `Medium` |
 | More than one low-severity finding | `Medium` |
 | One low-severity finding | `Low` |
-| Template cluster only | `Medium` |
+| Template pair only | Determined by pair severity |
 
 Any risk other than `None` sets `review_required` to `Yes` with neutral language recommending manual review. The scoring does not make an acceptance, rejection, fraud, or authorship determination.
 
@@ -274,23 +235,29 @@ Every run creates these files in the configured output directory:
 |---|---|
 | `parsed_records.jsonl` | Full normalized record objects, including abstract sections and warnings |
 | `parsed_records.csv` | Flat record export for analysis |
-| `integrity_findings.csv` | Rule findings and template-cluster findings with evidence and optional validation |
-| `template_clusters.csv` | Detailed cluster membership, scores, context, and exclusions |
+| `integrity_findings.csv` | Rule findings and one consolidated row per template pair |
+| `template_pair_findings.csv` | Stable detailed pair-evidence schema, including source metadata and separate similarity metrics |
+| `template_clusters.csv` | One row per verified visible family of three or more members |
 | `pattern_dictionary.csv` | Effective LLM and tortured-phrase rules used by the run |
 | `parse_warnings.csv` | Parser warnings and record-ID deduplication actions |
 | `run_metadata.jsonl` | Input/output paths, counts, thresholds, dictionary version, and scope notes |
 | `content_integrity_screening_poc.xlsx` | Consolidated editorial workbook |
 
-The workbook contains eight sheets:
+The workbook contains nine sheets:
 
 1. **Dashboard** — review priority, check, cluster, warning, and section counts;
 2. **Data Inventory** — parse totals, XML roots, and field coverage;
 3. **Abstract Summary** — one row per retained record with flags, counts, risk, and review status;
 4. **Integrity Findings** — one row per rule or template finding with exact evidence;
-5. **Template Clusters** — detailed cross-record comparison data;
-6. **Pattern Dictionary** — rules used for the run;
-7. **Parse Warnings** — ingestion and data-quality issues; and
-8. **Run Metadata** — configuration and audit context.
+5. **Template Pairs** — detailed pair evidence using the same ordered schema as the pair CSV;
+6. **Template Clusters** — verified family summaries;
+7. **Pattern Dictionary** — rules used for the run;
+8. **Parse Warnings** — ingestion and data-quality issues; and
+9. **Run Metadata** — configuration and audit context.
+
+Renamed fields: `similarity_score` is not used for new families; use `family_confidence`, `edge_density`, and `median_pair_confidence`. `template_cluster_similarity_score` is removed from the abstract summary. `template_cluster_flag` now means visible family membership only; `template_flag` means at least one accepted pair.
+
+The Python-only `run_default_pipeline(similarity_threshold=...)` argument is retained temporarily as a deprecated alias for `legacy_similarity_threshold`; it never changes production pair detection.
 
 The summary includes every retained record, including records with no findings.
 

@@ -336,7 +336,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(len(clusters), 2)
         self.assertTrue(all(cluster.template_cluster_id.startswith("TPL-") for cluster in clusters))
 
-    def test_template_clusters_appear_in_integrity_findings(self) -> None:
+    def test_template_pairs_appear_once_in_integrity_findings(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)
             input_dir = temp_dir / "xmls"
@@ -352,7 +352,7 @@ class PipelineTests(unittest.TestCase):
                     <article-meta>
                       <article-id pub-id-type="manuscript">TPL-A</article-id>
                       <article-title>Template A</article-title>
-                      <abstract><p>Background: A total of 10 patients received treatment. Methods: The primary endpoint was response rate. Results: 80%. Conclusion: Positive.</p></abstract>
+                      <abstract><p>Background: Patients with advanced disease entered this prospective study. Methods: The primary endpoint was independently assessed response rate. Results: Treatment produced durable responses and improved survival in the enrolled population. Conclusion: These findings support additional controlled investigation.</p></abstract>
                       <history><date date-type="accepted"><year>2026</year></date></history>
                     </article-meta>
                   </front>
@@ -369,7 +369,7 @@ class PipelineTests(unittest.TestCase):
                     <article-meta>
                       <article-id pub-id-type="manuscript">TPL-B</article-id>
                       <article-title>Template B</article-title>
-                      <abstract><p>Background: A total of 20 patients received treatment. Methods: The primary endpoint was response rate. Results: 81%. Conclusion: Positive.</p></abstract>
+                      <abstract><p>Background: Patients with advanced disease entered this prospective study. Methods: The primary endpoint was independently assessed response rate. Results: Treatment produced durable responses and improved survival in the enrolled population. Conclusion: These findings support additional controlled investigation.</p></abstract>
                       <history><date date-type="accepted"><year>2026</year></date></history>
                     </article-meta>
                   </front>
@@ -387,11 +387,11 @@ class PipelineTests(unittest.TestCase):
             with result.output_paths["findings_csv"].open(newline="", encoding="utf-8") as handle:
                 rows = list(csv.DictReader(handle))
 
-            template_rows = [row for row in rows if row.get("detector_type") == "template_cluster"]
-            self.assertTrue(template_rows)
-            self.assertTrue(all(row.get("category") == "template_cluster" for row in template_rows))
-            self.assertTrue(all(row.get("template_cluster_id", "").startswith("TPL-") for row in template_rows))
-            self.assertTrue(all(row.get("shared_skeleton_excerpt") for row in template_rows))
+            template_rows = [row for row in rows if row.get("detector_type") == "template_pair"]
+            self.assertEqual(len(template_rows), 1)
+            self.assertEqual(template_rows[0]["category"], "template")
+            self.assertEqual(result.abstract_summary_rows[0]["template_cluster_flag"], "No")
+            self.assertEqual(result.abstract_summary_rows[1]["template_cluster_flag"], "No")
 
     def test_full_pipeline_creates_workbook(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir_str:
@@ -425,6 +425,48 @@ class PipelineTests(unittest.TestCase):
             self.assertTrue(result.output_paths["workbook"].exists())
             self.assertTrue(result.output_paths["parsed_jsonl"].exists())
             self.assertTrue(result.output_paths["findings_csv"].exists())
+
+    def test_legacy_comparison_does_not_enter_production_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            input_dir = temp_dir / "xmls"
+            input_dir.mkdir()
+            _write_temp_file(
+                input_dir,
+                "sample.xml",
+                """
+                <article article-type="Original Research"><front><article-meta>
+                  <article-id pub-id-type="manuscript">LEGACY-CHECK</article-id>
+                  <article-title>Legacy comparison isolation</article-title>
+                  <abstract><p>A unique abstract with no cross-document template match.</p></abstract>
+                </article-meta></front></article>
+                """,
+            )
+            dictionary = _write_temp_file(
+                temp_dir,
+                "dict.csv",
+                'Fingerprint - Tortured Phrase,Expected Text,Nb Retrieved Papers\n"nervous network","neural network","1"',
+            )
+            baseline = run_default_pipeline(
+                input_dir=input_dir,
+                tortured_dictionary_path=dictionary,
+                output_dir=temp_dir / "baseline",
+            )
+            comparison = run_default_pipeline(
+                input_dir=input_dir,
+                tortured_dictionary_path=dictionary,
+                output_dir=temp_dir / "comparison",
+                compare_legacy_template_clustering=True,
+            )
+
+            self.assertIn("legacy_template_comparison_jsonl", comparison.output_paths)
+            self.assertEqual(baseline.pair_findings, comparison.pair_findings)
+            self.assertEqual(baseline.template_family_rows, comparison.template_family_rows)
+            self.assertEqual(baseline.abstract_summary_rows, comparison.abstract_summary_rows)
+            workbook = load_workbook(comparison.output_paths["workbook"], read_only=True)
+            self.assertNotIn("Legacy", " | ".join(workbook.sheetnames))
+            with comparison.output_paths["findings_csv"].open(newline="", encoding="utf-8") as handle:
+                self.assertFalse(any(row["detector_type"] == "template_cluster" for row in csv.DictReader(handle)))
 
     def test_validator_marks_bad_json_uncertain(self) -> None:
         class BrokenClient:

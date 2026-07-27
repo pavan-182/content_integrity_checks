@@ -17,6 +17,8 @@ MIN_SHARED_BLOCK_WORDS = 30
 MAX_SENTENCE_DOCUMENT_FREQUENCY = 10
 MEDIUM_COVERAGE = 0.15
 HIGH_COVERAGE = 0.30
+# ponytail: one shared sentence needs stronger coverage; calibrate on labelled editorial data.
+MIN_SINGLE_SENTENCE_COVERAGE = 0.40
 GENERIC_SENTENCES = {
     normalize_for_matching(text)
     for text in (
@@ -261,6 +263,13 @@ def detect_exact_text_reuse(
         elif coverage >= min_shared_coverage:
             match_type = "partial_or_reordered_reuse"
         else:
+            continue
+        if (
+            len(uncommon) == 1
+            and not exact_full
+            and not exact_sections
+            and coverage < MIN_SINGLE_SENTENCE_COVERAGE
+        ):
             continue
 
         relationship, relation_strength = _relationship_context(left, right)

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from collections import defaultdict
-from dataclasses import dataclass, asdict
+from collections import Counter, defaultdict
+from dataclasses import asdict, dataclass
 from typing import Any
 
 from .models import ParsedRecord
-from .template_matching_common import _similarity
 
 CONFIDENCE_RANK = {"low": 1, "medium": 2, "high": 3, "very_high": 4}
+CONFIDENCE_BY_RANK = {rank: confidence for confidence, rank in CONFIDENCE_RANK.items()}
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,6 +15,10 @@ class PairFinding:
     pair_id: str
     record_id: str
     matched_record_id: str
+    source_file: str
+    matched_source_file: str
+    title: str
+    matched_title: str
     primary_match_type: str
     supporting_match_types: list[str]
     confidence: str
@@ -45,13 +49,13 @@ def _confidence(value: str) -> int:
     return CONFIDENCE_RANK.get(value, 0)
 
 
-def _stronger(left: str, right: str) -> str:
-    return left if _confidence(left) >= _confidence(right) else right
-
-
 def _severity(confidence: str, relationship_context: str) -> str:
     context = relationship_context.lower()
-    if "shared trial" in context or "related study" in context or "related analysis" in context:
+    if (
+        "shared trial id:" in context
+        or "declared related analysis" in context
+        or "explicitly declare a related study" in context
+    ):
         return "low"
     if "author" in context or "affiliation" in context:
         return "medium" if confidence in {"high", "very_high"} else "low"
@@ -67,23 +71,31 @@ def merge_pair_findings(exact_findings: list[Any], entity_findings: list[Any]) -
     for pair in sorted(grouped):
         source = sorted(
             grouped[pair],
-            key=lambda item: (_confidence(item.confidence), item.check_type),
-            reverse=True,
+            key=lambda item: (-_confidence(item.confidence), item.check_type, item.match_type),
         )
         primary = source[0]
         confidence = primary.confidence
         if len(source) > 1:
-            confidence = ("low", "medium", "high", "very_high")[
-                min(3, _confidence(primary.confidence))
-            ]
+            confidence = CONFIDENCE_BY_RANK[min(4, _confidence(primary.confidence) + 1)]
         supporting = sorted({item.match_type for item in source})
         sections = sorted({section for item in source for section in item.matched_sections})
         relationship = "; ".join(sorted({item.relationship_context for item in source if item.relationship_context}))
+        record_details = {
+            item.record_id: (item.source_file, item.title)
+            for item in source
+        } | {
+            item.matched_record_id: (item.matched_source_file, item.matched_title)
+            for item in source
+        }
         merged.append(
             PairFinding(
                 pair_id=f"PAIR-{pair[0]}--{pair[1]}",
                 record_id=pair[0],
                 matched_record_id=pair[1],
+                source_file=record_details[pair[0]][0],
+                matched_source_file=record_details[pair[1]][0],
+                title=record_details[pair[0]][1],
+                matched_title=record_details[pair[1]][1],
                 primary_match_type=primary.match_type,
                 supporting_match_types=supporting,
                 confidence=confidence,
@@ -99,10 +111,45 @@ def merge_pair_findings(exact_findings: list[Any], entity_findings: list[Any]) -
                 variable_substitutions="; ".join(sorted({item.variable_substitutions for item in source if getattr(item, "variable_substitutions", "")})),
                 relationship_context=relationship,
                 evidence_excerpt="; ".join(sorted({getattr(item, "shared_skeleton_excerpt", "") or getattr(item, "evidence", "") for item in source})),
+                review_status=primary.review_status,
                 evidence="; ".join(sorted({item.evidence for item in source if item.evidence})),
             )
         )
     return merged
+
+
+def other_record_id(pair: PairFinding, record_id: str) -> str:
+    return pair.matched_record_id if pair.record_id == record_id else pair.record_id
+
+
+def _dominant_pattern(edges: list[PairFinding]) -> str:
+    counts = Counter(edge.primary_match_type for edge in edges)
+    strongest = {
+        pattern: max(
+            CONFIDENCE_RANK[edge.confidence]
+            for edge in edges
+            if edge.primary_match_type == pattern
+        )
+        for pattern in counts
+    }
+    return min(counts, key=lambda pattern: (-counts[pattern], -strongest[pattern], pattern))
+
+
+def _family_confidence(
+    size: int,
+    density: float,
+    median_confidence: str,
+    high_value_evidence: bool,
+    medoid_verified: bool,
+) -> str:
+    if not medoid_verified:
+        return "low"
+    rank = CONFIDENCE_RANK[median_confidence]
+    if size >= 3 and density >= 0.66 and rank >= 3 and high_value_evidence:
+        return "very_high"
+    if rank >= 3 and (density >= 0.5 or high_value_evidence):
+        return "high"
+    return "medium"
 
 
 def cluster_template_findings(pair_findings: list[PairFinding], records: list[ParsedRecord]) -> list[dict[str, Any]]:
@@ -148,6 +195,24 @@ def cluster_template_findings(pair_findings: list[PairFinding], records: list[Pa
             continue
         group_edges = [edge for key, edge in edge_map.items() if set(key) <= set(verified)]
         density = len(group_edges) / (len(verified) * (len(verified) - 1) / 2)
+        confidence_ranks = sorted(CONFIDENCE_RANK[edge.confidence] for edge in group_edges)
+        median_confidence = CONFIDENCE_BY_RANK[confidence_ranks[(len(confidence_ranks) - 1) // 2]]
+        high_value_evidence = any(
+            edge.confidence in {"high", "very_high"}
+            and (
+                edge.high_value_section_similarity >= 0.88
+                or any(
+                    label in section.lower()
+                    for section in edge.matched_sections
+                    for label in ("result", "conclusion")
+                )
+            )
+            for edge in group_edges
+        )
+        medoid_verified = all(
+            member == medoid or canonical_pair_key(member, medoid) in edge_map
+            for member in verified
+        )
         family_id = f"TPL-{index:04d}"
         for member in verified:
             rows.append({
@@ -156,13 +221,20 @@ def cluster_template_findings(pair_findings: list[PairFinding], records: list[Pa
                 "record_id": member,
                 "source_file": lookup[member].source_file,
                 "similar_record_ids": sorted(other for other in verified if other != member),
-                "similarity_score": round(max((CONFIDENCE_RANK[e.confidence] for e in group_edges), default=0) / 4, 3),
                 "cluster_severity": max((edge.severity for edge in group_edges), key=lambda value: {"low": 1, "medium": 2, "high": 3}.get(value, 0), default="medium"),
                 "shared_skeleton_excerpt": next((edge.evidence_excerpt for edge in group_edges if edge.evidence_excerpt), ""),
-                "template_pattern_type": max((edge.primary_match_type for edge in group_edges), key=lambda value: value),
+                "template_pattern_type": _dominant_pattern(group_edges),
                 "matched_sections": sorted({section for edge in group_edges for section in edge.matched_sections}),
                 "edge_density": round(density, 3),
-                "median_pair_strength": sorted(CONFIDENCE_RANK[e.confidence] for e in group_edges)[len(group_edges) // 2],
+                "median_pair_confidence": median_confidence,
+                "family_confidence": _family_confidence(
+                    len(verified),
+                    density,
+                    median_confidence,
+                    high_value_evidence,
+                    medoid_verified,
+                ),
+                "medoid_verification_passed": medoid_verified,
                 "representative_record_id": medoid,
                 "changed_entity_types": sorted({part.split(":", 1)[0] for edge in group_edges for part in edge.variable_substitutions.split("; ") if ":" in part}),
             })

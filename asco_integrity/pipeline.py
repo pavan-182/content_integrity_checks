@@ -18,9 +18,24 @@ from .detectors import (
     detect_tortured_phrases,
     load_tortured_rules,
 )
-from .models import Finding, ParseWarning, ParsedRecord
-from .template_clustering import PairFinding, cluster_template_findings, merge_pair_findings
-from .reporting import FINDINGS_COLUMNS, write_csv, write_jsonl, write_workbook
+from .models import Finding, ParsedRecord
+from .template_clustering import (
+    CONFIDENCE_RANK,
+    PairFinding,
+    cluster_template_findings,
+    merge_pair_findings,
+    other_record_id,
+)
+from .reporting import (
+    DICTIONARY_COLUMNS,
+    FAMILY_COLUMNS,
+    FINDINGS_COLUMNS,
+    PAIR_COLUMNS,
+    WARNING_COLUMNS,
+    write_csv,
+    write_jsonl,
+    write_workbook,
+)
 from .validators import ContextValidator, build_gpt_oss_client
 from .utils import dedupe_records, normalize_whitespace, to_pipe_string
 from .xml_parser import discover_xml_files, parse_wiley_xml_records
@@ -31,7 +46,7 @@ class PipelineConfig:
     input_dir: Path
     output_dir: Path
     tortured_dictionary_path: Path
-    similarity_threshold: float = 0.88
+    legacy_similarity_threshold: float = 0.88
     dictionary_version: str = "wiley_tortured_seed_v1"
     validate_llm: bool = False
     detect_nonsense_candidates: bool = False
@@ -44,6 +59,7 @@ class PipelineResult:
     records: list[ParsedRecord]
     findings: list[Finding]
     template_rows: list[dict[str, Any]]
+    template_family_rows: list[dict[str, Any]]
     pair_findings: list[PairFinding]
     field_inventory_rows: list[dict[str, Any]]
     root_summary_rows: list[tuple[str, Any]]
@@ -221,6 +237,21 @@ def _aggregate_findings(
         matched_pairs = pair_map.get(record.record_id, [])
         cluster_row = cluster_map.get(record.record_id)
         template_flag = bool(matched_pairs)
+        cluster_flag = cluster_row is not None
+        strongest_pair = max(
+            matched_pairs,
+            key=lambda pair: (
+                CONFIDENCE_RANK.get(pair.confidence, 0),
+                severity_rank(pair.severity),
+                pair.pair_id,
+            ),
+            default=None,
+        )
+        template_severity = max(
+            (pair.severity for pair in matched_pairs),
+            key=severity_rank,
+            default="none",
+        )
         detector_types = {finding.detector_type for finding in record_findings}
         if template_flag:
             detector_types.add("template")
@@ -228,8 +259,7 @@ def _aggregate_findings(
         for finding in record_findings:
             if severity_rank(finding.severity) > severity_rank(highest_severity):
                 highest_severity = finding.severity
-        if matched_pairs:
-            strongest_pair = max(matched_pairs, key=lambda pair: severity_rank(pair.severity))
+        if strongest_pair:
             if severity_rank(strongest_pair.severity) > severity_rank(highest_severity):
                 highest_severity = strongest_pair.severity
         overall_risk = _risk_from_signals(
@@ -262,23 +292,49 @@ def _aggregate_findings(
                 "llm_trace_flag": "Yes" if llm_findings else "No",
                 "tortured_phrase_flag": "Yes" if tortured_findings else "No",
                 "nonsense_candidate_flag": "Yes" if nonsense_findings else "No",
-                "template_cluster_flag": "Yes" if template_flag else "No",
+                "template_cluster_flag": "Yes" if cluster_flag else "No",
                 "template_flag": "Yes" if template_flag else "No",
-                "template_confidence": max((pair.confidence for pair in matched_pairs), default="none"),
-                "template_review_priority": highest_severity.title() if template_flag else "None",
-                "matched_abstract_count": len({pair.matched_record_id if pair.record_id == record.record_id else pair.record_id for pair in matched_pairs}),
-                "strongest_matched_record_id": (max(matched_pairs, key=lambda pair: severity_rank(pair.severity)).matched_record_id if matched_pairs else ""),
-                "primary_template_pattern": max(matched_pairs, key=lambda pair: severity_rank(pair.severity)).primary_match_type if matched_pairs else "",
+                "template_confidence": strongest_pair.confidence if strongest_pair else "none",
+                "template_review_priority": template_severity.title() if template_flag else "None",
+                "matched_abstract_count": len({other_record_id(pair, record.record_id) for pair in matched_pairs}),
+                "strongest_matched_record_id": other_record_id(strongest_pair, record.record_id) if strongest_pair else "",
+                "strongest_matched_source_file": (
+                    strongest_pair.matched_source_file
+                    if strongest_pair and strongest_pair.record_id == record.record_id
+                    else strongest_pair.source_file if strongest_pair else ""
+                ),
+                "strongest_matched_title": (
+                    strongest_pair.matched_title
+                    if strongest_pair and strongest_pair.record_id == record.record_id
+                    else strongest_pair.title if strongest_pair else ""
+                ),
+                "strongest_match_pair_id": strongest_pair.pair_id if strongest_pair else "",
+                "strongest_match_supporting_types": (
+                    strongest_pair.supporting_match_types if strongest_pair else []
+                ),
+                "strongest_match_sections": strongest_pair.matched_sections if strongest_pair else [],
+                "strongest_match_sentence_count": strongest_pair.matched_sentence_count if strongest_pair else 0,
+                "strongest_match_shared_text_coverage": strongest_pair.shared_text_coverage if strongest_pair else "",
+                "strongest_match_original_text_similarity": strongest_pair.original_text_similarity if strongest_pair else "",
+                "strongest_match_masked_skeleton_similarity": strongest_pair.masked_skeleton_similarity if strongest_pair else "",
+                "strongest_match_ngram_similarity": strongest_pair.ngram_similarity if strongest_pair else "",
+                "strongest_match_high_value_section_similarity": strongest_pair.high_value_section_similarity if strongest_pair else "",
+                "strongest_match_weighted_section_similarity": strongest_pair.weighted_section_similarity if strongest_pair else "",
+                "strongest_match_variable_substitutions": strongest_pair.variable_substitutions if strongest_pair else "",
+                "strongest_match_relationship_context": strongest_pair.relationship_context if strongest_pair else "",
+                "strongest_match_evidence_excerpt": strongest_pair.evidence_excerpt if strongest_pair else "",
+                "strongest_match_review_status": strongest_pair.review_status if strongest_pair else "",
+                "primary_template_pattern": strongest_pair.primary_match_type if strongest_pair else "",
                 "matched_sections": " | ".join(sorted({section for pair in matched_pairs for section in pair.matched_sections})),
                 "template_family_id": cluster_row["template_cluster_id"] if cluster_row else "",
                 "template_family_size": cluster_row["cluster_size"] if cluster_row else 0,
-                "template_evidence_summary": (max(matched_pairs, key=lambda pair: severity_rank(pair.severity)).evidence or "") if matched_pairs else "",
+                "template_family_confidence": cluster_row["family_confidence"] if cluster_row else "none",
+                "template_evidence_summary": strongest_pair.evidence if strongest_pair else "",
                 "llm_trace_count": len(llm_findings),
                 "tortured_phrase_count": len(tortured_findings),
                 "nonsense_candidate_count": len(nonsense_findings),
                 "template_cluster_id": cluster_row["template_cluster_id"] if cluster_row else "",
                 "template_cluster_size": cluster_row["cluster_size"] if cluster_row else 0,
-                "template_cluster_similarity_score": cluster_row.get("similarity_score", "") if cluster_row else "",
                 "total_finding_count": len(record_findings) + (1 if template_flag else 0),
                 "highest_severity": highest_severity.title() if highest_severity != "none" else "None",
                 "overall_content_risk": overall_risk,
@@ -309,12 +365,18 @@ def _pair_finding_rows(pair_findings: list[PairFinding]) -> list[dict[str, Any]]
                 "pair_id": pair.pair_id,
                 "record_id": pair.record_id,
                 "matched_record_id": pair.matched_record_id,
+                "source_file": pair.source_file,
+                "matched_source_file": pair.matched_source_file,
+                "title": pair.title,
+                "matched_title": pair.matched_title,
                 "detector_type": "template_pair",
                 "check_type": pair.primary_match_type,
+                "primary_match_type": pair.primary_match_type,
                 "category": "template",
                 "matched_text": pair.primary_match_type,
                 "expected_term": "",
                 "evidence_snippet": pair.evidence_excerpt,
+                "evidence_excerpt": pair.evidence_excerpt,
                 "section_or_field": "cross_document",
                 "severity": pair.severity,
                 "confidence": pair.confidence,
@@ -351,8 +413,31 @@ def _finding_row_sort_key(row: dict[str, Any]) -> tuple[str, str, str, str, int,
     )
 
 
-def _cluster_rows(clusters: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [row for row in clusters if row["cluster_size"] >= 3]
+def _family_rows(clusters: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in clusters:
+        if row["cluster_size"] >= 3:
+            grouped[row["template_cluster_id"]].append(row)
+    rows: list[dict[str, Any]] = []
+    for family_id, members in sorted(grouped.items()):
+        representative = members[0]
+        rows.append(
+            {
+                "template_family_id": family_id,
+                "member_count": representative["cluster_size"],
+                "family_confidence": representative["family_confidence"],
+                "representative_record_id": representative["representative_record_id"],
+                "template_pattern_type": representative["template_pattern_type"],
+                "matched_sections": representative["matched_sections"],
+                "edge_density": representative["edge_density"],
+                "median_pair_confidence": representative["median_pair_confidence"],
+                "changed_entity_types": representative["changed_entity_types"],
+                "member_ids": sorted(member["record_id"] for member in members),
+                "shared_skeleton_excerpt": representative["shared_skeleton_excerpt"],
+                "medoid_verification_passed": representative["medoid_verification_passed"],
+            }
+        )
+    return rows
 
 
 def _parse_warning_rows(records: list[ParsedRecord]) -> list[dict[str, Any]]:
@@ -419,7 +504,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     findings_rows = _findings_rows(findings)
     template_finding_rows = _pair_finding_rows(pair_findings)
     integrity_finding_rows = sorted(findings_rows + template_finding_rows, key=_finding_row_sort_key)
-    cluster_rows = _cluster_rows(template_rows)
+    family_rows = _family_rows(template_rows)
     parse_warning_rows = _parse_warning_rows(records)
     parse_warning_rows.extend(
         {
@@ -448,7 +533,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         ("tortured_rule_count", len(tortured_rules)),
         ("dictionary_version", config.dictionary_version),
         ("tortured_dictionary_path", str(config.tortured_dictionary_path)),
-        ("similarity_threshold", config.similarity_threshold),
+        ("legacy_similarity_threshold", config.legacy_similarity_threshold),
         ("nonsense_candidate_detection", "enabled" if config.detect_nonsense_candidates else "disabled"),
         ("limitations", "Rule-based screening flags explicit LLM response traces, known tortured phrases, and repeated abstract skeletons; optional GPT-OSS stages only annotate candidates, and the pipeline does not detect AI-generated authorship."),
         ("excluded_scope", "AI-generated text detection"),
@@ -488,75 +573,28 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     output_paths["template_pairs_csv"] = write_csv(
         output_dir / "template_pair_findings.csv",
         template_finding_rows,
-        sorted({key for row in template_finding_rows for key in row} | {"pair_id", "record_id", "matched_record_id", "confidence", "severity"}),
+        PAIR_COLUMNS,
     )
     if config.compare_legacy_template_clustering:
         from .template_detection import cluster_templates
         output_paths["legacy_template_comparison_jsonl"] = write_jsonl(
             output_dir / "legacy_template_comparison.jsonl",
-            [row.to_dict() for row in cluster_templates(records, similarity_threshold=config.similarity_threshold)],
+            [row.to_dict() for row in cluster_templates(records, similarity_threshold=config.legacy_similarity_threshold)],
         )
     output_paths["clusters_csv"] = write_csv(
         output_dir / "template_clusters.csv",
-        cluster_rows,
-        [
-            "template_cluster_id",
-            "cluster_size",
-            "record_id",
-            "source_file",
-            "similar_record_ids",
-            "similarity_score",
-            "cluster_severity",
-            "shared_skeleton_excerpt",
-            "metadata_context",
-            "template_pattern_type",
-            "original_text_similarity",
-            "masked_skeleton_similarity",
-            "ngram_similarity",
-            "weighted_section_similarity",
-            "section_similarities",
-            "variable_substitutions",
-            "exclusion_reason",
-            "representative_record_id",
-            "edge_density",
-            "median_pair_strength",
-            "matched_sections",
-            "changed_entity_types",
-            "title",
-            "journal",
-            "publication_year",
-            "article_type",
-        ],
+        family_rows,
+        FAMILY_COLUMNS,
     )
     output_paths["dictionary_csv"] = write_csv(
         output_dir / "pattern_dictionary.csv",
         dictionary_rows,
-        [
-            "detector_type",
-            "rule_id",
-            "category",
-            "pattern",
-            "matched_phrase",
-            "expected_term",
-            "severity",
-            "confidence",
-            "retrieved_papers",
-            "source",
-        ],
+        DICTIONARY_COLUMNS,
     )
     output_paths["warnings_csv"] = write_csv(
         output_dir / "parse_warnings.csv",
         parse_warning_rows,
-        [
-            "source_file",
-            "record_id",
-            "warning_code",
-            "warning_message",
-            "field_name",
-            "severity",
-            "evidence_snippet",
-            "schema_type",
-        ],
+        WARNING_COLUMNS,
     )
     output_paths["metadata_json"] = write_jsonl(output_dir / "run_metadata.jsonl", [{"key": key, "value": value} for key, value in run_metadata_rows])
     output_paths["workbook"] = write_workbook(
@@ -565,7 +603,8 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         root_summary_rows=root_summary_rows,
         abstract_summary_rows=abstract_summary_rows,
         findings_rows=integrity_finding_rows,
-        cluster_rows=cluster_rows,
+        pair_rows=template_finding_rows,
+        cluster_rows=family_rows,
         dictionary_rows=dictionary_rows,
         parse_warning_rows=parse_warning_rows,
         run_metadata_rows=run_metadata_rows,
@@ -575,6 +614,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         records=records,
         findings=findings,
         template_rows=template_rows,
+        template_family_rows=family_rows,
         pair_findings=pair_findings,
         field_inventory_rows=field_inventory_rows,
         root_summary_rows=root_summary_rows,
@@ -590,16 +630,19 @@ def run_default_pipeline(
     input_dir: str | Path = "WILEY_LIVE_PREFLIGHT_metadata_files",
     tortured_dictionary_path: str | Path = "🤷_tortured.csv",
     output_dir: str | Path = "outputs",
-    similarity_threshold: float = 0.88,
+    legacy_similarity_threshold: float = 0.88,
     validate_llm: bool = False,
     detect_nonsense_candidates: bool = False,
     compare_legacy_template_clustering: bool = False,
+    similarity_threshold: float | None = None,
 ) -> PipelineResult:
+    if similarity_threshold is not None:
+        legacy_similarity_threshold = similarity_threshold
     config = PipelineConfig(
         input_dir=Path(input_dir),
         output_dir=Path(output_dir),
         tortured_dictionary_path=Path(tortured_dictionary_path),
-        similarity_threshold=similarity_threshold,
+        legacy_similarity_threshold=legacy_similarity_threshold,
         validate_llm=validate_llm,
         detect_nonsense_candidates=detect_nonsense_candidates,
         compare_legacy_template_clustering=compare_legacy_template_clustering,
@@ -614,7 +657,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--input-dir", default="WILEY_LIVE_PREFLIGHT_metadata_files", help="Folder containing Wiley XML files.")
     parser.add_argument("--tortured-dictionary", default="🤷_tortured.csv", help="Tortured phrase dictionary CSV.")
     parser.add_argument("--output-dir", default="outputs", help="Directory for generated reports.")
-    parser.add_argument("--similarity-threshold", type=float, default=0.88, help="Template clustering similarity threshold.")
+    parser.add_argument(
+        "--legacy-similarity-threshold",
+        type=float,
+        default=0.88,
+        help="Legacy threshold used only with --compare-legacy-template-clustering.",
+    )
     parser.add_argument(
         "--validate-llm",
         action="store_true",
@@ -636,7 +684,7 @@ def main(argv: list[str] | None = None) -> int:
         input_dir=args.input_dir,
         tortured_dictionary_path=args.tortured_dictionary,
         output_dir=args.output_dir,
-        similarity_threshold=args.similarity_threshold,
+        legacy_similarity_threshold=args.legacy_similarity_threshold,
         validate_llm=args.validate_llm,
         detect_nonsense_candidates=args.detect_nonsense_candidates,
         compare_legacy_template_clustering=args.compare_legacy_template_clustering,
