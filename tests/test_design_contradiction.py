@@ -11,6 +11,7 @@ from asco_integrity.detectors.design_contradiction import (
     DesignValidationResult,
     build_study_design_profile,
     detect_design_contradictions,
+    extract_study_design_claims,
 )
 from asco_integrity.models import ParsedRecord
 from scripts.detect_design_contradictions import CSV_COLUMNS
@@ -229,6 +230,92 @@ class DesignContradictionTests(unittest.TestCase):
             ]),
             [],
         )
+
+    def test_generic_cohort_in_randomized_trial_is_not_flagged(self) -> None:
+        self.assertEqual(
+            detect_design_contradictions([
+                _record("A cohort of 300 patients was enrolled in a randomized trial.")
+            ]),
+            [],
+        )
+
+    def test_observational_cohort_with_randomized_assignment_is_flagged(self) -> None:
+        finding = detect_design_contradictions([
+            _record("This observational retrospective cohort used randomized assignment.")
+        ])[0]
+        self.assertEqual(
+            finding.contradiction_type,
+            "observational_cohort_vs_randomized_allocation",
+        )
+
+    def test_negative_allocation_phrases_do_not_extract_randomized(self) -> None:
+        for phrase in ("non randomized study", "not randomized", "without randomization"):
+            with self.subTest(phrase=phrase):
+                values = [
+                    claim.value
+                    for claim in extract_study_design_claims(_record(f"This was a {phrase}."))
+                    if claim.attribute == "allocation"
+                ]
+                self.assertEqual(values, ["nonrandomized"])
+
+    def test_future_design_statements_are_not_current_claims(self) -> None:
+        examples = (
+            (
+                "This retrospective study reviewed records.",
+                "A prospective randomized trial is warranted.",
+            ),
+            (
+                "This was an open-label study.",
+                "Future double-blind studies are required.",
+            ),
+            (
+                "This was a single-arm uncontrolled study.",
+                "A placebo-controlled trial is planned.",
+            ),
+        )
+        for sentences in examples:
+            with self.subTest(sentences=sentences):
+                self.assertEqual(detect_design_contradictions([_record(*sentences)]), [])
+
+    def test_unrelated_secondary_analysis_does_not_hide_masking_conflict(self) -> None:
+        findings = detect_design_contradictions([
+            _record(
+                "The primary study was described as open-label and double-blind.",
+                "A separate secondary analysis examined older patients.",
+            )
+        ])
+        self.assertEqual(
+            [finding.contradiction_type for finding in findings],
+            ["open_label_vs_blinded"],
+        )
+
+    def test_unrelated_cohorts_do_not_hide_phase_conflict(self) -> None:
+        findings = detect_design_contradictions([
+            _record(
+                "The primary study was described as Phase II and Phase III.",
+                "A discovery cohort identified markers.",
+                "A validation cohort confirmed them.",
+            )
+        ])
+        self.assertEqual(
+            [finding.contradiction_type for finding in findings],
+            ["phase_2_vs_phase_3"],
+        )
+
+    def test_legitimate_mixed_designs_are_not_flagged(self) -> None:
+        examples = (
+            "Data were collected prospectively and reviewed retrospectively.",
+            "This was an open-label trial with blinded independent radiology review.",
+            (
+                "Participants came from a randomized parent trial and entered an "
+                "observational long-term follow-up study."
+            ),
+            "Data were entered prospectively into a registry and analysed retrospectively.",
+            "A Phase II cohort was evaluated within a broader Phase III development programme.",
+        )
+        for sentence in examples:
+            with self.subTest(sentence=sentence):
+                self.assertEqual(detect_design_contradictions([_record(sentence)]), [])
 
 
 if __name__ == "__main__":
