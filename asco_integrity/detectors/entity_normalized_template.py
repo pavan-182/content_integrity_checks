@@ -9,7 +9,7 @@ from itertools import combinations
 from typing import Any
 
 from ..models import ParsedRecord
-from ..template_detection import (
+from ..template_matching_common import (
     DATE_PATTERNS,
     DRUG_SUFFIX_PATTERN,
     EMAIL_PATTERN,

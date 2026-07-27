@@ -50,6 +50,15 @@ FINDINGS_COLUMNS = [
     "section_similarities",
     "variable_substitutions",
     "exclusion_reason",
+    "pair_id",
+    "matched_record_id",
+    "supporting_match_types",
+    "matched_sections",
+    "matched_sentence_count",
+    "shared_text_coverage",
+    "high_value_section_similarity",
+    "relationship_context",
+    "review_status",
 ]
 
 
@@ -342,6 +351,16 @@ def write_workbook(
         "template_cluster_id",
         "template_cluster_size",
         "template_cluster_similarity_score",
+        "template_flag",
+        "template_confidence",
+        "template_review_priority",
+        "matched_abstract_count",
+        "strongest_matched_record_id",
+        "primary_template_pattern",
+        "matched_sections",
+        "template_family_id",
+        "template_family_size",
+        "template_evidence_summary",
         "total_finding_count",
         "highest_severity",
         "overall_content_risk",
@@ -413,6 +432,11 @@ def write_workbook(
         "journal",
         "publication_year",
         "article_type",
+        "representative_record_id",
+        "edge_density",
+        "median_pair_strength",
+        "matched_sections",
+        "changed_entity_types",
     ]
     _write_table(ws, cluster_rows or [{"template_cluster_id": "", "cluster_size": "", "record_id": "", "source_file": "", "similar_record_ids": "", "similarity_score": "", "cluster_severity": "", "shared_skeleton_excerpt": "No template clusters detected in this run.", "metadata_context": "", "title": "", "journal": "", "publication_year": "", "article_type": ""}], cluster_columns, start_row=1)
     ws.freeze_panes = "A2"

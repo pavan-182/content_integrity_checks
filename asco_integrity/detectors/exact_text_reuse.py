@@ -8,7 +8,7 @@ from itertools import combinations
 from typing import Any
 
 from ..models import ParsedRecord
-from ..template_detection import TRIAL_PATTERN, _candidate_pairs, _sentence_split
+from ..template_matching_common import TRIAL_PATTERN, _candidate_pairs, _sentence_split
 from ..utils import normalize_for_matching, normalize_label, normalize_whitespace, text_tokens
 
 
