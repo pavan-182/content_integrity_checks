@@ -14,6 +14,7 @@ from asco_integrity.detectors.entity_normalized_template import (
     MINIMUM_SKELETON_WORDS,
     MINIMUM_SUBSTITUTIONS,
     ORIGINAL_SUPPORT_THRESHOLD,
+    SECTION_SIMILARITY_THRESHOLD,
     detect_entity_normalized_templates,
 )
 from asco_integrity.reporting import write_csv
@@ -53,6 +54,9 @@ def main() -> int:
     parser.add_argument(
         "--minimum-substitutions", type=int, default=MINIMUM_SUBSTITUTIONS
     )
+    parser.add_argument(
+        "--section-similarity-threshold", type=float, default=SECTION_SIMILARITY_THRESHOLD
+    )
     args = parser.parse_args()
 
     xml_files = discover_xml_files(args.input_dir)
@@ -76,6 +80,7 @@ def main() -> int:
         minimum_skeleton_words=args.minimum_skeleton_words,
         maximum_placeholder_ratio=args.maximum_placeholder_ratio,
         minimum_substitutions=args.minimum_substitutions,
+        section_similarity_threshold=args.section_similarity_threshold,
     )
     write_csv(args.output_csv, [finding.to_dict() for finding in findings], CSV_COLUMNS)
     print(

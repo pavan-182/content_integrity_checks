@@ -4,6 +4,8 @@ import re
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from difflib import SequenceMatcher
+from hashlib import blake2b
+from itertools import combinations
 from typing import Any
 
 from ..models import ParsedRecord
@@ -26,7 +28,7 @@ from ..template_detection import (
     _similarity,
 )
 from ..utils import normalize_for_matching, normalize_label, normalize_whitespace, text_tokens
-from .exact_text_reuse import _non_generic_text, detect_exact_text_reuse
+from .exact_text_reuse import _non_generic_text
 
 
 # ponytail: uncalibrated ASCO V1 thresholds; replace after labelled-corpus calibration.
@@ -60,12 +62,6 @@ EXPLICIT_RELATION_RE = re.compile(
     re.IGNORECASE,
 )
 HIGH_VALUE_SECTIONS = ("result", "conclusion")
-EXACT_REUSE_PRECEDENCE_TYPES = {
-    "exact_full_abstract",
-    "exact_results_section",
-    "exact_methods_section",
-    "multiple_uncommon_sentences",
-}
 MEANINGFUL_ENTITY_TYPES = {
     "trial_id", "date", "pvalue", "percent", "gene", "drug", "disease",
     "biomarker", "number",
@@ -108,6 +104,7 @@ class EntityNormalizedTemplateFinding:
 @dataclass(frozen=True, slots=True)
 class _Representation:
     original: str
+    original_normalized: str
     normalized: str
     skeleton: str
     section_skeletons: dict[str, str]
@@ -155,12 +152,15 @@ def _mask_and_capture(text: str) -> tuple[str, dict[str, tuple[str, ...]]]:
 
 def _representation(record: ParsedRecord) -> _Representation:
     original = record.abstract_text or record.title or record.raw_text
-    skeleton, entities = _mask_and_capture(original)
-    section_skeletons = {
-        normalize_label(item.get("section", "")) or "Abstract": _mask_and_capture(item.get("text", ""))[0]
-        for item in record.abstract_sections
-        if normalize_whitespace(item.get("text", ""))
-    }
+    comparison_text = _non_generic_text(original)
+    skeleton, entities = _mask_and_capture(comparison_text)
+    section_skeletons: dict[str, str] = {}
+    for item in record.abstract_sections:
+        section_text = _non_generic_text(item.get("text", ""))
+        if section_text:
+            section_skeletons[normalize_label(item.get("section", "")) or "Abstract"] = (
+                _mask_and_capture(section_text)[0]
+            )
     if not section_skeletons and original:
         section_skeletons["Abstract"] = skeleton
     placeholder_count = len(PLACEHOLDER_TOKEN_RE.findall(skeleton))
@@ -168,7 +168,8 @@ def _representation(record: ParsedRecord) -> _Representation:
     denominator = placeholder_count + meaningful_word_count
     return _Representation(
         original=original,
-        normalized=normalize_for_matching(original),
+        original_normalized=normalize_for_matching(original),
+        normalized=normalize_for_matching(comparison_text),
         skeleton=skeleton,
         section_skeletons=section_skeletons,
         placeholder_count=placeholder_count,
@@ -176,6 +177,25 @@ def _representation(record: ParsedRecord) -> _Representation:
         meaningful_word_count=meaningful_word_count,
         entities=entities,
     )
+
+
+def _section_candidate_pairs(
+    representations: dict[str, _Representation],
+) -> set[tuple[str, str]]:
+    blocks: dict[tuple[str, str], list[str]] = defaultdict(list)
+    for record_id, representation in representations.items():
+        for section, skeleton in representation.section_skeletons.items():
+            if len(text_tokens(skeleton)) >= 5:
+                blocks[
+                    normalize_for_matching(section),
+                    blake2b(skeleton.encode(), digest_size=16).hexdigest(),
+                ].append(record_id)
+    return {
+        pair
+        for members in blocks.values()
+        if len(members) >= 2
+        for pair in combinations(sorted(members), 2)
+    }
 
 
 def _ngram_similarity(left: str, right: str, size: int = 5) -> float:
@@ -267,15 +287,16 @@ def _relationship_context(left: ParsedRecord, right: ParsedRecord) -> tuple[str,
     } & {
         normalize_for_matching(value) for value in right.affiliations
     } - {""}
-    explicit_relation = bool(
-        EXPLICIT_RELATION_RE.search(left.abstract_text)
-        or EXPLICIT_RELATION_RE.search(right.abstract_text)
-    )
+    left_explicit = bool(EXPLICIT_RELATION_RE.search(left.abstract_text))
+    right_explicit = bool(EXPLICIT_RELATION_RE.search(right.abstract_text))
+    explicit_relation = left_explicit and right_explicit
     context: list[str] = []
     if shared_trials:
         context.append(f"shared trial ID: {', '.join(shared_trials)}")
     if explicit_relation:
-        context.append("explicitly declared related study or cohort")
+        context.append("both abstracts explicitly declare a related study or cohort")
+    elif left_explicit or right_explicit:
+        context.append("one abstract mentions a related study without pair-level confirmation")
     if shared_authors:
         context.append(f"overlapping authors: {len(shared_authors)}")
     if shared_affiliations:
@@ -297,16 +318,27 @@ def determine_confidence(
     original_similarity: float,
     substitution_count: int,
     high_value_section_similarity: float,
+    *,
+    masked_similarity_threshold: float = MASKED_SIMILARITY_THRESHOLD,
+    original_support_threshold: float = ORIGINAL_SUPPORT_THRESHOLD,
+    section_similarity_threshold: float = SECTION_SIMILARITY_THRESHOLD,
 ) -> str:
-    if masked_similarity >= 0.95 and original_similarity >= 0.65 and substitution_count >= 2:
+    if (
+        masked_similarity >= max(0.95, masked_similarity_threshold)
+        and original_similarity >= max(0.65, original_support_threshold)
+        and substitution_count >= 2
+    ):
         return "very_high"
     if (
         (
-            masked_similarity >= MASKED_SIMILARITY_THRESHOLD
-            or high_value_section_similarity >= 0.90
+            masked_similarity >= masked_similarity_threshold
+            or high_value_section_similarity >= section_similarity_threshold
         )
-        and original_similarity >= ORIGINAL_SUPPORT_THRESHOLD
-        and (substitution_count >= 1 or high_value_section_similarity >= 0.90)
+        and original_similarity >= original_support_threshold
+        and (
+            substitution_count >= 1
+            or high_value_section_similarity >= section_similarity_threshold
+        )
     ):
         return "high"
     return "medium"
@@ -337,18 +369,14 @@ def detect_entity_normalized_templates(
     skeletons = {record_id: item.skeleton for record_id, item in representations.items()}
     normalized = {record_id: item.normalized for record_id, item in representations.items()}
     candidates = _candidate_pairs(records, skeletons, normalized)
-    exact_reuse_pairs = {
-        tuple(sorted((finding.record_id, finding.matched_record_id)))
-        for finding in detect_exact_text_reuse(records)
-        if finding.match_type in EXACT_REUSE_PRECEDENCE_TYPES
-    }
+    candidates.update(_section_candidate_pairs(representations))
 
     findings: list[EntityNormalizedTemplateFinding] = []
     for left_id, right_id in sorted(candidates):
         left, right = representations[left_id], representations[right_id]
-        if not left.normalized or left.normalized == right.normalized:
+        if not left.normalized or not right.normalized:
             continue
-        if (left_id, right_id) in exact_reuse_pairs:
+        if left.original_normalized == right.original_normalized:
             continue
         if max(left.placeholder_ratio, right.placeholder_ratio) > maximum_placeholder_ratio:
             continue
@@ -356,10 +384,7 @@ def detect_entity_normalized_templates(
             continue
         if _content_class(lookup[right_id], right.skeleton) in {"empty_or_unusable", "administrative_boilerplate"}:
             continue
-        if min(
-            len(text_tokens(_non_generic_text(left.original))),
-            len(text_tokens(_non_generic_text(right.original))),
-        ) < minimum_skeleton_words:
+        if min(left.meaningful_word_count, right.meaningful_word_count) < minimum_skeleton_words:
             continue
 
         masked_similarity = _similarity(left.skeleton, right.skeleton)
@@ -385,7 +410,10 @@ def detect_entity_normalized_templates(
         ) >= section_similarity_threshold
         substitution_count, substitutions = _substitutions(left, right)
         shared_word_count = _shared_skeleton_words(left.skeleton, right.skeleton)
-        section_trigger = len(matched_high_value) >= 2 and high_value_section_similarity >= masked_similarity_threshold
+        section_trigger = (
+            len(matched_high_value) >= 2
+            and high_value_section_similarity >= section_similarity_threshold
+        )
         if (
             original_similarity < original_support_threshold
             or substitution_count < minimum_substitutions
@@ -400,6 +428,9 @@ def detect_entity_normalized_templates(
             original_similarity,
             substitution_count,
             high_value_section_similarity,
+            masked_similarity_threshold=masked_similarity_threshold,
+            original_support_threshold=original_support_threshold,
+            section_similarity_threshold=section_similarity_threshold,
         )
         relationship, relationship_strength = _relationship_context(
             lookup[left_id], lookup[right_id]

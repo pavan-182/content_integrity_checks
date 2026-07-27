@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import sys
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from asco_integrity.detectors.entity_normalized_template import (
+    _representation,
+    _section_candidate_pairs,
     detect_entity_normalized_templates,
 )
 from asco_integrity.models import ParsedRecord
+from asco_integrity.utils import text_tokens
+from scripts.detect_entity_normalized_templates import main as cli_main
 
 
 def _record(
@@ -213,6 +220,119 @@ class EntityNormalizedTemplateTests(unittest.TestCase):
             for record_id, grant in (("A", "12345"), ("B", "67890"))
         ]
         self.assertEqual(detect_entity_normalized_templates(records), [])
+
+    def test_exact_methods_reuse_does_not_suppress_entity_template(self) -> None:
+        records = _templated_pair()
+        shared_methods = (
+            "Adults entered a prospective multicentre study with independent radiographic "
+            "review and prespecified longitudinal safety assessments."
+        )
+        for record in records:
+            record.abstract_sections[1]["text"] = shared_methods
+            record.abstract_text = " ".join(item["text"] for item in record.abstract_sections)
+        finding = detect_entity_normalized_templates(records)[0]
+        self.assertIn("Methods", finding.matched_sections)
+        self.assertIn("drug: osimertinib -> trastuzumab", finding.variable_substitutions)
+
+    def test_one_sided_previously_reported_wording_is_not_expected_relationship(self) -> None:
+        records = _templated_pair()
+        records[0].abstract_sections[0]["text"] = (
+            "This previously reported study provided the rationale. "
+            + records[0].abstract_sections[0]["text"]
+        )
+        records[0].abstract_text = " ".join(item["text"] for item in records[0].abstract_sections)
+        finding = detect_entity_normalized_templates(records)[0]
+        self.assertNotEqual(finding.severity, "low")
+        self.assertIn("without pair-level confirmation", finding.relationship_context)
+
+    def test_funding_boilerplate_is_removed_before_similarity(self) -> None:
+        records = _templated_pair()
+        for record, grant in zip(records, ("12345", "67890")):
+            record.abstract_text += (
+                f" This study was funded by the Example Oncology Foundation under grant "
+                f"number {grant} with no role in study design or publication."
+            )
+        finding = detect_entity_normalized_templates(records)[0]
+        self.assertEqual(finding.masked_skeleton_similarity, 1.0)
+        self.assertNotIn("12345", finding.variable_substitutions)
+        self.assertNotIn("67890", finding.variable_substitutions)
+
+    def test_raw_word_count_does_not_replace_meaningful_skeleton_length(self) -> None:
+        records = [
+            ParsedRecord(
+                f"{record_id}.xml",
+                record_id=record_id,
+                abstract_text=" ".join([phrase] * 5),
+            )
+            for record_id, phrase in (
+                ("A", "EGFR osimertinib non-small-cell lung cancer 41% 245 p=0.01"),
+                ("B", "HER2 trastuzumab breast cancer 56% 312 p=0.02"),
+            )
+        ]
+        self.assertGreaterEqual(len(text_tokens(records[0].abstract_text)), 30)
+        self.assertLess(_representation(records[0]).meaningful_word_count, 30)
+        self.assertEqual(
+            detect_entity_normalized_templates(records, maximum_placeholder_ratio=1.0),
+            [],
+        )
+
+    def test_entity_normalized_sections_create_candidate_blocks(self) -> None:
+        records = [
+            ParsedRecord(
+                f"{record_id}.xml",
+                record_id=record_id,
+                abstract_text=f"{background} {result}",
+                abstract_sections=[
+                    {"section": "Background", "text": background},
+                    {"section": "Results", "text": result},
+                ],
+            )
+            for record_id, background, result in (
+                ("A", "A distinct prospective programme enrolled adults.", "Observed 41% response in lung cancer."),
+                ("B", "Unrelated registry records supplied comparison data.", "Observed 56% response in breast cancer."),
+            )
+        ]
+        representations = {record.record_id: _representation(record) for record in records}
+        self.assertEqual(_section_candidate_pairs(representations), {("A", "B")})
+
+    @patch("scripts.detect_entity_normalized_templates.write_csv")
+    @patch("scripts.detect_entity_normalized_templates.detect_entity_normalized_templates")
+    @patch("scripts.detect_entity_normalized_templates.parse_wiley_xml_records")
+    @patch("scripts.detect_entity_normalized_templates.discover_xml_files")
+    def test_cli_passes_custom_thresholds(
+        self,
+        discover,
+        parse,
+        detect,
+        _write,
+    ) -> None:
+        discover.return_value = [Path("input.xml")]
+        parse.return_value = _templated_pair()
+        detect.return_value = []
+        argv = [
+            "detect_entity_normalized_templates.py",
+            "--input-dir", "input",
+            "--output-csv", "output.csv",
+            "--masked-similarity-threshold", "0.8",
+            "--original-support-threshold", "0.5",
+            "--minimum-skeleton-words", "20",
+            "--maximum-placeholder-ratio", "0.4",
+            "--minimum-substitutions", "2",
+            "--section-similarity-threshold", "0.82",
+        ]
+        with patch.object(sys, "argv", argv):
+            self.assertEqual(cli_main(), 0)
+        self.assertEqual(
+            detect.call_args.kwargs,
+            {
+                "masked_similarity_threshold": 0.8,
+                "original_support_threshold": 0.5,
+                "minimum_skeleton_words": 20,
+                "maximum_placeholder_ratio": 0.4,
+                "minimum_substitutions": 2,
+                "section_similarity_threshold": 0.82,
+            },
+        )
 
 
 if __name__ == "__main__":
