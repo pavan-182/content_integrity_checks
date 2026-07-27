@@ -21,9 +21,9 @@ from asco_integrity.xml_parser import discover_xml_files, parse_wiley_xml_record
 CSV_COLUMNS = [
     "finding_id", "check_type", "check_triggered", "record_id", "source_file",
     "title", "contradiction_type", "evidence", "severity", "confidence",
-    "review_reason", "attribute_1", "value_1", "section_1", "sentence_1",
-    "attribute_2", "value_2", "section_2", "sentence_2", "validation_status",
-    "validation_reason", "review_status",
+    "matched_source_type", "matched_source_id", "review_reason", "attribute_1",
+    "value_1", "section_1", "sentence_1", "attribute_2", "value_2", "section_2",
+    "sentence_2", "validation_status", "validation_reason", "review_status",
 ]
 
 

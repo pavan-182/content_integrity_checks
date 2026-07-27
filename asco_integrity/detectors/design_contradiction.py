@@ -65,6 +65,8 @@ class DesignContradictionFinding:
     evidence: str
     severity: str
     confidence: str
+    matched_source_type: str
+    matched_source_id: str
     review_reason: str
     attribute_1: str
     value_1: str
@@ -477,6 +479,8 @@ def detect_design_contradictions(
                     ),
                     severity=severity,
                     confidence="high" if left.confidence == right.confidence == "high" else "medium",
+                    matched_source_type="same_abstract",
+                    matched_source_id=record.record_id,
                     review_reason=(
                         "The two explicit design descriptions appear incompatible for the same "
                         "study component. Review the protocol wording and intended study period."

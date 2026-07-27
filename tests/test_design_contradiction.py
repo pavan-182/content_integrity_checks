@@ -219,6 +219,8 @@ class DesignContradictionTests(unittest.TestCase):
             self.assertEqual(reader.fieldnames, CSV_COLUMNS)
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["contradiction_type"], "prospective_vs_retrospective")
+            self.assertEqual(rows[0]["matched_source_type"], "same_abstract")
+            self.assertEqual(rows[0]["matched_source_id"], "DESIGN-CLI")
 
     def test_future_prospective_study_recommendation_is_not_current_design(self) -> None:
         self.assertEqual(
