@@ -235,7 +235,8 @@ Every run creates these files in the configured output directory:
 |---|---|
 | `parsed_records.jsonl` | Full normalized record objects, including abstract sections and warnings |
 | `parsed_records.csv` | Flat record export for analysis |
-| `integrity_findings.csv` | Rule findings and one consolidated row per template pair |
+| `integrity_findings.csv` | Compact reviewer queue with evidence, severity, confidence, and review status |
+| `detailed_findings.csv` | Full diagnostic fields for rule findings and consolidated template pairs |
 | `template_pair_findings.csv` | Stable detailed pair-evidence schema, including source metadata and separate similarity metrics |
 | `template_clusters.csv` | One row per verified visible family of three or more members |
 | `pattern_dictionary.csv` | Effective LLM and tortured-phrase rules used by the run |

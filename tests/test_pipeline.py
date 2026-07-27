@@ -13,6 +13,7 @@ from openpyxl import load_workbook
 from asco_integrity.detectors import built_in_llm_rules, build_tortured_rule_index, detect_llm_trace, detect_tortured_phrases, load_tortured_rules
 from asco_integrity.models import Finding, ParsedRecord
 from asco_integrity.pipeline import run_default_pipeline
+from asco_integrity.reporting import FINDINGS_COLUMNS, REVIEW_FINDINGS_COLUMNS
 from asco_integrity.template_detection import _candidate_pairs, _content_class, _similarity, build_normalized_text, build_skeleton_text, cluster_templates
 from asco_integrity.validators import ContextValidator
 from asco_integrity.validators.context_validator import _parse_validator_payload
@@ -384,7 +385,7 @@ class PipelineTests(unittest.TestCase):
 
             result = run_default_pipeline(input_dir=input_dir, tortured_dictionary_path=dict_path, output_dir=output_dir)
 
-            with result.output_paths["findings_csv"].open(newline="", encoding="utf-8") as handle:
+            with result.output_paths["detailed_findings_csv"].open(newline="", encoding="utf-8") as handle:
                 rows = list(csv.DictReader(handle))
 
             template_rows = [row for row in rows if row.get("detector_type") == "template_pair"]
@@ -425,6 +426,11 @@ class PipelineTests(unittest.TestCase):
             self.assertTrue(result.output_paths["workbook"].exists())
             self.assertTrue(result.output_paths["parsed_jsonl"].exists())
             self.assertTrue(result.output_paths["findings_csv"].exists())
+            self.assertTrue(result.output_paths["detailed_findings_csv"].exists())
+            with result.output_paths["findings_csv"].open(newline="", encoding="utf-8") as handle:
+                self.assertEqual(next(csv.reader(handle)), REVIEW_FINDINGS_COLUMNS)
+            with result.output_paths["detailed_findings_csv"].open(newline="", encoding="utf-8") as handle:
+                self.assertEqual(next(csv.reader(handle)), FINDINGS_COLUMNS)
 
     def test_legacy_comparison_does_not_enter_production_outputs(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir_str:
@@ -465,7 +471,7 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(baseline.abstract_summary_rows, comparison.abstract_summary_rows)
             workbook = load_workbook(comparison.output_paths["workbook"], read_only=True)
             self.assertNotIn("Legacy", " | ".join(workbook.sheetnames))
-            with comparison.output_paths["findings_csv"].open(newline="", encoding="utf-8") as handle:
+            with comparison.output_paths["detailed_findings_csv"].open(newline="", encoding="utf-8") as handle:
                 self.assertFalse(any(row["detector_type"] == "template_cluster" for row in csv.DictReader(handle)))
 
     def test_validator_marks_bad_json_uncertain(self) -> None:

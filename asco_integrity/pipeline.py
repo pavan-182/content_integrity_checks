@@ -31,6 +31,7 @@ from .reporting import (
     FAMILY_COLUMNS,
     FINDINGS_COLUMNS,
     PAIR_COLUMNS,
+    REVIEW_FINDINGS_COLUMNS,
     WARNING_COLUMNS,
     write_csv,
     write_jsonl,
@@ -502,6 +503,9 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     field_inventory_rows, root_summary_rows = _inventory_rows(records)
     abstract_summary_rows = _aggregate_findings(records, findings, pair_findings, template_rows)
     findings_rows = _findings_rows(findings)
+    titles_by_record = {record.record_id: record.title for record in records}
+    for row in findings_rows:
+        row["title"] = titles_by_record.get(row["record_id"], "")
     template_finding_rows = _pair_finding_rows(pair_findings)
     integrity_finding_rows = sorted(findings_rows + template_finding_rows, key=_finding_row_sort_key)
     family_rows = _family_rows(template_rows)
@@ -567,6 +571,11 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     )
     output_paths["findings_csv"] = write_csv(
         output_dir / "integrity_findings.csv",
+        integrity_finding_rows,
+        REVIEW_FINDINGS_COLUMNS,
+    )
+    output_paths["detailed_findings_csv"] = write_csv(
+        output_dir / "detailed_findings.csv",
         integrity_finding_rows,
         FINDINGS_COLUMNS,
     )

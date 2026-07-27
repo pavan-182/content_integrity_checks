@@ -64,6 +64,21 @@ FINDINGS_COLUMNS = [
     "review_status",
 ]
 
+REVIEW_FINDINGS_COLUMNS = [
+    "finding_id",
+    "record_id",
+    "matched_record_id",
+    "title",
+    "matched_title",
+    "evidence_snippet",
+    "matched_sentence_count",
+    "shared_text_coverage",
+    "relationship_context",
+    "severity",
+    "confidence",
+    "review_status",
+]
+
 PAIR_COLUMNS = [
     "pair_id",
     "record_id",
