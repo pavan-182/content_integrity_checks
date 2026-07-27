@@ -1,3 +1,5 @@
+"""Sentence-local V1 checks; numbers are not linked across sentences or sections."""
+
 from __future__ import annotations
 
 import re
@@ -19,7 +21,7 @@ COUNT_PERCENT_PATTERNS = (
         re.compile(
             rf"\b(?P<numerator>\d+)\s+(?:of|out of)\s+(?P<denominator>\d+)"
             rf"(?:\s+(?P<unit>(?:evaluable\s+)?{POPULATION}))?\s*"
-            rf"(?:\(|,?\s*(?:representing|corresponding to|reported as|or|=)\s*)?"
+            rf"(?:\(|,?\s*(?:representing|corresponding to|reported as|responded|or|=)\s*\(?)?"
             rf"(?P<percentage>\d+(?:\.\d+)?)\s*%\)?",
             re.IGNORECASE,
         ),
@@ -29,7 +31,7 @@ COUNT_PERCENT_PATTERNS = (
         re.compile(
             rf"\b(?P<numerator>\d+)\s*/\s*(?P<denominator>\d+)"
             rf"(?:\s+(?P<unit>{POPULATION}))?\s*"
-            rf"(?:\(|,?\s*(?:representing|corresponding to|reported as|or|=)\s*)?"
+            rf"(?:\(|,?\s*(?:representing|corresponding to|reported as|responded|or|=)\s*\(?)?"
             rf"(?P<percentage>\d+(?:\.\d+)?)\s*%\)?",
             re.IGNORECASE,
         ),
@@ -57,7 +59,9 @@ COUNT_OF_RE = re.compile(
 FRACTION_RE = re.compile(r"\b(?P<numerator>\d+)\s*/\s*(?P<denominator>\d+)\b")
 OUTCOME_AMONG_RE = re.compile(
     rf"\b(?P<numerator>\d+)\s+"
-    r"(?P<label>responses?|responders?|events?|cases?|deaths?|toxicities?)\s+"
+    rf"(?P<label>(?:{POPULATION})\s+(?:with|who had)\s+[A-Za-z][A-Za-z -]{{0,30}}?|"
+    r"serious adverse events?|adverse events?|hospitali[sz]ations?|episodes?|"
+    r"responses?|responders?|events?|unique cases?|cases?|deaths?|toxicities?)\s+"
     rf"(?:among|in|of)\s+(?P<denominator>\d+)\s+"
     rf"(?P<unit>(?:evaluable\s+|treated\s+|enrolled\s+)?{POPULATION})\b",
     re.IGNORECASE,
@@ -65,7 +69,8 @@ OUTCOME_AMONG_RE = re.compile(
 PERCENT_RE = re.compile(rf"(?P<percentage>{NUMBER})\s*%")
 RELATIVE_PERCENT_RE = re.compile(
     r"\b(?:relative|increase[sd]?|increasing|change[sd]?|improve(?:ment|d)?|"
-    r"reduction|reduced|higher|growth|rose|gain(?:ed)?)\b",
+    r"reduction|reduced|decreas(?:e|ed|ing)|higher|growth|rose|gain(?:ed)?|"
+    r"dose intensity)\b",
     re.IGNORECASE,
 )
 RATE_CONTEXT_RE = re.compile(
@@ -74,7 +79,18 @@ RATE_CONTEXT_RE = re.compile(
     re.IGNORECASE,
 )
 COUNT_CONTEXT_RE = re.compile(
-    rf"\b(?:{POPULATION}|responses?|responders?|events?|deaths?|evaluable|treated|enrolled)\b",
+    rf"\b(?:{POPULATION}|responses?|responders?|events?|deaths?|toxicities?|"
+    r"hospitali[sz]ations?|episodes?|evaluable|treated|enrolled)\b",
+    re.IGNORECASE,
+)
+ONE_PER_PERSON_RE = re.compile(
+    rf"\b(?:responders?|responses?|deaths?|unique cases?|"
+    rf"(?:{POPULATION})\s+with\b|(?:{POPULATION})\s+who\b|responded)\b",
+    re.IGNORECASE,
+)
+REPEATABLE_EVENT_RE = re.compile(
+    r"\b(?:serious adverse events?|adverse events?|events?|toxicities?|"
+    r"hospitali[sz]ations?|episodes?|admissions?)\b",
     re.IGNORECASE,
 )
 MEDIAN_RANGE_RE = re.compile(
@@ -122,10 +138,16 @@ class NumericalClaim:
     upper_bound: float | None = None
     unit: str = ""
     extraction_method: str = ""
+    outcome_classification: str = "ambiguous"
 
 
 @dataclass(frozen=True, slots=True)
 class NumericalContradictionFinding:
+    """calculated_value is the derived percentage, subgroup sum, numerator, or valid boundary.
+
+    It is null for median/range and reversed-interval contradictions.
+    """
+
     finding_id: str
     check_type: str
     check_triggered: bool
@@ -168,6 +190,20 @@ def _label_before(sentence: str, start: int) -> str:
     return " ".join(words[-5:])
 
 
+def _classify_outcome(label: str, sentence: str) -> str:
+    if ONE_PER_PERSON_RE.search(label):
+        return "one_per_person"
+    if REPEATABLE_EVENT_RE.search(label):
+        return "repeatable_event"
+    if re.search(rf"\b(?:{POPULATION})\s+(?:with|who)\b", sentence, re.IGNORECASE):
+        return "one_per_person"
+    if REPEATABLE_EVENT_RE.search(sentence):
+        return "repeatable_event"
+    if ONE_PER_PERSON_RE.search(sentence):
+        return "one_per_person"
+    return "ambiguous"
+
+
 def _section_sentences(record: ParsedRecord) -> list[tuple[str, str]]:
     if record.abstract_sections:
         return [
@@ -204,23 +240,27 @@ def extract_numerical_claims(record: ParsedRecord) -> list[NumericalClaim]:
     for section, sentence in _section_sentences(record):
         for pattern, method in COUNT_PERCENT_PATTERNS:
             for match in pattern.finditer(sentence):
+                label = _label_before(sentence, match.start())
                 claims.append(_claim(
                     record, section, sentence, "count_percentage", method,
-                    label=_label_before(sentence, match.start()),
+                    label=label,
                     numerator=_float(match.group("numerator")),
                     denominator=_float(match.group("denominator")),
                     reported_percentage=_float(match.group("percentage")),
                     unit=_unit(match.groupdict().get("unit")) or "patient",
+                    outcome_classification=_classify_outcome(label, sentence),
                 ))
 
         for match in COUNT_PERCENT_WITHOUT_DENOMINATOR_RE.finditer(sentence):
+            label = _label_before(sentence, match.start())
             claims.append(_claim(
                 record, section, sentence, "count_percentage",
                 "count_with_parenthetical_percentage",
-                label=_label_before(sentence, match.start()),
+                label=label,
                 numerator=_float(match.group("numerator")),
                 reported_percentage=_float(match.group("percentage")),
                 unit=_unit(match.group("unit")),
+                outcome_classification=_classify_outcome(label, sentence),
             ))
 
         if COUNT_CONTEXT_RE.search(sentence):
@@ -230,12 +270,14 @@ def extract_numerical_claims(record: ParsedRecord) -> list[NumericalClaim]:
                 (OUTCOME_AMONG_RE, "outcome_count_among_population"),
             ):
                 for match in pattern.finditer(sentence):
+                    label = match.groupdict().get("label") or _label_before(sentence, match.start())
                     claims.append(_claim(
                         record, section, sentence, "count_denominator", method,
-                        label=match.groupdict().get("label") or _label_before(sentence, match.start()),
+                        label=label,
                         numerator=_float(match.group("numerator")),
                         denominator=_float(match.group("denominator")),
                         unit=_unit(match.groupdict().get("unit")) or "patient",
+                        outcome_classification=_classify_outcome(label, sentence),
                     ))
 
         for match in PERCENT_RE.finditer(sentence):
@@ -325,6 +367,9 @@ def detect_numerical_contradictions(
     *,
     percentage_tolerance: float = PERCENTAGE_TOLERANCE,
 ) -> list[NumericalContradictionFinding]:
+    if percentage_tolerance < 0:
+        raise ValueError("percentage_tolerance must be non-negative")
+
     findings: list[NumericalContradictionFinding] = []
     seen: set[tuple[str, str, str, str]] = set()
 
@@ -340,20 +385,35 @@ def detect_numerical_contradictions(
             findings.append(finding)
 
     for record in records:
-        for claim in extract_numerical_claims(record):
+        claims = extract_numerical_claims(record)
+        invalid_count_percentages = {
+            (claim.sentence, claim.numerator, claim.denominator)
+            for claim in claims
+            if (
+                claim.claim_type == "count_percentage"
+                and claim.reported_percentage is not None
+                and not 0 <= claim.reported_percentage <= 100
+            )
+        }
+        for claim in claims:
             if (
                 claim.claim_type in {"count_percentage", "count_denominator"}
                 and claim.numerator is not None
                 and claim.denominator is not None
+                and (claim.sentence, claim.numerator, claim.denominator)
+                not in invalid_count_percentages
             ):
-                if claim.numerator > claim.denominator:
+                if (
+                    claim.numerator > claim.denominator
+                    and claim.outcome_classification == "one_per_person"
+                ):
                     difference = claim.numerator - claim.denominator
                     add(record, claim, _finding(
                         record, claim, "numerator_exceeds_denominator",
                         f"The reported count {claim.numerator:g} exceeds the denominator {claim.denominator:g}.",
                         "high", "high",
                         f"numerator={claim.numerator:g}; denominator={claim.denominator:g}",
-                        claim.denominator, difference, 0.0,
+                        claim.numerator, difference, 0.0,
                     ))
                 if claim.reported_percentage is not None and claim.denominator > 0:
                     calculated = claim.numerator / claim.denominator * 100
@@ -372,7 +432,7 @@ def detect_numerical_contradictions(
             if (
                 claim.claim_type == "percentage"
                 and claim.reported_percentage is not None
-                and claim.reported_percentage > 100
+                and not 0 <= claim.reported_percentage <= 100
             ):
                 percent_match = re.search(
                     rf"{re.escape(f'{claim.reported_percentage:g}')}0*\s*%", claim.sentence
@@ -380,13 +440,15 @@ def detect_numerical_contradictions(
                 position = percent_match.start() if percent_match else len(claim.sentence)
                 context = claim.sentence[max(0, position - 60):position + 30]
                 if RATE_CONTEXT_RE.search(claim.sentence) and not RELATIVE_PERCENT_RE.search(context):
+                    boundary = 0.0 if claim.reported_percentage < 0 else 100.0
+                    direction = "below 0%" if claim.reported_percentage < 0 else "above 100%"
                     add(record, claim, _finding(
                         record, claim, "impossible_percentage",
                         f"The reported absolute rate or proportion is {claim.reported_percentage:g}%, "
-                        "which is above 100%.",
+                        f"which is {direction}.",
                         "high", "high",
                         f"reported_percentage={claim.reported_percentage:g}%",
-                        100.0, claim.reported_percentage - 100, 0.0,
+                        boundary, abs(claim.reported_percentage - boundary), 0.0,
                     ))
 
             if (
