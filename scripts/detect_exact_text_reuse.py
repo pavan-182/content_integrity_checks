@@ -15,7 +15,7 @@ from asco_integrity.reporting import write_csv
 from asco_integrity.utils import dedupe_records
 from asco_integrity.xml_parser import (
     discover_xml_files,
-    parse_wiley_xml_records,
+    parse_xml_records,
 )
 
 CSV_COLUMNS = [
@@ -70,7 +70,7 @@ def main() -> int:
     records = [
         record
         for path in xml_files
-        for record in parse_wiley_xml_records(path)
+        for record in parse_xml_records(path)
     ]
 
     records, warnings = dedupe_records(records)

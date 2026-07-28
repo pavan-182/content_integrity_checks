@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from asco_integrity.models import ParsedRecord
-from asco_integrity.xml_parser import parse_wiley_xml
+from asco_integrity.xml_parser import parse_xml
 from scripts.detect_llm_response_traces_llm import (
     RULES,
     SYSTEM_PROMPT,
@@ -134,7 +134,7 @@ class LLMTraceBatchScriptTests(unittest.TestCase):
 
     def test_six_labelled_llm_trace_records_are_recovered(self) -> None:
         paths = sorted((ROOT / "tests" / "fixtures" / "eval_corpus" / "positives").glob("syn9000[1-6]_llm_response_trace.xml"))
-        records = [parse_wiley_xml(path) for path in paths]
+        records = [parse_xml(path) for path in paths]
         planted = [
             ("Here is the revised", "LLM-009"),
             ("As an AI language model", "LLM-001"),

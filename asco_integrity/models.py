@@ -82,13 +82,14 @@ class Finding:
     evidence_snippet: str
     section_or_field: str
     severity: str
-    confidence: float
+    confidence: float | str
     rule_id: str
     check_type: str = ""
     expected_term: str = ""
     validation_status: str = ""
     validation_reason: str = ""
     validated_by: str = ""
+    review_status: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

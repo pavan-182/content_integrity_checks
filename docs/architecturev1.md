@@ -148,7 +148,7 @@ The current codebase covers the V1 flow end to end:
 - `asco_integrity/validators/context_validator.py` adds the opt-in GPT-OSS 20B validation pass for `tortured_phrase` and `llm_response_trace` findings.
 - The validator is annotate-only. It writes `validation_status`, `validation_reason`, and `validated_by`, but it does not change `overall_content_risk`.
 - The validator now uses a larger completion budget and can recover JSON from fenced or wrapped gateway responses.
-- The generated outputs include the compact reviewer queue `integrity_findings.csv`, its full diagnostic counterpart `detailed_findings.csv`, and the existing parsed-record, template, dictionary, warning, metadata, and workbook reports.
+- The generated outputs include the compact reviewer queue `integrity_findings.csv`, its full diagnostic counterpart `detailed_findings.csv`, native numerical/design/trial reports, and the existing parsed-record, template, dictionary, warning, metadata, and workbook reports.
 
 Validation runs completed:
 - Full corpus run with `--validate-llm` completed and populated validation columns in `detailed_findings.csv`.

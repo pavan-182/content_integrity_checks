@@ -297,7 +297,7 @@ class EntityNormalizedTemplateTests(unittest.TestCase):
 
     @patch("scripts.detect_entity_normalized_templates.write_csv")
     @patch("scripts.detect_entity_normalized_templates.detect_entity_normalized_templates")
-    @patch("scripts.detect_entity_normalized_templates.parse_wiley_xml_records")
+    @patch("scripts.detect_entity_normalized_templates.parse_xml_records")
     @patch("scripts.detect_entity_normalized_templates.discover_xml_files")
     def test_cli_passes_custom_thresholds(
         self,

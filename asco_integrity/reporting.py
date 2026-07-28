@@ -66,6 +66,8 @@ FINDINGS_COLUMNS = [
 
 REVIEW_FINDINGS_COLUMNS = [
     "finding_id",
+    "detector_type",
+    "check_type",
     "record_id",
     "matched_record_id",
     "title",
@@ -163,6 +165,9 @@ ABSTRACT_SUMMARY_COLUMNS = [
     "llm_trace_flag",
     "tortured_phrase_flag",
     "nonsense_candidate_flag",
+    "numerical_contradiction_flag",
+    "design_contradiction_flag",
+    "unverifiable_trial_flag",
     "template_flag",
     "template_confidence",
     "template_review_priority",
@@ -194,6 +199,9 @@ ABSTRACT_SUMMARY_COLUMNS = [
     "llm_trace_count",
     "tortured_phrase_count",
     "nonsense_candidate_count",
+    "numerical_contradiction_count",
+    "design_contradiction_count",
+    "unverifiable_trial_count",
     "total_finding_count",
     "highest_severity",
     "overall_content_risk",

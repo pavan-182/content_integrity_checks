@@ -10,7 +10,7 @@ from asco_integrity.detectors.nonsense_candidate import NonsenseCandidateDetecto
 from asco_integrity.models import ParsedRecord
 from asco_integrity.aggregation.risk_engine import _risk_from_signals
 from asco_integrity.pipeline import run_default_pipeline
-from asco_integrity.xml_parser import parse_wiley_xml
+from asco_integrity.xml_parser import parse_xml
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -56,7 +56,7 @@ class NonsenseCandidateTests(unittest.TestCase):
 
     def test_three_eval_corpus_candidates_are_annotated_low_severity(self) -> None:
         paths = sorted((ROOT / "tests" / "fixtures" / "eval_corpus" / "positives").glob("nonsense_candidate_*.xml"))
-        findings = [self.detector.detect(parse_wiley_xml(path)) for path in paths]
+        findings = [self.detector.detect(parse_xml(path)) for path in paths]
 
         self.assertEqual(len(findings), 3)
         self.assertTrue(all(len(items) == 1 for items in findings))

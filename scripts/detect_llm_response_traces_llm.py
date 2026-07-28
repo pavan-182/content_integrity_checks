@@ -19,7 +19,7 @@ if str(ROOT) not in sys.path:
 from asco_integrity.models import ParsedRecord
 from asco_integrity.utils import dedupe_records, evidence_snippet, normalize_label, normalize_whitespace
 from asco_integrity.validators.context_validator import _parse_validator_payload, build_gpt_oss_client
-from asco_integrity.xml_parser import discover_xml_files, parse_wiley_xml_records
+from asco_integrity.xml_parser import discover_xml_files, parse_xml_records
 
 
 PROMPT_VERSION = "llm_trace_batch_v1"
@@ -370,7 +370,7 @@ def load_records(input_dir: str | Path) -> tuple[list[ParsedRecord], int]:
     xml_files = discover_xml_files(input_dir)
     if not xml_files:
         raise ValueError(f"No XML files found under {input_dir}")
-    records = [record for path in xml_files for record in parse_wiley_xml_records(path)]
+    records = [record for path in xml_files for record in parse_xml_records(path)]
     failed = [record for record in records if record.parse_status == "failed"]
     if failed:
         examples = ", ".join(record.source_file for record in failed[:5])

@@ -30,8 +30,14 @@ flowchart TD
     D --> E2[Tortured phrase detector]
     D --> E3[Cross-record template detector]
     D --> E4{--detect-nonsense-candidates?}
+    D --> E5[Numerical contradiction detector]
+    D --> E6[Design contradiction detector]
+    D --> E7[Trial-reference checks]
     E1 --> F[Deterministic findings]
     E2 --> F
+    E5 --> F
+    E6 --> F
+    E7 --> F
     E4 -- Yes --> N[GPT-OSS sentence review]
     N --> F
     F --> G{--validate-llm?}
@@ -45,7 +51,7 @@ flowchart TD
     L --> M[Write JSONL, CSV, and Excel reports]
 ```
 
-The default path is deterministic and local. Network access occurs only when `--validate-llm` or `--detect-nonsense-candidates` enables an optional GPT-OSS step.
+The default path is deterministic and local. Network access occurs only when `--validate-llm`, `--detect-nonsense-candidates`, or `--verify-trials` enables an external service.
 
 ## 3. Inputs and configuration
 
@@ -59,6 +65,7 @@ The command-line interface accepts:
 | `--legacy-similarity-threshold` | `0.88` | Legacy-only threshold used with `--compare-legacy-template-clustering` |
 | `--validate-llm` | disabled | Enables per-finding GPT-OSS context validation |
 | `--detect-nonsense-candidates` | disabled | Enables sentence-level GPT-OSS review for dictionary misses |
+| `--verify-trials` | disabled | Verifies valid NCT identifiers against ClinicalTrials.gov; local format and placeholder checks always run |
 
 Run the default pipeline with:
 
@@ -189,6 +196,10 @@ All findings receive stable run-local IDs (`FND-00001`, `FND-00002`, and so on) 
 
 Only a model response marking the sentence not understandable creates a `nonsense_candidate` finding. It quotes the suspected phrase, preserves the full sentence as evidence, records the explanation/model/prompt version, and always has low severity. The check is sentence-level and candidate-only; it does not classify the abstract or infer authorship. Invalid model responses create no candidate.
 
+### 7.4 Contradiction and trial-reference checks
+
+Numerical and study-design contradiction detectors run locally on every comparable record. Trial-reference format, placeholder, missing-ID, and unsupported-registry checks also run locally. `--verify-trials` additionally checks valid NCT identifiers against ClinicalTrials.gov using the persistent output-directory cache.
+
 ## 8. Stage 5 — Optional context validation
 
 When `--validate-llm` is enabled, each LLM-trace and tortured-phrase finding is sent individually to GPT-OSS 20B through the IntelliHub chat-completions endpoint. The model receives only:
@@ -237,6 +248,9 @@ Every run creates these files in the configured output directory:
 | `parsed_records.csv` | Flat record export for analysis |
 | `integrity_findings.csv` | Compact reviewer queue with evidence, severity, confidence, and review status |
 | `detailed_findings.csv` | Full diagnostic fields for rule findings and consolidated template pairs |
+| `numerical_contradictions.csv` | Native detailed numerical-contradiction findings |
+| `design_contradictions.csv` | Native detailed study-design contradiction findings |
+| `trial_verification.csv` | All discovered trial references and their verification outcomes |
 | `template_pair_findings.csv` | Stable detailed pair-evidence schema, including source metadata and separate similarity metrics |
 | `template_clusters.csv` | One row per verified visible family of three or more members |
 | `pattern_dictionary.csv` | Effective LLM and tortured-phrase rules used by the run |

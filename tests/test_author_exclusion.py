@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from asco_integrity.detectors import built_in_llm_rules, detect_llm_trace
-from asco_integrity.xml_parser import parse_wiley_xml
+from asco_integrity.xml_parser import parse_xml
 
 
 class AuthorExclusionTests(unittest.TestCase):
@@ -25,7 +25,7 @@ class AuthorExclusionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "sample.xml"
             path.write_text(xml, encoding="utf-8")
-            record = parse_wiley_xml(path)
+            record = parse_xml(path)
         return record, detect_llm_trace(record, built_in_llm_rules())
 
     def test_author_affiliation_and_reference_text_are_excluded(self) -> None:

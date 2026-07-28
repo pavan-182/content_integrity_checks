@@ -484,11 +484,11 @@ def _extract_article_set_root(tree: etree._ElementTree, source_file: str) -> Par
     )
 
 
-def parse_wiley_xml(path: str | Path) -> ParsedRecord:
-    return parse_wiley_xml_records(path)[0]
+def parse_xml(path: str | Path) -> ParsedRecord:
+    return parse_xml_records(path)[0]
 
 
-def parse_wiley_xml_records(path: str | Path) -> list[ParsedRecord]:
+def parse_xml_records(path: str | Path) -> list[ParsedRecord]:
     source_file = Path(path).name
     try:
         tree = _parse_tree(path)

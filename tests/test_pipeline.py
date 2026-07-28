@@ -17,7 +17,7 @@ from asco_integrity.reporting import FINDINGS_COLUMNS, REVIEW_FINDINGS_COLUMNS
 from asco_integrity.template_detection import _candidate_pairs, _content_class, _similarity, build_normalized_text, build_skeleton_text, cluster_templates
 from asco_integrity.validators import ContextValidator
 from asco_integrity.validators.context_validator import _parse_validator_payload
-from asco_integrity.xml_parser import parse_wiley_xml, parse_wiley_xml_records
+from asco_integrity.xml_parser import parse_xml, parse_xml_records
 from asco_integrity.utils import dedupe_records
 
 
@@ -58,7 +58,7 @@ class PipelineTests(unittest.TestCase):
             </article>
             """
         )
-        root, nested = parse_wiley_xml_records(path)
+        root, nested = parse_xml_records(path)
         self.assertEqual((root.record_id, nested.record_id), ("e1", "e2"))
         self.assertEqual((root.author_count, nested.author_count), (1, 1))
         self.assertEqual((root.affiliations, nested.affiliations), (["Root Hospital"], ["Nested Hospital"]))
@@ -183,8 +183,8 @@ class PipelineTests(unittest.TestCase):
                 </article_set>
                 """,
             )
-            article_record = parse_wiley_xml(article_path)
-            article_set_record = parse_wiley_xml(article_set_path)
+            article_record = parse_xml(article_path)
+            article_set_record = parse_xml(article_set_path)
             self.assertEqual(article_record.record_id, "TEST-1")
             self.assertEqual(article_record.journal, "Test Journal")
             self.assertTrue(article_record.structured_abstract)
@@ -194,7 +194,7 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(article_set_record.publication_year, "2025")
 
     def test_llm_trace_detector_finds_synthetic_trace(self) -> None:
-        record = parse_wiley_xml(
+        record = parse_xml(
             self._temp_xml(
                 """
                 <article article-type="Original Research">
@@ -242,7 +242,7 @@ class PipelineTests(unittest.TestCase):
                 """,
             )
             rules = load_tortured_rules(dictionary_path)
-            record = parse_wiley_xml(
+            record = parse_xml(
                 self._temp_xml(
                     """
                     <article article-type="Original Research">
@@ -299,7 +299,7 @@ class PipelineTests(unittest.TestCase):
             self.assertTrue(all(rule.rule_id.startswith("TP-") and len(rule.rule_id) == 15 for rule in rules))
 
     def test_template_detection_clusters_synthetic_abstracts(self) -> None:
-        record_a = parse_wiley_xml(
+        record_a = parse_xml(
             self._temp_xml(
                 """
                 <article article-type="Original Research">
@@ -316,7 +316,7 @@ class PipelineTests(unittest.TestCase):
                 """
             )
         )
-        record_b = parse_wiley_xml(
+        record_b = parse_xml(
             self._temp_xml(
                 """
                 <article article-type="Original Research">
@@ -337,7 +337,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(len(clusters), 2)
         self.assertTrue(all(cluster.template_cluster_id.startswith("TPL-") for cluster in clusters))
 
-    def test_template_pairs_appear_once_in_integrity_findings(self) -> None:
+    def test_template_pairs_are_reported_for_each_record(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)
             input_dir = temp_dir / "xmls"
@@ -389,8 +389,11 @@ class PipelineTests(unittest.TestCase):
                 rows = list(csv.DictReader(handle))
 
             template_rows = [row for row in rows if row.get("detector_type") == "template_pair"]
-            self.assertEqual(len(template_rows), 1)
-            self.assertEqual(template_rows[0]["category"], "template")
+            self.assertEqual(len(template_rows), 2)
+            self.assertEqual({row["record_id"] for row in template_rows}, {"TPL-A", "TPL-B"})
+            self.assertEqual({row["matched_record_id"] for row in template_rows}, {"TPL-A", "TPL-B"})
+            self.assertEqual(len({row["pair_id"] for row in template_rows}), 1)
+            self.assertTrue(all(row["category"] == "template" for row in template_rows))
             self.assertEqual(result.abstract_summary_rows[0]["template_cluster_flag"], "No")
             self.assertEqual(result.abstract_summary_rows[1]["template_cluster_flag"], "No")
 
@@ -431,6 +434,48 @@ class PipelineTests(unittest.TestCase):
                 self.assertEqual(next(csv.reader(handle)), REVIEW_FINDINGS_COLUMNS)
             with result.output_paths["detailed_findings_csv"].open(newline="", encoding="utf-8") as handle:
                 self.assertEqual(next(csv.reader(handle)), FINDINGS_COLUMNS)
+
+    def test_pipeline_integrates_contradiction_and_trial_checks(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            input_dir = root / "xmls"
+            input_dir.mkdir()
+            _write_temp_file(
+                input_dir,
+                "checks.xml",
+                """
+                <article><front><article-meta>
+                  <article-id pub-id-type="manuscript">CHECKS-1</article-id>
+                  <article-title>Contradictory trial</article-title>
+                  <abstract><p>
+                    This study was open-label and double-blind.
+                    Responses occurred in 8 of 20 patients reported as 65%.
+                    The trial was registered as NCT123.
+                  </p></abstract>
+                </article-meta></front></article>
+                """,
+            )
+            dictionary = _write_temp_file(
+                root,
+                "dict.csv",
+                "Fingerprint - Tortured Phrase,Expected Text,Nb Retrieved Papers\n",
+            )
+
+            result = run_default_pipeline(input_dir, dictionary, root / "outputs")
+
+            with result.output_paths["findings_csv"].open(newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertEqual(
+                {row["detector_type"] for row in rows},
+                {
+                    "numerical_contradiction",
+                    "design_contradiction",
+                    "unverifiable_clinical_trial",
+                },
+            )
+            self.assertTrue(result.output_paths["numerical_contradictions_csv"].exists())
+            self.assertTrue(result.output_paths["design_contradictions_csv"].exists())
+            self.assertTrue(result.output_paths["trial_verification_csv"].exists())
 
     def test_legacy_comparison_does_not_enter_production_outputs(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir_str:

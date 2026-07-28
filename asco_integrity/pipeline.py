@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -19,6 +19,21 @@ from .detectors import (
     load_tortured_rules,
 )
 from .models import Finding, ParsedRecord
+from .detectors.design_contradiction import (
+    DesignContradictionFinding,
+    LLMDesignContradictionValidator,
+    detect_design_contradictions,
+)
+from .detectors.numerical_contradiction import (
+    NumericalContradictionFinding,
+    detect_numerical_contradictions,
+)
+from .detectors.unverifiable_trial import (
+    CLINICAL_TRIALS_GOV,
+    ClinicalTrialsGovClient,
+    TrialVerificationResult,
+    detect_unverifiable_trials,
+)
 from .template_clustering import (
     CONFIDENCE_RANK,
     PairFinding,
@@ -39,7 +54,7 @@ from .reporting import (
 )
 from .validators import ContextValidator, build_gpt_oss_client
 from .utils import dedupe_records, normalize_whitespace, to_pipe_string
-from .xml_parser import discover_xml_files, parse_wiley_xml_records
+from .xml_parser import discover_xml_files, parse_xml_records
 
 
 @dataclass(slots=True)
@@ -52,6 +67,7 @@ class PipelineConfig:
     validate_llm: bool = False
     detect_nonsense_candidates: bool = False
     compare_legacy_template_clustering: bool = False
+    verify_trials: bool = False
 
 
 @dataclass(slots=True)
@@ -79,6 +95,37 @@ def _finding_sort_key(finding: Finding) -> tuple[str, str, str, str, int, int]:
         finding.section_or_field,
         finding.severity,
         finding.finding_id,
+    )
+
+
+def _integrated_finding(result: Any) -> Finding:
+    detail = getattr(result, "contradiction_type", "") or getattr(result, "finding_type", "")
+    matched_text = (
+        getattr(result, "reported_values", "")
+        or getattr(result, "raw_trial_id", "")
+        or " vs ".join(filter(None, (getattr(result, "value_1", ""), getattr(result, "value_2", ""))))
+        or detail
+    )
+    return Finding(
+        finding_id=result.finding_id,
+        record_id=result.record_id,
+        source_file=result.source_file,
+        detector_type=result.check_type,
+        check_type=detail or result.check_type,
+        category=result.check_type,
+        matched_text=matched_text,
+        evidence_snippet=result.evidence,
+        section_or_field=(
+            getattr(result, "section", "")
+            or getattr(result, "section_1", "")
+            or getattr(result, "source_section", "")
+        ),
+        severity=result.severity,
+        confidence=result.confidence,
+        rule_id=f"{result.check_type}:{detail or result.check_type}",
+        validation_status=getattr(result, "validation_status", ""),
+        validation_reason=getattr(result, "validation_reason", ""),
+        review_status=result.review_status,
     )
 
 
@@ -235,6 +282,9 @@ def _aggregate_findings(
         llm_findings = [finding for finding in record_findings if finding.detector_type == "llm_response_trace"]
         tortured_findings = [finding for finding in record_findings if finding.detector_type == "tortured_phrase"]
         nonsense_findings = [finding for finding in record_findings if finding.detector_type == "nonsense_candidate"]
+        numerical_findings = [finding for finding in record_findings if finding.detector_type == "numerical_contradiction"]
+        design_findings = [finding for finding in record_findings if finding.detector_type == "design_contradiction"]
+        trial_findings = [finding for finding in record_findings if finding.detector_type == "unverifiable_clinical_trial"]
         matched_pairs = pair_map.get(record.record_id, [])
         cluster_row = cluster_map.get(record.record_id)
         template_flag = bool(matched_pairs)
@@ -293,6 +343,9 @@ def _aggregate_findings(
                 "llm_trace_flag": "Yes" if llm_findings else "No",
                 "tortured_phrase_flag": "Yes" if tortured_findings else "No",
                 "nonsense_candidate_flag": "Yes" if nonsense_findings else "No",
+                "numerical_contradiction_flag": "Yes" if numerical_findings else "No",
+                "design_contradiction_flag": "Yes" if design_findings else "No",
+                "unverifiable_trial_flag": "Yes" if trial_findings else "No",
                 "template_cluster_flag": "Yes" if cluster_flag else "No",
                 "template_flag": "Yes" if template_flag else "No",
                 "template_confidence": strongest_pair.confidence if strongest_pair else "none",
@@ -334,6 +387,9 @@ def _aggregate_findings(
                 "llm_trace_count": len(llm_findings),
                 "tortured_phrase_count": len(tortured_findings),
                 "nonsense_candidate_count": len(nonsense_findings),
+                "numerical_contradiction_count": len(numerical_findings),
+                "design_contradiction_count": len(design_findings),
+                "unverifiable_trial_count": len(trial_findings),
                 "template_cluster_id": cluster_row["template_cluster_id"] if cluster_row else "",
                 "template_cluster_size": cluster_row["cluster_size"] if cluster_row else 0,
                 "total_finding_count": len(record_findings) + (1 if template_flag else 0),
@@ -352,54 +408,55 @@ def _findings_rows(findings: list[Finding]) -> list[dict[str, Any]]:
         if not finding.finding_id:
             finding.finding_id = f"FND-{index:05d}"
         item = finding.to_dict()
-        item["confidence"] = round(finding.confidence, 3)
+        item["confidence"] = round(finding.confidence, 3) if isinstance(finding.confidence, float) else finding.confidence
         rows.append(item)
     return rows
 
 
 def _pair_finding_rows(pair_findings: list[PairFinding]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for index, pair in enumerate(pair_findings, start=1):
-        rows.append(
-            {
-                "finding_id": f"TPL-PAIR-{index:05d}",
-                "pair_id": pair.pair_id,
-                "record_id": pair.record_id,
-                "matched_record_id": pair.matched_record_id,
-                "source_file": pair.source_file,
-                "matched_source_file": pair.matched_source_file,
-                "title": pair.title,
-                "matched_title": pair.matched_title,
-                "detector_type": "template_pair",
-                "check_type": pair.primary_match_type,
-                "primary_match_type": pair.primary_match_type,
-                "category": "template",
-                "matched_text": pair.primary_match_type,
-                "expected_term": "",
-                "evidence_snippet": pair.evidence_excerpt,
-                "evidence_excerpt": pair.evidence_excerpt,
-                "section_or_field": "cross_document",
-                "severity": pair.severity,
-                "confidence": pair.confidence,
-                "validation_status": "",
-                "validation_reason": "",
-                "validated_by": "",
-                "rule_id": pair.pair_id,
-                "template_pattern_type": pair.primary_match_type,
-                "supporting_match_types": pair.supporting_match_types,
-                "matched_sections": pair.matched_sections,
-                "matched_sentence_count": pair.matched_sentence_count,
-                "shared_text_coverage": round(pair.shared_text_coverage, 3),
-                "original_text_similarity": round(pair.original_text_similarity, 3),
-                "masked_skeleton_similarity": round(pair.masked_skeleton_similarity, 3),
-                "ngram_similarity": round(pair.ngram_similarity, 3),
-                "high_value_section_similarity": round(pair.high_value_section_similarity, 3),
-                "weighted_section_similarity": round(pair.weighted_section_similarity, 3),
-                "variable_substitutions": pair.variable_substitutions,
-                "relationship_context": pair.relationship_context,
-                "review_status": pair.review_status,
-            }
-        )
+    for pair in pair_findings:
+        for side in (False, True):
+            rows.append(
+                {
+                    "finding_id": f"TPL-PAIR-{len(rows) + 1:05d}",
+                    "pair_id": pair.pair_id,
+                    "record_id": pair.matched_record_id if side else pair.record_id,
+                    "matched_record_id": pair.record_id if side else pair.matched_record_id,
+                    "source_file": pair.matched_source_file if side else pair.source_file,
+                    "matched_source_file": pair.source_file if side else pair.matched_source_file,
+                    "title": pair.matched_title if side else pair.title,
+                    "matched_title": pair.title if side else pair.matched_title,
+                    "detector_type": "template_pair",
+                    "check_type": pair.primary_match_type,
+                    "primary_match_type": pair.primary_match_type,
+                    "category": "template",
+                    "matched_text": pair.primary_match_type,
+                    "expected_term": "",
+                    "evidence_snippet": pair.evidence_excerpt,
+                    "evidence_excerpt": pair.evidence_excerpt,
+                    "section_or_field": "cross_document",
+                    "severity": pair.severity,
+                    "confidence": pair.confidence,
+                    "validation_status": "",
+                    "validation_reason": "",
+                    "validated_by": "",
+                    "rule_id": pair.pair_id,
+                    "template_pattern_type": pair.primary_match_type,
+                    "supporting_match_types": pair.supporting_match_types,
+                    "matched_sections": pair.matched_sections,
+                    "matched_sentence_count": pair.matched_sentence_count,
+                    "shared_text_coverage": round(pair.shared_text_coverage, 3),
+                    "original_text_similarity": round(pair.original_text_similarity, 3),
+                    "masked_skeleton_similarity": round(pair.masked_skeleton_similarity, 3),
+                    "ngram_similarity": round(pair.ngram_similarity, 3),
+                    "high_value_section_similarity": round(pair.high_value_section_similarity, 3),
+                    "weighted_section_similarity": round(pair.weighted_section_similarity, 3),
+                    "variable_substitutions": pair.variable_substitutions,
+                    "relationship_context": pair.relationship_context,
+                    "review_status": pair.review_status,
+                }
+            )
     return rows
 
 
@@ -462,12 +519,12 @@ def _dictionary_rows(llm_rules: list[dict[str, Any]], tortured_rules: list[dict[
 
 def run_pipeline(config: PipelineConfig) -> PipelineResult:
     xml_files = discover_xml_files(config.input_dir)
-    records = [record for path in xml_files for record in parse_wiley_xml_records(path)]
+    records = [record for path in xml_files for record in parse_xml_records(path)]
     records, record_id_warnings = dedupe_records(records)
     llm_rules = built_in_llm_rules()
     tortured_rules = load_tortured_rules(config.tortured_dictionary_path)
     tortured_index = build_tortured_rule_index(tortured_rules)
-    llm_client = build_gpt_oss_client() if config.detect_nonsense_candidates else None
+    llm_client = build_gpt_oss_client() if (config.detect_nonsense_candidates or config.validate_llm) else None
     nonsense_detector = NonsenseCandidateDetector(llm_client) if config.detect_nonsense_candidates else None
 
     findings: list[Finding] = []
@@ -478,6 +535,29 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         findings.extend(tortured_findings)
         if nonsense_detector:
             findings.extend(nonsense_detector.detect(record, tortured_findings))
+
+    comparable_records = [
+        record
+        for record in records
+        if record.parse_status != "failed" and (record.title.strip() or record.abstract_text.strip())
+    ]
+    numerical_results = detect_numerical_contradictions(comparable_records)
+    design_validator = LLMDesignContradictionValidator(llm_client) if config.validate_llm else None
+    design_results = detect_design_contradictions(comparable_records, validator=design_validator)
+    trial_results = detect_unverifiable_trials(
+        comparable_records,
+        registry_clients={
+            CLINICAL_TRIALS_GOV: ClinicalTrialsGovClient(
+                cache_dir=config.output_dir / ".trial_registry_cache",
+                offline_cache_only=not config.verify_trials,
+            )
+        },
+    )
+    findings.extend(
+        _integrated_finding(result)
+        for result in [*numerical_results, *design_results, *trial_results]
+        if result.check_triggered
+    )
 
     ordered_findings = sorted(findings, key=_finding_sort_key)
     for index, finding in enumerate(ordered_findings, start=1):
@@ -539,6 +619,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         ("tortured_dictionary_path", str(config.tortured_dictionary_path)),
         ("legacy_similarity_threshold", config.legacy_similarity_threshold),
         ("nonsense_candidate_detection", "enabled" if config.detect_nonsense_candidates else "disabled"),
+        ("clinical_trial_registry_lookup", "enabled" if config.verify_trials else "local_checks_only"),
         ("limitations", "Rule-based screening flags explicit LLM response traces, known tortured phrases, and repeated abstract skeletons; optional GPT-OSS stages only annotate candidates, and the pipeline does not detect AI-generated authorship."),
         ("excluded_scope", "AI-generated text detection"),
     ]
@@ -578,6 +659,21 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         output_dir / "detailed_findings.csv",
         integrity_finding_rows,
         FINDINGS_COLUMNS,
+    )
+    output_paths["numerical_contradictions_csv"] = write_csv(
+        output_dir / "numerical_contradictions.csv",
+        [result.to_dict() for result in numerical_results],
+        [field.name for field in fields(NumericalContradictionFinding)],
+    )
+    output_paths["design_contradictions_csv"] = write_csv(
+        output_dir / "design_contradictions.csv",
+        [result.to_dict() for result in design_results],
+        [field.name for field in fields(DesignContradictionFinding)],
+    )
+    output_paths["trial_verification_csv"] = write_csv(
+        output_dir / "trial_verification.csv",
+        [result.to_dict() for result in trial_results],
+        [field.name for field in fields(TrialVerificationResult)],
     )
     output_paths["template_pairs_csv"] = write_csv(
         output_dir / "template_pair_findings.csv",
@@ -643,6 +739,7 @@ def run_default_pipeline(
     validate_llm: bool = False,
     detect_nonsense_candidates: bool = False,
     compare_legacy_template_clustering: bool = False,
+    verify_trials: bool = False,
     similarity_threshold: float | None = None,
 ) -> PipelineResult:
     if similarity_threshold is not None:
@@ -655,6 +752,7 @@ def run_default_pipeline(
         validate_llm=validate_llm,
         detect_nonsense_candidates=detect_nonsense_candidates,
         compare_legacy_template_clustering=compare_legacy_template_clustering,
+        verify_trials=verify_trials,
     )
     return run_pipeline(config)
 
@@ -687,6 +785,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Write legacy clustering results to an internal comparison file only.",
     )
+    parser.add_argument(
+        "--verify-trials",
+        action="store_true",
+        help="Verify valid NCT identifiers against ClinicalTrials.gov; local trial-reference checks always run.",
+    )
     args = parser.parse_args(argv)
 
     result = run_default_pipeline(
@@ -697,6 +800,7 @@ def main(argv: list[str] | None = None) -> int:
         validate_llm=args.validate_llm,
         detect_nonsense_candidates=args.detect_nonsense_candidates,
         compare_legacy_template_clustering=args.compare_legacy_template_clustering,
+        verify_trials=args.verify_trials,
     )
     print(json.dumps({key: str(value) for key, value in result.output_paths.items()}, ensure_ascii=False, indent=2))
     return 0

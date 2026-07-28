@@ -15,7 +15,7 @@ from asco_integrity.detectors.design_contradiction import (
 from asco_integrity.reporting import write_csv
 from asco_integrity.utils import dedupe_records
 from asco_integrity.validators.context_validator import build_gpt_oss_client
-from asco_integrity.xml_parser import discover_xml_files, parse_wiley_xml_records
+from asco_integrity.xml_parser import discover_xml_files, parse_xml_records
 
 
 CSV_COLUMNS = [
@@ -41,7 +41,7 @@ def main() -> int:
     if not xml_files:
         parser.error(f"No XML files found in {args.input_dir}")
     records, warnings = dedupe_records([
-        record for path in xml_files for record in parse_wiley_xml_records(path)
+        record for path in xml_files for record in parse_xml_records(path)
     ])
     comparable = [
         record
