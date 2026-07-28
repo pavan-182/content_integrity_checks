@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from openpyxl import Workbook
+from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.styles import Alignment, Font, PatternFill
 
 from .utils import ensure_parent_dir, normalize_whitespace, to_pipe_string
@@ -16,6 +17,14 @@ from .utils import ensure_parent_dir, normalize_whitespace, to_pipe_string
 HEADER_FILL = PatternFill("solid", fgColor="1F4E78")
 HEADER_FONT = Font(color="FFFFFF", bold=True)
 THIN_FONT = Font(name="Calibri", size=11)
+EDITOR_LABELS = (
+    "not_reviewed",
+    "no_issue",
+    "acceptable_overlap",
+    "unclear",
+    "concerning_overlap",
+    "duplicate_or_near_duplicate",
+)
 
 FINDINGS_COLUMNS = [
     "finding_id",
@@ -62,6 +71,8 @@ FINDINGS_COLUMNS = [
     "high_value_section_similarity",
     "relationship_context",
     "review_status",
+    "editor_label",
+    "editor_notes",
 ]
 
 REVIEW_FINDINGS_COLUMNS = [
@@ -79,6 +90,8 @@ REVIEW_FINDINGS_COLUMNS = [
     "severity",
     "confidence",
     "review_status",
+    "editor_label",
+    "editor_notes",
 ]
 
 PAIR_COLUMNS = [
@@ -105,6 +118,8 @@ PAIR_COLUMNS = [
     "relationship_context",
     "evidence_excerpt",
     "review_status",
+    "editor_label",
+    "editor_notes",
 ]
 
 FAMILY_COLUMNS = [
@@ -289,6 +304,17 @@ def _auto_size_columns(ws, max_width: int = 60) -> None:
             widths[cell.column_letter] = max(widths.get(cell.column_letter, 0), min(len(text), max_width))
     for column_letter, width in widths.items():
         ws.column_dimensions[column_letter].width = max(12, min(width + 2, max_width))
+
+
+def _add_editor_label_validation(ws, columns: Sequence[str]) -> None:
+    column = columns.index("editor_label") + 1
+    validation = DataValidation(
+        type="list",
+        formula1=f'"{",".join(EDITOR_LABELS)}"',
+        allow_blank=False,
+    )
+    ws.add_data_validation(validation)
+    validation.add(f"{ws.cell(2, column).coordinate}:{ws.cell(max(ws.max_row, 2), column).coordinate}")
 
 
 def _dashboard_block(ws, title: str, rows: list[dict[str, Any]], columns: list[str], start_row: int) -> int:
@@ -512,12 +538,14 @@ def write_workbook(
         FINDINGS_COLUMNS,
         start_row=1,
     )
+    _add_editor_label_validation(ws, FINDINGS_COLUMNS)
     ws.freeze_panes = "A2"
     _auto_size_columns(ws)
 
     # Template Pair Evidence
     ws = workbook.create_sheet("Template Pairs")
     _write_table(ws, pair_rows, PAIR_COLUMNS, start_row=1)
+    _add_editor_label_validation(ws, PAIR_COLUMNS)
     ws.freeze_panes = "A2"
     _auto_size_columns(ws)
 

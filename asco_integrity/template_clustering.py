@@ -62,6 +62,16 @@ def _severity(confidence: str, relationship_context: str) -> str:
     return "high" if confidence in {"high", "very_high"} else "medium"
 
 
+def _evidence_excerpt(item: Any) -> str:
+    sentences = getattr(item, "record_matched_sentences", ())
+    if sentences:
+        return " | ".join(sentences)
+    blocks = getattr(item, "matched_text_blocks", ())
+    if blocks:
+        return " | ".join(sorted(set(blocks)))
+    return getattr(item, "shared_skeleton_excerpt", "") or getattr(item, "evidence", "")
+
+
 def merge_pair_findings(exact_findings: list[Any], entity_findings: list[Any]) -> list[PairFinding]:
     grouped: dict[tuple[str, str], list[Any]] = defaultdict(list)
     for finding in [*exact_findings, *entity_findings]:
@@ -110,7 +120,7 @@ def merge_pair_findings(exact_findings: list[Any], entity_findings: list[Any]) -
                 weighted_section_similarity=max(getattr(item, "weighted_section_similarity", 0.0) for item in source),
                 variable_substitutions="; ".join(sorted({item.variable_substitutions for item in source if getattr(item, "variable_substitutions", "")})),
                 relationship_context=relationship,
-                evidence_excerpt="; ".join(sorted({getattr(item, "shared_skeleton_excerpt", "") or getattr(item, "evidence", "") for item in source})),
+                evidence_excerpt="; ".join(sorted({_evidence_excerpt(item) for item in source if _evidence_excerpt(item)})),
                 review_status=primary.review_status,
                 evidence="; ".join(sorted({item.evidence for item in source if item.evidence})),
             )

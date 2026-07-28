@@ -394,6 +394,15 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual({row["matched_record_id"] for row in template_rows}, {"TPL-A", "TPL-B"})
             self.assertEqual(len({row["pair_id"] for row in template_rows}), 1)
             self.assertTrue(all(row["category"] == "template" for row in template_rows))
+            self.assertTrue(all(row["editor_label"] == "not_reviewed" for row in template_rows))
+            self.assertTrue(all(row["editor_notes"] == "" for row in template_rows))
+
+            workbook = load_workbook(result.output_paths["workbook"])
+            worksheet = workbook["Template Pairs"]
+            headers = [cell.value for cell in worksheet[1]]
+            editor_column = headers.index("editor_label") + 1
+            self.assertEqual(worksheet.cell(2, editor_column).value, "not_reviewed")
+            self.assertIn("acceptable_overlap", worksheet.data_validations.dataValidation[0].formula1)
             self.assertEqual(result.abstract_summary_rows[0]["template_cluster_flag"], "No")
             self.assertEqual(result.abstract_summary_rows[1]["template_cluster_flag"], "No")
 

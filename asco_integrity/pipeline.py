@@ -409,6 +409,8 @@ def _findings_rows(findings: list[Finding]) -> list[dict[str, Any]]:
             finding.finding_id = f"FND-{index:05d}"
         item = finding.to_dict()
         item["confidence"] = round(finding.confidence, 3) if isinstance(finding.confidence, float) else finding.confidence
+        item["editor_label"] = "not_reviewed"
+        item["editor_notes"] = ""
         rows.append(item)
     return rows
 
@@ -455,6 +457,8 @@ def _pair_finding_rows(pair_findings: list[PairFinding]) -> list[dict[str, Any]]
                     "variable_substitutions": pair.variable_substitutions,
                     "relationship_context": pair.relationship_context,
                     "review_status": pair.review_status,
+                    "editor_label": "not_reviewed",
+                    "editor_notes": "",
                 }
             )
     return rows

@@ -153,6 +153,15 @@ class TemplateArchitectureTests(unittest.TestCase):
         finding = detector_finding("exact_text_reuse", relationship_context="shared trial ID: NCT12345678")
         self.assertEqual(merge_pair_findings([finding], [])[0].severity, "low")
 
+    def test_pair_evidence_prefers_the_actual_matched_sentences(self):
+        finding = detector_finding("exact_text_reuse")
+        finding.record_matched_sentences = ["The exact matched sentence."]
+        finding.matched_text_blocks = []
+        self.assertEqual(
+            merge_pair_findings([finding], [])[0].evidence_excerpt,
+            "The exact matched sentence.",
+        )
+
     def test_pair_csv_schema_is_stable_when_empty_or_populated(self):
         with tempfile.TemporaryDirectory() as directory:
             empty = write_csv(Path(directory) / "empty.csv", [], PAIR_COLUMNS)
