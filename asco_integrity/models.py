@@ -75,6 +75,8 @@ class ParsedRecord:
 @dataclass(slots=True)
 class ValidationResult:
     finding_id: str
+    # Supported: "", confirmed, rejected, uncertain, validation_failed, candidate.
+    # Reports may label the blank status as not_validated.
     status: str
     reason: str
     model_id: str
@@ -99,6 +101,8 @@ class Finding:
     rule_id: str
     check_type: str = ""
     expected_term: str = ""
+    # Supported: "", confirmed, rejected, uncertain, validation_failed, candidate.
+    # Reports may label the blank status as not_validated.
     validation_status: str = ""
     validation_reason: str = ""
     validated_by: str = ""

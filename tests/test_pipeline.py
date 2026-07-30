@@ -12,7 +12,7 @@ from openpyxl import load_workbook
 
 from asco_integrity.detectors import built_in_llm_rules, build_tortured_rule_index, detect_llm_trace, detect_tortured_phrases, load_tortured_rules
 from asco_integrity.models import Finding, ParsedRecord
-from asco_integrity.pipeline import run_default_pipeline
+from asco_integrity.pipeline import _aggregate_findings, run_default_pipeline
 from asco_integrity.reporting import FINDINGS_COLUMNS, REVIEW_FINDINGS_COLUMNS
 from asco_integrity.template_detection import _candidate_pairs, _content_class, _similarity, build_normalized_text, build_skeleton_text, cluster_templates
 from asco_integrity.validators import ContextValidator
@@ -25,6 +25,24 @@ def _write_temp_file(directory: Path, name: str, content: str) -> Path:
     path = directory / name
     path.write_text(textwrap.dedent(content).strip(), encoding="utf-8")
     return path
+
+
+def _tortured_finding(status: str = "", severity: str = "medium") -> Finding:
+    return Finding(
+        finding_id="FND-00001",
+        record_id="REC-1",
+        source_file="sample.xml",
+        detector_type="tortured_phrase",
+        category="tortured_phrase",
+        matched_text="nervous network",
+        evidence_snippet="The model uses a nervous network.",
+        section_or_field="abstract_text",
+        severity=severity,
+        confidence=0.87,
+        rule_id="TP-00001",
+        expected_term="neural network",
+        validation_status=status,
+    )
 
 
 class PipelineTests(unittest.TestCase):
@@ -299,6 +317,31 @@ class PipelineTests(unittest.TestCase):
             )
             self.assertTrue(all(rule.rule_id.startswith("TP-") and len(rule.rule_id) == 15 for rule in rules))
 
+    def test_tortured_phrase_detector_deduplicates_only_exact_matches(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir_str:
+            dictionary_path = _write_temp_file(
+                Path(temp_dir_str),
+                "tortured.csv",
+                '''
+                Fingerprint - Tortured Phrase,Expected Text,Nb Retrieved Papers
+                "nervous network","neural network","1"
+                "nervous network","neural network","1"
+                """nervous network"" AND ""model""","neural network","1"
+                ''',
+            )
+            rules = load_tortured_rules(dictionary_path)
+            record = ParsedRecord(
+                source_file="sample.xml",
+                record_id="REC-1",
+                abstract_text="One nervous network model and another nervous network model.",
+            )
+
+            findings = detect_tortured_phrases(record, rules, build_tortured_rule_index(rules))
+
+            self.assertEqual(len(findings), 4)
+            self.assertEqual(len({finding.rule_id for finding in findings}), 2)
+            self.assertTrue(all(sum(item.rule_id == finding.rule_id for item in findings) == 2 for finding in findings))
+
     def test_template_detection_clusters_synthetic_abstracts(self) -> None:
         record_a = parse_xml(
             self._temp_xml(
@@ -529,31 +572,91 @@ class PipelineTests(unittest.TestCase):
             with comparison.output_paths["detailed_findings_csv"].open(newline="", encoding="utf-8") as handle:
                 self.assertFalse(any(row["detector_type"] == "template_cluster" for row in csv.DictReader(handle)))
 
-    def test_validator_marks_bad_json_uncertain(self) -> None:
+    def test_validator_marks_bad_json_validation_failed(self) -> None:
         class BrokenClient:
             def complete(self, *, system: str, user: str, max_tokens: int = 150, temperature: float = 0.0) -> str:
                 return "not-json"
 
         validator = ContextValidator(client=BrokenClient())
-        finding = Finding(
-            finding_id="FND-00001",
-            record_id="REC-1",
-            source_file="sample.xml",
-            detector_type="tortured_phrase",
-            category="tortured_phrase",
-            matched_text="nervous network",
-            evidence_snippet="The model uses a nervous network.",
-            section_or_field="abstract_text",
-            severity="medium",
-            confidence=0.87,
-            rule_id="TP-00001",
-            expected_term="neural network",
-        )
-        result = validator.validate(finding)
+        result = validator.validate(_tortured_finding())
 
-        self.assertEqual(result.status, "uncertain")
+        self.assertEqual(result.status, "validation_failed")
         self.assertEqual(result.reason, "Validator response could not be parsed.")
         self.assertEqual(result.finding_id, "FND-00001")
+
+    def test_validator_marks_incomplete_payload_validation_failed(self) -> None:
+        class BrokenClient:
+            def complete(self, *, system: str, user: str, max_tokens: int = 150, temperature: float = 0.0) -> str:
+                return '{"status": "confirmed"}'
+
+        result = ContextValidator(client=BrokenClient()).validate(_tortured_finding())
+
+        self.assertEqual(result.status, "validation_failed")
+        self.assertEqual(result.reason, "Validator response could not be parsed.")
+
+    def test_validator_distinguishes_infrastructure_failure_from_uncertainty(self) -> None:
+        class FailedClient:
+            def complete(self, *, system: str, user: str, max_tokens: int = 150, temperature: float = 0.0) -> str:
+                raise RuntimeError("service unavailable")
+
+        failed_finding = _tortured_finding()
+        failed = ContextValidator(client=FailedClient()).validate(failed_finding)
+        failed_finding.validation_status = failed.status
+        failed_finding.validation_reason = failed.reason
+
+        class UncertainClient:
+            def complete(self, *, system: str, user: str, max_tokens: int = 150, temperature: float = 0.0) -> str:
+                return '{"status":"uncertain","reason":"The phrase may be legitimate in this context."}'
+
+        uncertain_finding = _tortured_finding()
+        uncertain = ContextValidator(client=UncertainClient()).validate(uncertain_finding)
+        uncertain_finding.validation_status = uncertain.status
+
+        self.assertEqual(failed.status, "validation_failed")
+        self.assertIn("infrastructure", failed.reason)
+        self.assertEqual(uncertain.status, "uncertain")
+        self.assertEqual(uncertain.reason, "The phrase may be legitimate in this context.")
+        record = ParsedRecord(source_file="sample.xml", record_id="REC-1")
+        failed_summary = _aggregate_findings([record], [failed_finding], [], [])[0]
+        uncertain_summary = _aggregate_findings([record], [uncertain_finding], [], [])[0]
+        self.assertEqual(failed_summary["tortured_validation_failed_count"], 1)
+        self.assertEqual(uncertain_summary["tortured_uncertain_count"], 1)
+        self.assertEqual(failed_summary["overall_content_risk"], "None")
+        self.assertEqual(uncertain_summary["overall_content_risk"], "None")
+        self.assertEqual(failed_finding.to_dict()["validation_status"], "validation_failed")
+
+    def test_rejected_tortured_phrase_does_not_affect_risk(self) -> None:
+        record = ParsedRecord(source_file="sample.xml", record_id="REC-1")
+        finding = _tortured_finding("rejected", "high")
+
+        summary = _aggregate_findings([record], [finding], [], [])[0]
+
+        self.assertEqual(summary["tortured_rejected_count"], 1)
+        self.assertEqual(summary["total_finding_count"], 0)
+        self.assertEqual(summary["highest_severity"], "None")
+        self.assertEqual(summary["overall_content_risk"], "None")
+        self.assertEqual(summary["review_required"], "No")
+        self.assertEqual(summary["tortured_phrase_count"], 1)
+
+    def test_tortured_validation_status_risk_matrix(self) -> None:
+        record = ParsedRecord(source_file="sample.xml", record_id="REC-1")
+        cases = {
+            "confirmed": ("tortured_confirmed_count", "Medium", 1),
+            "": ("tortured_not_validated_count", "Medium", 1),
+            "rejected": ("tortured_rejected_count", "None", 0),
+            "uncertain": ("tortured_uncertain_count", "None", 0),
+            "validation_failed": ("tortured_validation_failed_count", "None", 0),
+            "candidate": ("tortured_candidate_count", "None", 0),
+        }
+
+        for status, (count_field, risk, risk_count) in cases.items():
+            with self.subTest(status=status or "blank"):
+                finding = _tortured_finding(status)
+                summary = _aggregate_findings([record], [finding], [], [])[0]
+                self.assertEqual(summary[count_field], 1)
+                self.assertEqual(summary["overall_content_risk"], risk)
+                self.assertEqual(summary["total_finding_count"], risk_count)
+                self.assertEqual(summary["tortured_phrase_count"], 1)
 
     def test_validator_parses_wrapped_json(self) -> None:
         parsed = _parse_validator_payload('Result: {"status":"confirmed","reason":"Trace confirmed."} done')
@@ -614,6 +717,22 @@ class PipelineTests(unittest.TestCase):
                 tortured_findings[0].validated_by,
                 "gpt-oss-20b:context_validator_v2",
             )
+            summary = result.abstract_summary_rows[0]
+            self.assertEqual(summary["tortured_rejected_count"], 1)
+            self.assertEqual(summary["total_finding_count"], 0)
+            self.assertEqual(summary["highest_severity"], "None")
+            self.assertEqual(summary["overall_content_risk"], "None")
+            self.assertEqual(summary["review_required"], "No")
+
+            with result.output_paths["detailed_findings_csv"].open(newline="", encoding="utf-8") as handle:
+                detailed_rows = list(csv.DictReader(handle))
+            self.assertTrue(
+                any(
+                    row["detector_type"] == "tortured_phrase"
+                    and row["validation_status"] == "rejected"
+                    for row in detailed_rows
+                )
+            )
 
             workbook = load_workbook(result.output_paths["workbook"], read_only=True)
             ws = workbook["Integrity Findings"]
@@ -622,6 +741,8 @@ class PipelineTests(unittest.TestCase):
             self.assertLess(headers.index("validation_status"), headers.index("validation_reason"))
             self.assertLess(headers.index("validation_reason"), headers.index("validated_by"))
             self.assertLess(headers.index("validated_by"), headers.index("rule_id"))
+            summary_headers = [cell.value for cell in next(workbook["Abstract Summary"].iter_rows(max_row=1))]
+            self.assertIn("tortured_rejected_count", summary_headers)
 
     def test_default_pipeline_leaves_validation_columns_blank(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir_str:

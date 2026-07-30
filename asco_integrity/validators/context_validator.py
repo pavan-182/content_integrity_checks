@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
-import ssl
 import re
+import ssl
 import time
 import urllib.error
 import urllib.request
@@ -13,6 +14,8 @@ from typing import Any
 from ..models import Finding, ValidationResult
 from ..utils import normalize_whitespace
 
+
+logger = logging.getLogger(__name__)
 
 PROMPT_VERSION = "context_validator_v2"
 MODEL_ID = "gpt-oss-20b"
@@ -282,11 +285,18 @@ class ContextValidator:
             parsed = _parse_validator_payload(raw)
             status = normalize_whitespace(str(parsed["status"])).lower()
             reason = normalize_whitespace(str(parsed["reason"]))
-            if status not in {"confirmed", "rejected", "uncertain"} or not reason:
-                raise ValueError("validator payload missing required fields")
-        except (KeyError, TypeError, ValueError, RuntimeError):
-            status = "uncertain"
+            if status not in {"confirmed", "rejected", "uncertain"}:
+                raise ValueError("validator payload contains unsupported status")
+            if not reason:
+                raise ValueError("validator payload missing reason")
+        except RuntimeError as exc:
+            status = "validation_failed"
+            reason = "Validator request failed because of an infrastructure error."
+            logger.exception("Tortured phrase validator infrastructure failure: %s", exc)
+        except (KeyError, TypeError, ValueError) as exc:
+            status = "validation_failed"
             reason = "Validator response could not be parsed."
+            logger.exception("Tortured phrase validator response parsing failure: %s", exc)
 
         return ValidationResult(
             finding_id=finding.finding_id,

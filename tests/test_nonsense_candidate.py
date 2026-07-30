@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 import tempfile
 import unittest
@@ -8,7 +9,6 @@ from unittest.mock import patch
 
 from asco_integrity.detectors.nonsense_candidate import NonsenseCandidateDetector
 from asco_integrity.models import ParsedRecord
-from asco_integrity.aggregation.risk_engine import _risk_from_signals
 from asco_integrity.pipeline import run_default_pipeline
 from asco_integrity.xml_parser import parse_xml
 
@@ -64,7 +64,7 @@ class NonsenseCandidateTests(unittest.TestCase):
         self.assertTrue(all(items[0].severity == "low" and items[0].confidence > 0 for items in findings))
         self.assertTrue(all(items[0].evidence_snippet for items in findings))
 
-    def test_multiple_candidates_use_existing_low_severity_risk_rule(self) -> None:
+    def test_multiple_candidates_remain_marked_for_review(self) -> None:
         record = ParsedRecord(
             "sample.xml",
             record_id="two-candidates",
@@ -79,7 +79,7 @@ class NonsenseCandidateTests(unittest.TestCase):
         findings = self.detector.detect(record)
 
         self.assertEqual(len(findings), 2)
-        self.assertEqual(_risk_from_signals("low", {"nonsense_candidate"}, len(findings), False), "Medium")
+        self.assertTrue(all(finding.validation_status == "candidate" for finding in findings))
 
     def test_pipeline_flag_is_opt_in(self) -> None:
         fixture = ROOT / "tests" / "fixtures" / "eval_corpus" / "positives" / "nonsense_candidate_01.xml"
@@ -95,9 +95,24 @@ class NonsenseCandidateTests(unittest.TestCase):
                     Path(directory) / "enabled",
                     detect_nonsense_candidates=True,
                 )
+            with enabled_result.output_paths["detailed_findings_csv"].open(newline="", encoding="utf-8") as handle:
+                detailed_rows = list(csv.DictReader(handle))
 
         self.assertFalse(any(item.detector_type == "nonsense_candidate" for item in default_result.findings))
         self.assertTrue(any(item.detector_type == "nonsense_candidate" for item in enabled_result.findings))
+        summary = enabled_result.abstract_summary_rows[0]
+        self.assertEqual(summary["nonsense_candidate_count"], 1)
+        self.assertEqual(summary["total_finding_count"], 0)
+        self.assertEqual(summary["highest_severity"], "None")
+        self.assertEqual(summary["overall_content_risk"], "None")
+        self.assertEqual(summary["review_required"], "No")
+        self.assertTrue(
+            any(
+                row["detector_type"] == "nonsense_candidate"
+                and row["validation_status"] == "candidate"
+                for row in detailed_rows
+            )
+        )
 
 
 if __name__ == "__main__":

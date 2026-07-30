@@ -1,7 +1,7 @@
 # LLM Validation Layer — Architecture & Implementation Guide
 
 **Status:** Implemented and in pilot validation
-**Scope:** Adds an optional LLM validation pass on top of the existing rule-based detectors. Does not change detector logic, risk scoring formula, or V1's deterministic-by-default behavior.
+**Scope:** Adds an optional LLM validation pass on top of the existing rule-based detectors. It does not change detector logic or the risk formula; validation status filters the findings supplied to that formula while validation-disabled deterministic findings remain eligible.
 **Related docs:** `docs/prd.md`, `docs/research.md`, `docs/problemstatement.md`
 
 ---
@@ -25,7 +25,7 @@ Add a **Validator** layer that wraps detector output. It never generates finding
 
 **Model:** GPT-OSS 20B (self-hosted, already in use for the AI-generated-text detection module — see `docs/research.md`).
 
-**Risk-adjustment behavior — Option A (annotate-only):** The validator never changes an existing finding's risk level. `overall_content_risk` is computed by `_risk_from_signals` exactly as today, from raw rule output only. `validation_status` (`confirmed`, `rejected`, or `uncertain`) is written as an additional, independently filterable column. `rejected` means the finding is likely a false positive; `confirmed` means it remains an integrity concern; and validator errors become `uncertain`. Editors can filter likely-noise rows, but nothing is auto-suppressed or hidden by default.
+**Risk-adjustment behavior:** `confirmed` findings and deterministic tortured-phrase findings with blank validation status contribute to abstract-level risk. `rejected`, `uncertain`, `validation_failed`, and `candidate` findings do not. Every finding remains visible in detailed output; blank status is counted as `not_validated` in reviewer summaries.
 
 ## 3. Requirement → Module Map
 
@@ -47,7 +47,7 @@ Add a **Validator** layer that wraps detector output. It never generates finding
 @dataclass(slots=True)
 class ValidationResult:
     finding_id: str
-    status: str            # "confirmed" | "rejected" | "uncertain"
+    status: str            # "" | confirmed | rejected | uncertain | validation_failed | candidate
     reason: str             # one sentence, shown to editor
     model_id: str
     prompt_version: str
@@ -76,7 +76,7 @@ class Finding:
     validated_by: str = ""
 ```
 
-`ValidationResult` rows are joined onto `Finding` rows by `finding_id` at report-write time. `overall_content_risk` on the summary sheet is computed before this join and is never recalculated from validation output.
+Validation metadata is copied onto each `Finding` before abstract aggregation. Aggregation filters only the risk-driving collection and preserves the complete collection for detailed reporting and status counts.
 
 ## 5. Validator Design
 
@@ -135,7 +135,7 @@ Do not use the words "hallucination", "token", or "embedding".
 | `validation_reason` | `ValidationResult.reason` | blank if validator wasn't run |
 | `validated_by` | `ValidationResult.model_id` + `prompt_version` | for audit trail |
 
-The summary sheet's `overall_content_risk` column is **unchanged** — computed from raw findings only, per the Option A decision in §2. No new column is added to the summary sheet in this phase; editors filter on the detailed findings sheet.
+The summary sheet adds `tortured_confirmed_count`, `tortured_rejected_count`, `tortured_uncertain_count`, `tortured_validation_failed_count`, `tortured_candidate_count`, and `tortured_not_validated_count`. Its risk, severity, detector, finding-count, and review-priority fields use only risk-eligible findings.
 
 ## 7. Implementation Status
 
@@ -146,7 +146,7 @@ The current codebase covers the V1 flow end to end:
 - `asco_integrity/pipeline.py` wires parsing, detectors, clustering, optional validation, and report generation together.
 - `asco_integrity/reporting.py` writes the JSONL, CSV, and workbook outputs, including the validation columns and `template_cluster` rows on the findings sheet.
 - `asco_integrity/validators/context_validator.py` adds the opt-in GPT-OSS 20B validation pass for `tortured_phrase` and `llm_response_trace` findings.
-- The validator is annotate-only. It writes `validation_status`, `validation_reason`, and `validated_by`, but it does not change `overall_content_risk`.
+- The validator writes `validation_status`, `validation_reason`, and `validated_by`; aggregation uses the status rules in §2 without hiding detailed findings.
 - The validator now uses a larger completion budget and can recover JSON from fenced or wrapped gateway responses.
 - The generated outputs include the compact reviewer queue `integrity_findings.csv`, its full diagnostic counterpart `detailed_findings.csv`, native numerical/design/trial reports, and the existing parsed-record, template, dictionary, warning, metadata, and workbook reports.
 
@@ -167,4 +167,3 @@ Validation runs completed:
 - **Template-cluster validation** — different shape of problem (pairwise comparison, not single-finding); needs its own design, not blocking this work.
 - **Novel tortured-phrase discovery** (finding phrases outside the CSV) — this is recall expansion, not precision cleanup on existing candidates; PRD's own "later problem," out of scope here.
 - **`aggregation/review_reason.py`** — LLM-generated plain-English summary of *why* an abstract got its risk level. Natural follow-on once the validator is live, not part of this phase.
-- **Auto-adjustment of risk from validation status** — Option A is annotate-only for V1. Revisit only after pilot agreement numbers are in.

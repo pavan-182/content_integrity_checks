@@ -66,6 +66,22 @@ from .utils import dedupe_records, normalize_whitespace, to_pipe_string
 from .xml_parser import discover_xml_files, parse_xml_records
 
 
+RISK_INELIGIBLE_VALIDATION_STATUSES = {
+    "rejected",
+    "uncertain",
+    "validation_failed",
+    "candidate",
+}
+
+
+def _normalized_validation_status(finding: Finding) -> str:
+    return normalize_whitespace(finding.validation_status or "").lower() or "not_validated"
+
+
+def _is_risk_eligible_finding(finding: Finding) -> bool:
+    return _normalized_validation_status(finding) not in RISK_INELIGIBLE_VALIDATION_STATUSES
+
+
 @dataclass(slots=True)
 class PipelineConfig:
     input_dir: Path
@@ -294,6 +310,7 @@ def _aggregate_findings(
         llm_findings = [finding for finding in record_findings if finding.detector_type == "llm_response_trace"]
         llm_priority = llm_reviewer_priority(llm_findings, llm_rules)
         tortured_findings = [finding for finding in record_findings if finding.detector_type == "tortured_phrase"]
+        tortured_status_counts = Counter(_normalized_validation_status(finding) for finding in tortured_findings)
         nonsense_findings = [finding for finding in record_findings if finding.detector_type == "nonsense_candidate"]
         numerical_findings = [finding for finding in record_findings if finding.detector_type == "numerical_contradiction"]
         design_findings = [finding for finding in record_findings if finding.detector_type == "design_contradiction"]
@@ -316,16 +333,18 @@ def _aggregate_findings(
             key=severity_rank,
             default="none",
         )
-        non_llm_findings = [
-            finding for finding in record_findings if finding.detector_type != "llm_response_trace"
+        risk_eligible_non_llm_findings = [
+            finding
+            for finding in record_findings
+            if finding.detector_type != "llm_response_trace" and _is_risk_eligible_finding(finding)
         ]
-        detector_types = {finding.detector_type for finding in non_llm_findings}
+        detector_types = {finding.detector_type for finding in risk_eligible_non_llm_findings}
         if llm_priority != "None":
             detector_types.add("llm_response_trace")
         if template_flag:
             detector_types.add("template")
         highest_severity = "none"
-        for finding in non_llm_findings:
+        for finding in risk_eligible_non_llm_findings:
             if severity_rank(finding.severity) > severity_rank(highest_severity):
                 highest_severity = finding.severity
         if severity_rank(llm_priority) > severity_rank(highest_severity):
@@ -333,10 +352,15 @@ def _aggregate_findings(
         if strongest_pair:
             if severity_rank(strongest_pair.severity) > severity_rank(highest_severity):
                 highest_severity = strongest_pair.severity
+        risk_finding_count = (
+            len(risk_eligible_non_llm_findings)
+            + (1 if llm_priority != "None" else 0)
+            + (1 if template_flag else 0)
+        )
         overall_risk = _risk_from_signals(
             highest_signal_severity=highest_severity,
             detector_types=detector_types,
-            total_finding_count=len(non_llm_findings) + (1 if llm_priority != "None" else 0) + (1 if template_flag else 0),
+            total_finding_count=risk_finding_count,
             template_cluster_flag=template_flag,
         )
         review_required = overall_risk != "None"
@@ -407,13 +431,19 @@ def _aggregate_findings(
                 "template_evidence_summary": strongest_pair.evidence if strongest_pair else "",
                 "llm_trace_count": len(llm_findings),
                 "tortured_phrase_count": len(tortured_findings),
+                "tortured_confirmed_count": tortured_status_counts["confirmed"],
+                "tortured_rejected_count": tortured_status_counts["rejected"],
+                "tortured_uncertain_count": tortured_status_counts["uncertain"],
+                "tortured_validation_failed_count": tortured_status_counts["validation_failed"],
+                "tortured_candidate_count": tortured_status_counts["candidate"],
+                "tortured_not_validated_count": tortured_status_counts["not_validated"],
                 "nonsense_candidate_count": len(nonsense_findings),
                 "numerical_contradiction_count": len(numerical_findings),
                 "design_contradiction_count": len(design_findings),
                 "unverifiable_trial_count": len(trial_findings),
                 "template_cluster_id": cluster_row["template_cluster_id"] if cluster_row else "",
                 "template_cluster_size": cluster_row["cluster_size"] if cluster_row else 0,
-                "total_finding_count": len(record_findings) + (1 if template_flag else 0),
+                "total_finding_count": risk_finding_count,
                 "highest_severity": highest_severity.title() if highest_severity != "none" else "None",
                 "overall_content_risk": overall_risk,
                 "review_required": "Yes" if review_required else "No",

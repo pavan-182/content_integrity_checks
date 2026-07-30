@@ -162,7 +162,6 @@ def build_tortured_rule_index(rules: Iterable[TorturedRule]) -> dict[str, list[T
 def _candidate_tortured_rules(field_text: str, indexed_rules: dict[str, list[TorturedRule]]) -> list[TorturedRule]:
     tokens = _tokens(field_text)
     candidates: list[TorturedRule] = []
-    seen: set[str] = set()
     if not tokens:
         return candidates
     keys: set[str] = set(tokens)
@@ -170,9 +169,6 @@ def _candidate_tortured_rules(field_text: str, indexed_rules: dict[str, list[Tor
         keys.update(" ".join(tokens[index : index + 2]) for index in range(len(tokens) - 1))
     for key in keys:
         for rule in indexed_rules.get(key, []):
-            if rule.rule_id in seen:
-                continue
-            seen.add(rule.rule_id)
             candidates.append(rule)
     return candidates
 
@@ -184,6 +180,7 @@ def detect_tortured_phrases(
 ) -> list[Finding]:
     index = rule_index if rule_index is not None else build_tortured_rule_index(rules)
     findings: list[Finding] = []
+    seen_matches: set[tuple[str, str, str, str, int, int]] = set()
     for field_name, field_text in (("title", record.title), ("abstract_text", record.abstract_text)):
         if not field_text:
             continue
@@ -193,6 +190,18 @@ def detect_tortured_phrases(
             if any(pattern.search(field_text) for pattern in rule.excluded):
                 continue
             for match in rule.compiled.finditer(field_text):
+                section = section_for_match(record, field_name, match.group(0))
+                match_key = (
+                    record.record_id,
+                    section,
+                    rule.rule_id,
+                    normalize_for_matching(match.group(0)),
+                    match.start(),
+                    match.end(),
+                )
+                if match_key in seen_matches:
+                    continue
+                seen_matches.add(match_key)
                 findings.append(
                     Finding(
                         finding_id="",
@@ -202,7 +211,7 @@ def detect_tortured_phrases(
                         category="tortured_phrase",
                         matched_text=match.group(0),
                         evidence_snippet=evidence_snippet(field_text, match.start(), match.end()),
-                        section_or_field=section_for_match(record, field_name, match.group(0)),
+                        section_or_field=section,
                         severity=rule.severity,
                         confidence=rule.confidence,
                         rule_id=rule.rule_id,
