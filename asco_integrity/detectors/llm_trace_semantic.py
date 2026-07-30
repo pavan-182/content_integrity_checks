@@ -19,7 +19,7 @@ from .llm_trace_context import (
 )
 
 
-PROMPT_VERSION = "llm_trace_semantic_v2"
+PROMPT_VERSION = "llm_trace_semantic_v3"
 DEFAULT_INPUT_TOKEN_BUDGET = 7000
 MAX_INPUT_TOKEN_BUDGET = 8000
 DEFAULT_MAX_OUTPUT_TOKENS = 8192
@@ -66,6 +66,7 @@ Requirements:
 - semantic_variant requires a valid mapped_rule_id and the mapped rule's category.
 - novel_pattern_candidate requires an empty mapped_rule_id and a controlled category.
 - Do not force genuinely novel residue into the closest known rule.
+- Do not relabel the same words under another category unless distinct words support that second category.
 - Do not flag normal academic style, polished prose, legitimate AI discussion, or generic sophistication.
 - Do not return Markdown fences, commentary, or extra keys.
 """

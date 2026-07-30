@@ -24,7 +24,6 @@ class TraceTextBlock:
     block_type: str
     block_index: int
     source_text: str
-    detection_text: str
     source_start: int | None = None
     source_end: int | None = None
 

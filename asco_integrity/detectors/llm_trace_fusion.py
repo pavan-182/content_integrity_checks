@@ -11,6 +11,16 @@ def _overlaps(left: TraceCandidate, right: TraceCandidate) -> bool:
     return left.source_start < right.source_end and right.source_start < left.source_end
 
 
+def _adds_lexical_evidence(candidate: TraceCandidate, known: TraceCandidate) -> bool:
+    overlap_start = max(candidate.source_start, known.source_start)
+    overlap_end = min(candidate.source_end, known.source_end)
+    outside = (
+        candidate.source_text[candidate.source_start:overlap_start]
+        + candidate.source_text[overlap_end:candidate.source_end]
+    )
+    return any(character.isalnum() for character in outside)
+
+
 def _preference(candidate: TraceCandidate) -> tuple[int, float, str, str]:
     path_rank = {"known_pattern": 2, "semantic_variant": 1, "novel_pattern_candidate": 0}
     return (
@@ -35,20 +45,31 @@ def fuse_llm_trace_candidates(candidates: Iterable[TraceCandidate]) -> list[Trac
             item.mapped_rule_id,
         ),
     )
+    strong_known = [
+        candidate
+        for candidate in ordered
+        if candidate.match_type == "known_pattern"
+        and candidate.rule is not None
+        and candidate.rule.signal_level == "strong"
+    ]
     for candidate in ordered:
+        if candidate.match_type != "known_pattern" and any(
+            known.record_id == candidate.record_id
+            and known.section_label.casefold() == candidate.section_label.casefold()
+            and known.block_index == candidate.block_index
+            and known.category != candidate.category
+            and _overlaps(known, candidate)
+            and not _adds_lexical_evidence(candidate, known)
+            for known in strong_known
+        ):
+            continue
         duplicates = [
             current
             for current in selected
             if current.record_id == candidate.record_id
             and current.section_label.casefold() == candidate.section_label.casefold()
             and current.block_index == candidate.block_index
-            and (
-                current.category == candidate.category
-                or (
-                    current.match_type != "known_pattern"
-                    and candidate.match_type != "known_pattern"
-                )
-            )
+            and current.category == candidate.category
             and _overlaps(current, candidate)
         ]
         if not duplicates:

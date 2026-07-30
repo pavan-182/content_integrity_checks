@@ -20,7 +20,7 @@ ASCO XML
   → detailed CSV, compact CSV, and Excel Integrity Findings
 ```
 
-The parser continues to expose normalized `title`, `abstract_sections`, and flattened `abstract_text` for existing consumers. LLM response-trace detection instead uses optional `TraceTextBlock` records containing the field, exact section label, block type and order, `source_text`, and a minimally transformed `detection_text`.
+The parser continues to expose normalized `title`, `abstract_sections`, and flattened `abstract_text` for existing consumers. LLM response-trace detection instead uses optional `TraceTextBlock` records containing the field, exact section label, block type and order, and authoritative `source_text`. Deterministic matching runs directly against `source_text`; case-insensitive comparisons are created transiently where needed, so no duplicate detection-text field is stored.
 
 `source_text` preserves logical submitted text: capitalization, punctuation, NFC Unicode characters, line breaks, blank lines, paragraph blocks, Markdown markers, code fences, repeated hyphens, quotes, inline XML text, section order, and title text. Newline forms are canonicalized to `\n`; outer XML formatting whitespace is removed. It does not provide raw XML byte offsets.
 
@@ -53,7 +53,7 @@ Novel findings use `LLM-NOVEL-OCC-<HASH>`, derived from record, section, block, 
 
 ## Fusion and validation
 
-Fusion uses record, exact section, block index, overlapping source spans, and category. A deterministic and semantic hit on the same evidence becomes one editor-facing finding; the deterministic span, exact text, and known rule ID win. Separate sections and records remain separate.
+Fusion uses record, exact section, block index, overlapping source spans, and category. A deterministic and semantic hit on the same evidence becomes one editor-facing finding; the deterministic span, exact text, and known rule ID win. A cross-category semantic relabel is also discarded when a strong deterministic match covers all of its alphanumeric evidence, so punctuation-only extensions do not create duplicate categories. Distinct lexical evidence remains separate, as do separate sections and records.
 
 Validation is selective:
 

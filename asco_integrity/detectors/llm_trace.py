@@ -4,7 +4,12 @@ from collections.abc import Iterable
 
 from ..models import Finding, ParsedRecord
 from ..rules import LLMTraceRule, load_llm_trace_rules
-from .llm_trace_context import TraceCandidate, context_for_span, trace_blocks_for_record
+from .llm_trace_context import (
+    TraceCandidate,
+    context_for_span,
+    requires_validation,
+    trace_blocks_for_record,
+)
 
 
 LLMRule = LLMTraceRule
@@ -64,13 +69,7 @@ def detect_llm_trace_candidates(
 
 def candidate_to_finding(candidate: TraceCandidate) -> Finding:
     if not candidate.validation_status:
-        needs_validation = (
-            candidate.match_type != "known_pattern"
-            or candidate.rule is None
-            or candidate.rule.requires_validation
-            or candidate.context.quotation_context != "not_quoted"
-        )
-        candidate.validation_status = "pending" if needs_validation else "not_required"
+        candidate.validation_status = "pending" if requires_validation(candidate) else "not_required"
     if not candidate.review_status:
         if candidate.rule and candidate.rule.signal_level == "supporting":
             candidate.review_status = "supporting_only"

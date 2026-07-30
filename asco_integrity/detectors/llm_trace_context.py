@@ -53,20 +53,30 @@ class TraceCandidate:
         return self.rule.signal_level if self.rule else "contextual"
 
 
+def requires_validation(candidate: TraceCandidate) -> bool:
+    return (
+        candidate.match_type != "known_pattern"
+        or candidate.rule is None
+        or candidate.rule.requires_validation
+        or candidate.rule.signal_level in {"contextual", "supporting"}
+        or candidate.context.quotation_context != "not_quoted"
+    )
+
+
 def trace_blocks_for_record(record: ParsedRecord) -> list[TraceTextBlock]:
     if record.trace_text_blocks:
         return record.trace_text_blocks
     blocks: list[TraceTextBlock] = []
     if record.title:
-        blocks.append(TraceTextBlock("title", "Title", "title", 0, record.title, record.title))
+        blocks.append(TraceTextBlock("title", "Title", "title", 0, record.title))
     for index, section in enumerate(record.abstract_sections):
         text = section.get("text", "")
         if text:
             label = section.get("section", "") or "Abstract"
-            blocks.append(TraceTextBlock("abstract", label, "fallback_abstract", index, text, text))
+            blocks.append(TraceTextBlock("abstract", label, "fallback_abstract", index, text))
     if not any(block.field_name == "abstract" for block in blocks) and record.abstract_text:
         blocks.append(
-            TraceTextBlock("abstract", "Abstract", "fallback_abstract", 0, record.abstract_text, record.abstract_text)
+            TraceTextBlock("abstract", "Abstract", "fallback_abstract", 0, record.abstract_text)
         )
     record.trace_text_blocks = blocks
     record.trace_preprocessing_fallback = True

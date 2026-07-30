@@ -201,7 +201,7 @@ def build_trace_text_blocks(
     blocks: list[TraceTextBlock] = []
     title_source = _preserve_text(title_node, excluded_sections) if title_node is not None else fallback_title
     if title_source:
-        blocks.append(TraceTextBlock("title", "Title", "title", 0, title_source, title_source))
+        blocks.append(TraceTextBlock("title", "Title", "title", 0, title_source))
 
     abstract_blocks: list[tuple[str, str, str]] = []
     if abstract_node is not None:
@@ -249,7 +249,7 @@ def build_trace_text_blocks(
             if section.get("text", "")
         ]
     for index, (label, block_type, source) in enumerate(abstract_blocks):
-        blocks.append(TraceTextBlock("abstract", label, block_type, index, source, source))
+        blocks.append(TraceTextBlock("abstract", label, block_type, index, source))
     return blocks, fallback
 
 

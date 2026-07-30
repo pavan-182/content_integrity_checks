@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from csv import DictReader
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -124,8 +125,8 @@ class SemanticResponseTests(unittest.TestCase):
             abstract_text=text,
             abstract_sections=[{"section": "Background", "text": text}],
             trace_text_blocks=[
-                TraceTextBlock("title", "Title", "title", 0, "Exact title", "Exact title"),
-                TraceTextBlock("abstract", "Background", "paragraph", 0, text, text),
+                TraceTextBlock("title", "Title", "title", 0, "Exact title"),
+                TraceTextBlock("abstract", "Background", "paragraph", 0, text),
             ],
         )
 
@@ -251,6 +252,128 @@ class FusionValidationPriorityTests(unittest.TestCase):
         fused = fuse_llm_trace_candidates([semantic, deterministic])
         self.assertEqual(len(fused), 1)
         self.assertEqual(fused[0].match_type, "known_pattern")
+
+    def test_fusion_keeps_overlapping_semantic_candidates_in_different_categories(self) -> None:
+        text = "As an AI language model, here is the revised abstract."
+        record = ParsedRecord(
+            source_file="overlap.xml",
+            record_id="OVERLAP",
+            abstract_text=text,
+            abstract_sections=[{"section": "Abstract", "text": text}],
+        )
+        candidates = validate_model_response(
+            semantic_payload(
+                "OVERLAP",
+                [
+                    {
+                        "match_type": "semantic_variant",
+                        "mapped_rule_id": "LLM-001",
+                        "category": "ai_self_identification",
+                        "matched_text": "As an AI language model",
+                        "section_or_field": "Abstract",
+                        "confidence": 0.95,
+                        "reason": "The speaker identifies itself as an AI.",
+                    },
+                    {
+                        "match_type": "novel_pattern_candidate",
+                        "mapped_rule_id": "",
+                        "category": "response_preamble",
+                        "matched_text": "language model, here is the revised abstract",
+                        "section_or_field": "Abstract",
+                        "confidence": 0.91,
+                        "reason": "The phrase introduces a response to a requester.",
+                    },
+                ],
+            ),
+            [record],
+            "B1",
+            "model",
+        )
+
+        self.assertEqual(
+            {candidate.category for candidate in fuse_llm_trace_candidates(candidates)},
+            {"ai_self_identification", "response_preamble"},
+        )
+
+    def test_fusion_drops_cross_category_relabel_without_new_words(self) -> None:
+        record = ParsedRecord(
+            source_file="interface.xml",
+            record_id="INTERFACE",
+            abstract_text="Regenerate response:",
+            abstract_sections=[{"section": "Abstract", "text": "Regenerate response:"}],
+        )
+        deterministic = detect_llm_trace_candidates(record, self.rules)[0]
+        semantic = validate_model_response(
+            semantic_payload(
+                "INTERFACE",
+                [{
+                    "match_type": "semantic_variant",
+                    "mapped_rule_id": "LLM-017",
+                    "category": "prompt_leakage",
+                    "matched_text": "Regenerate response:",
+                    "section_or_field": "Abstract",
+                    "confidence": 0.95,
+                    "reason": "This appears to be a leaked instruction.",
+                }],
+            ),
+            [record],
+            "B1",
+            "model",
+        )[0]
+
+        fused = fuse_llm_trace_candidates([deterministic, semantic])
+
+        self.assertEqual([(candidate.match_type, candidate.mapped_rule_id) for candidate in fused], [("known_pattern", "LLM-022")])
+
+    def test_fusion_keeps_cross_category_semantic_candidate_with_new_words(self) -> None:
+        text = "As an AI language model, I do not have access to a specific dataset."
+        record = ParsedRecord(
+            source_file="capability.xml",
+            record_id="CAPABILITY",
+            abstract_text=text,
+            abstract_sections=[{"section": "Abstract", "text": text}],
+        )
+        deterministic = detect_llm_trace_candidates(record, self.rules)[0]
+        semantic = validate_model_response(
+            semantic_payload(
+                "CAPABILITY",
+                [{
+                    "match_type": "semantic_variant",
+                    "mapped_rule_id": "LLM-006",
+                    "category": "capability_disclaimer",
+                    "matched_text": text,
+                    "section_or_field": "Abstract",
+                    "confidence": 0.95,
+                    "reason": "This disclaims access to a dataset.",
+                }],
+            ),
+            [record],
+            "B1",
+            "model",
+        )[0]
+
+        fused = fuse_llm_trace_candidates([deterministic, semantic])
+
+        self.assertEqual(
+            {candidate.category for candidate in fused},
+            {"ai_self_identification", "capability_disclaimer"},
+        )
+
+    def test_direct_conversion_uses_shared_validation_requirement(self) -> None:
+        record = ParsedRecord(
+            source_file="contextual.xml",
+            record_id="CTX-DIRECT",
+            abstract_text="Certainly, here is the requested revision.",
+            abstract_sections=[{"section": "Abstract", "text": "Certainly, here is the requested revision."}],
+        )
+        candidate = detect_llm_trace_candidates(record, self.rules)[0]
+        candidate.rule = replace(candidate.rule, requires_validation=False)
+
+        finding = candidate_to_finding(candidate)
+
+        self.assertEqual(candidate.rule.signal_level, "contextual")
+        self.assertEqual(finding.validation_status, "pending")
+        self.assertEqual(finding.review_status, "needs_validation")
 
     def test_selective_validation_and_priority_states(self) -> None:
         strong = detect_llm_trace_candidates(self.record, self.rules)[0]
