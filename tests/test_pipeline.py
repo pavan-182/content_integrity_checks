@@ -221,13 +221,14 @@ class PipelineTests(unittest.TestCase):
             record_id="TEST-WEAK",
             abstract_text=(
                 "It is essential to note that the user requested a revision. "
-                "### Revised abstract ---"
+                "\n### Revised abstract\n---"
             ),
         )
 
         rule_ids = {finding.rule_id for finding in detect_llm_trace(record, built_in_llm_rules())}
 
-        self.assertTrue({"LLM-025", "LLM-026", "LLM-027", "LLM-028"} <= rule_ids)
+        self.assertTrue({"LLM-025", "LLM-027", "LLM-028"} <= rule_ids)
+        self.assertNotIn("LLM-026", rule_ids)
 
     def test_tortured_phrase_detector_finds_synthetic_phrase(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir_str:

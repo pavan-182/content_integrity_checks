@@ -11,14 +11,22 @@ from .aggregation.risk_engine import _risk_from_signals, severity_rank
 from .detectors import (
     built_in_llm_rules,
     build_tortured_rule_index,
+    candidate_to_finding,
     detect_exact_text_reuse,
     detect_entity_normalized_templates,
-    detect_llm_trace,
+    detect_llm_trace_candidates,
     NonsenseCandidateDetector,
     detect_tortured_phrases,
     load_tortured_rules,
 )
+from .detectors.llm_trace_fusion import fuse_llm_trace_candidates, llm_reviewer_priority
+from .detectors.llm_trace_semantic import (
+    PROMPT_VERSION as SEMANTIC_PROMPT_VERSION,
+    SemanticRunStats,
+    detect_semantic_traces,
+)
 from .models import Finding, ParsedRecord
+from .rules import catalogue_metadata
 from .detectors.design_contradiction import (
     DesignContradictionFinding,
     LLMDesignContradictionValidator,
@@ -52,7 +60,8 @@ from .reporting import (
     write_jsonl,
     write_workbook,
 )
-from .validators import ContextValidator, build_gpt_oss_client
+from .validators import ContextValidator, LLMTraceValidator, apply_llm_trace_validation, build_gpt_oss_client
+from .validators.llm_trace_validator import PROMPT_VERSION as LLM_VALIDATION_PROMPT_VERSION
 from .utils import dedupe_records, normalize_whitespace, to_pipe_string
 from .xml_parser import discover_xml_files, parse_xml_records
 
@@ -65,6 +74,7 @@ class PipelineConfig:
     legacy_similarity_threshold: float = 0.88
     dictionary_version: str = "wiley_tortured_seed_v1"
     validate_llm: bool = False
+    detect_llm_semantic: bool = False
     detect_nonsense_candidates: bool = False
     compare_legacy_template_clustering: bool = False
     verify_trials: bool = False
@@ -267,7 +277,9 @@ def _aggregate_findings(
     findings: list[Finding],
     pair_findings: list[PairFinding],
     clusters: list[dict[str, Any]],
+    llm_rules: list[Any] | None = None,
 ) -> list[dict[str, Any]]:
+    llm_rules = llm_rules or built_in_llm_rules()
     finding_map: dict[str, list[Finding]] = defaultdict(list)
     for finding in findings:
         finding_map[finding.record_id].append(finding)
@@ -280,6 +292,7 @@ def _aggregate_findings(
     for record in records:
         record_findings = finding_map.get(record.record_id, [])
         llm_findings = [finding for finding in record_findings if finding.detector_type == "llm_response_trace"]
+        llm_priority = llm_reviewer_priority(llm_findings, llm_rules)
         tortured_findings = [finding for finding in record_findings if finding.detector_type == "tortured_phrase"]
         nonsense_findings = [finding for finding in record_findings if finding.detector_type == "nonsense_candidate"]
         numerical_findings = [finding for finding in record_findings if finding.detector_type == "numerical_contradiction"]
@@ -303,20 +316,27 @@ def _aggregate_findings(
             key=severity_rank,
             default="none",
         )
-        detector_types = {finding.detector_type for finding in record_findings}
+        non_llm_findings = [
+            finding for finding in record_findings if finding.detector_type != "llm_response_trace"
+        ]
+        detector_types = {finding.detector_type for finding in non_llm_findings}
+        if llm_priority != "None":
+            detector_types.add("llm_response_trace")
         if template_flag:
             detector_types.add("template")
         highest_severity = "none"
-        for finding in record_findings:
+        for finding in non_llm_findings:
             if severity_rank(finding.severity) > severity_rank(highest_severity):
                 highest_severity = finding.severity
+        if severity_rank(llm_priority) > severity_rank(highest_severity):
+            highest_severity = llm_priority.lower()
         if strongest_pair:
             if severity_rank(strongest_pair.severity) > severity_rank(highest_severity):
                 highest_severity = strongest_pair.severity
         overall_risk = _risk_from_signals(
             highest_signal_severity=highest_severity,
             detector_types=detector_types,
-            total_finding_count=len(record_findings) + (1 if template_flag else 0),
+            total_finding_count=len(non_llm_findings) + (1 if llm_priority != "None" else 0) + (1 if template_flag else 0),
             template_cluster_flag=template_flag,
         )
         review_required = overall_risk != "None"
@@ -341,6 +361,7 @@ def _aggregate_findings(
                 "parse_status": record.parse_status,
                 "parse_warnings": to_pipe_string([warning.warning_code for warning in record.parse_warnings]),
                 "llm_trace_flag": "Yes" if llm_findings else "No",
+                "llm_review_priority": llm_priority,
                 "tortured_phrase_flag": "Yes" if tortured_findings else "No",
                 "nonsense_candidate_flag": "Yes" if nonsense_findings else "No",
                 "numerical_contradiction_flag": "Yes" if numerical_findings else "No",
@@ -528,17 +549,30 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     llm_rules = built_in_llm_rules()
     tortured_rules = load_tortured_rules(config.tortured_dictionary_path)
     tortured_index = build_tortured_rule_index(tortured_rules)
-    llm_client = build_gpt_oss_client() if (config.detect_nonsense_candidates or config.validate_llm) else None
+    llm_client = (
+        build_gpt_oss_client()
+        if (config.detect_nonsense_candidates or config.detect_llm_semantic or config.validate_llm)
+        else None
+    )
     nonsense_detector = NonsenseCandidateDetector(llm_client) if config.detect_nonsense_candidates else None
 
     findings: list[Finding] = []
+    deterministic_candidates = []
     for record in records:
-        llm_findings = detect_llm_trace(record, llm_rules)
+        deterministic_candidates.extend(detect_llm_trace_candidates(record, llm_rules))
         tortured_findings = detect_tortured_phrases(record, tortured_rules, tortured_index)
-        findings.extend(llm_findings)
         findings.extend(tortured_findings)
         if nonsense_detector:
             findings.extend(nonsense_detector.detect(record, tortured_findings))
+
+    semantic_candidates = []
+    semantic_stats = SemanticRunStats()
+    if config.detect_llm_semantic and llm_client is not None:
+        semantic_candidates, semantic_stats = detect_semantic_traces(llm_client, records)
+    llm_candidates = fuse_llm_trace_candidates([*deterministic_candidates, *semantic_candidates])
+    llm_validator = LLMTraceValidator(llm_client) if config.validate_llm and llm_client is not None else None
+    apply_llm_trace_validation(llm_candidates, llm_validator)
+    findings.extend(candidate_to_finding(candidate) for candidate in llm_candidates)
 
     comparable_records = [
         record
@@ -573,6 +607,8 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
             llm_client = build_gpt_oss_client()
         validator = ContextValidator(client=llm_client)
         for finding in ordered_findings:
+            if finding.detector_type == "llm_response_trace":
+                continue
             if finding.detector_type not in validator.applies_to:
                 continue
             result = validator.validate(finding)
@@ -585,7 +621,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     pair_findings = merge_pair_findings(exact_template_findings, entity_template_findings)
     template_rows = cluster_template_findings(pair_findings, records)
     field_inventory_rows, root_summary_rows = _inventory_rows(records)
-    abstract_summary_rows = _aggregate_findings(records, findings, pair_findings, template_rows)
+    abstract_summary_rows = _aggregate_findings(records, findings, pair_findings, template_rows, llm_rules)
     findings_rows = _findings_rows(findings)
     titles_by_record = {record.record_id: record.title for record in records}
     for row in findings_rows:
@@ -607,8 +643,26 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         }
         for warning in record_id_warnings
     )
+    parse_warning_rows.extend(
+        {
+            "source_file": next(
+                (record.source_file for record in records if record.record_id == record_id),
+                "",
+            ),
+            "record_id": record_id,
+            "warning_code": "llm_semantic_batch_failed",
+            "warning_message": "Semantic response-trace coverage is incomplete for this record.",
+            "field_name": "abstract_text",
+            "severity": "warning",
+            "evidence_snippet": "",
+            "schema_type": "",
+        }
+        for record_id in semantic_stats.failed_record_ids
+    )
     dictionary_rows = _dictionary_rows([rule.to_dict() for rule in llm_rules], [rule.to_dict() for rule in tortured_rules])
     now = datetime.now(timezone.utc)
+    catalogue_version, catalogue_checksum = catalogue_metadata()
+    llm_findings = [finding for finding in findings if finding.detector_type == "llm_response_trace"]
     run_metadata_rows: list[tuple[str, Any]] = [
         ("run_date_utc", now.isoformat()),
         ("input_folder", str(config.input_dir)),
@@ -618,6 +672,27 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         ("parsed_with_warnings", sum(1 for record in records if record.parse_status == "parsed_with_warnings")),
         ("failed_files", sum(1 for record in records if record.parse_status == "failed")),
         ("llm_rule_count", len(llm_rules)),
+        ("llm_trace_preprocessing_version", "lossless_trace_blocks_v1"),
+        ("llm_trace_lossless_blocks_enabled", True),
+        ("llm_trace_preprocessing_fallback_count", sum(record.trace_preprocessing_fallback for record in records)),
+        ("llm_rule_catalogue_version", catalogue_version),
+        ("llm_rule_catalogue_checksum", catalogue_checksum),
+        ("llm_deterministic_rule_count", len(llm_rules)),
+        ("llm_semantic_enabled", config.detect_llm_semantic),
+        ("llm_semantic_model_id", getattr(llm_client, "model_name", "") if config.detect_llm_semantic else ""),
+        ("llm_semantic_prompt_version", SEMANTIC_PROMPT_VERSION),
+        ("llm_semantic_batch_count", semantic_stats.batch_count),
+        ("llm_semantic_batch_failure_count", semantic_stats.batch_failure_count),
+        ("llm_deterministic_finding_count", len(deterministic_candidates)),
+        ("llm_semantic_variant_count", sum(finding.check_type == "semantic_variant" for finding in llm_findings)),
+        ("llm_novel_candidate_count", sum(finding.check_type == "novel_pattern_candidate" for finding in llm_findings)),
+        ("llm_validation_enabled", config.validate_llm),
+        ("llm_validation_model_id", getattr(llm_client, "model_name", "") if config.validate_llm else ""),
+        ("llm_validation_prompt_version", LLM_VALIDATION_PROMPT_VERSION),
+        ("llm_confirmed_count", sum(finding.validation_status == "confirmed" for finding in llm_findings)),
+        ("llm_rejected_count", sum(finding.validation_status == "rejected" for finding in llm_findings)),
+        ("llm_uncertain_count", sum(finding.validation_status == "uncertain" for finding in llm_findings)),
+        ("llm_supporting_only_count", sum(finding.review_status == "supporting_only" for finding in llm_findings)),
         ("tortured_rule_count", len(tortured_rules)),
         ("dictionary_version", config.dictionary_version),
         ("tortured_dictionary_path", str(config.tortured_dictionary_path)),
@@ -741,6 +816,7 @@ def run_default_pipeline(
     output_dir: str | Path = "outputs",
     legacy_similarity_threshold: float = 0.88,
     validate_llm: bool = False,
+    detect_llm_semantic: bool = False,
     detect_nonsense_candidates: bool = False,
     compare_legacy_template_clustering: bool = False,
     verify_trials: bool = False,
@@ -754,6 +830,7 @@ def run_default_pipeline(
         tortured_dictionary_path=Path(tortured_dictionary_path),
         legacy_similarity_threshold=legacy_similarity_threshold,
         validate_llm=validate_llm,
+        detect_llm_semantic=detect_llm_semantic,
         detect_nonsense_candidates=detect_nonsense_candidates,
         compare_legacy_template_clustering=compare_legacy_template_clustering,
         verify_trials=verify_trials,
@@ -773,6 +850,11 @@ def main(argv: list[str] | None = None) -> int:
         type=float,
         default=0.88,
         help="Legacy threshold used only with --compare-legacy-template-clustering.",
+    )
+    parser.add_argument(
+        "--detect-llm-semantic",
+        action="store_true",
+        help="Run opt-in semantic discovery for known variants and novel LLM response residue.",
     )
     parser.add_argument(
         "--validate-llm",
@@ -802,6 +884,7 @@ def main(argv: list[str] | None = None) -> int:
         output_dir=args.output_dir,
         legacy_similarity_threshold=args.legacy_similarity_threshold,
         validate_llm=args.validate_llm,
+        detect_llm_semantic=args.detect_llm_semantic,
         detect_nonsense_candidates=args.detect_nonsense_candidates,
         compare_legacy_template_clustering=args.compare_legacy_template_clustering,
         verify_trials=args.verify_trials,

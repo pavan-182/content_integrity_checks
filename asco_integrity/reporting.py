@@ -24,6 +24,13 @@ EDITOR_LABELS = (
     "unclear",
     "concerning_overlap",
     "duplicate_or_near_duplicate",
+    "confirmed_response_residue",
+    "legitimate_quotation",
+    "legitimate_ai_discussion",
+    "ordinary_academic_language",
+    "false_positive",
+    "new_pattern_confirmed",
+    "uncertain",
 )
 
 FINDINGS_COLUMNS = [
@@ -80,15 +87,23 @@ REVIEW_FINDINGS_COLUMNS = [
     "detector_type",
     "check_type",
     "record_id",
+    "source_file",
     "matched_record_id",
     "title",
     "matched_title",
+    "category",
+    "matched_text",
     "evidence_snippet",
+    "section_or_field",
     "matched_sentence_count",
     "shared_text_coverage",
     "relationship_context",
     "severity",
     "confidence",
+    "validation_status",
+    "validation_reason",
+    "validated_by",
+    "rule_id",
     "review_status",
     "editor_label",
     "editor_notes",
@@ -178,6 +193,7 @@ ABSTRACT_SUMMARY_COLUMNS = [
     "parse_status",
     "parse_warnings",
     "llm_trace_flag",
+    "llm_review_priority",
     "tortured_phrase_flag",
     "nonsense_candidate_flag",
     "numerical_contradiction_flag",
@@ -251,7 +267,7 @@ def _stringify(value: Any) -> str:
         return " | ".join(normalize_whitespace(str(item)) for item in value if normalize_whitespace(str(item)))
     if isinstance(value, dict):
         return json.dumps(value, ensure_ascii=False, sort_keys=True)
-    return normalize_whitespace(str(value))
+    return value if isinstance(value, str) else str(value)
 
 
 def _write_table(

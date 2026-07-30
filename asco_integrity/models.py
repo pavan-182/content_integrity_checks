@@ -18,6 +18,18 @@ class ParseWarning:
 
 
 @dataclass(slots=True)
+class TraceTextBlock:
+    field_name: str
+    section_label: str
+    block_type: str
+    block_index: int
+    source_text: str
+    detection_text: str
+    source_start: int | None = None
+    source_end: int | None = None
+
+
+@dataclass(slots=True)
 class ParsedRecord:
     source_file: str
     schema_type: str = ""
@@ -37,6 +49,8 @@ class ParsedRecord:
     excluded_sections: list[str] = field(default_factory=list)
     parse_status: str = "parsed"
     parse_warnings: list[ParseWarning] = field(default_factory=list)
+    trace_text_blocks: list[TraceTextBlock] = field(default_factory=list)
+    trace_preprocessing_fallback: bool = False
 
     @property
     def author_count(self) -> int:
@@ -90,6 +104,10 @@ class Finding:
     validation_reason: str = ""
     validated_by: str = ""
     review_status: str = ""
+
+    def __post_init__(self) -> None:
+        if self.detector_type == "llm_response_trace" and self.check_type == "llm_trace":
+            self.check_type = "known_pattern"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

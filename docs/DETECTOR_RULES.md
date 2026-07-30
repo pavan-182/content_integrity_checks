@@ -14,7 +14,9 @@ This detector **must not classify the whole abstract**, infer AI authorship, jud
 
 ## LLM response traces
 
-The deterministic LLM-trace detector matches explicit assistant residue, prompt leakage, interface text, and related patterns. It does not classify ordinary prose as AI-generated text and skips quoted examples.
+The deterministic LLM-trace detector loads one shared YAML catalogue and matches explicit assistant residue, prompt leakage, conversation/interface text, and supporting formatting against preserved source blocks. The opt-in semantic layer can add source-verified known variants and novel occurrence candidates. It does not classify ordinary prose as AI-generated text. Quoted examples are retained for validation, not silently discarded.
+
+Supporting-only and validator-rejected findings remain in audit output but do not independently affect reviewer priority. See `docs/LLM_RESPONSE_TRACE_PIPELINE.md`.
 
 ## Template clusters
 

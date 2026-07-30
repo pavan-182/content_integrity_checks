@@ -5,7 +5,7 @@ from pathlib import Path
 
 from lxml import etree
 
-from .models import ParseWarning, ParsedRecord
+from .models import ParseWarning, ParsedRecord, TraceTextBlock
 from .utils import (
     dedupe_sequence,
     first_nonempty,
@@ -60,6 +60,7 @@ EXCLUDED_TEXT_TAGS = {
     "references": "references",
     "table-wrap": "tables",
 }
+TRACE_BLOCK_TAGS = {"p": "paragraph", "list-item": "list_item", "preformat": "preformatted"}
 
 
 def _local_name(tag: str) -> str:
@@ -142,6 +143,114 @@ def _text_without_excluded_blocks(node: etree._Element, excluded_sections: set[s
             parts.append(_text_without_excluded_blocks(child, excluded_sections))
         parts.append(child.tail or "")
     return normalize_whitespace("".join(parts))
+
+
+def _preserve_text(node: etree._Element, excluded_sections: set[str] | None = None) -> str:
+    parts = [node.text or ""]
+    for child in node:
+        excluded_name = EXCLUDED_TEXT_TAGS.get(_local_name(child.tag))
+        if excluded_name:
+            if excluded_sections is not None:
+                excluded_sections.add(excluded_name)
+        else:
+            parts.append(_preserve_text(child, excluded_sections))
+        parts.append(child.tail or "")
+    text = "".join(parts).replace("\r\n", "\n").replace("\r", "\n")
+    return text.strip()
+
+
+def _top_level_trace_nodes(node: etree._Element) -> list[etree._Element]:
+    selected: list[etree._Element] = []
+    for candidate in node.iterdescendants():
+        if _local_name(candidate.tag) not in TRACE_BLOCK_TAGS:
+            continue
+        if any(
+            ancestor is not node and _local_name(ancestor.tag) in TRACE_BLOCK_TAGS
+            for ancestor in candidate.iterancestors()
+        ):
+            continue
+        selected.append(candidate)
+    return selected
+
+
+def _split_preserved_structured_block(text: str) -> list[tuple[str, str]]:
+    matches = list(STRUCTURED_LABEL_RE.finditer(text))
+    if not matches:
+        return [("Abstract", text)]
+    blocks: list[tuple[str, str]] = []
+    prefix = text[: matches[0].start("label")].strip()
+    if prefix:
+        blocks.append(("Abstract", prefix))
+    for index, match in enumerate(matches):
+        start = match.start("label")
+        end = matches[index + 1].start("label") if index + 1 < len(matches) else len(text)
+        source = text[start:end].strip()
+        if source:
+            blocks.append((_canonical_label(match.group("label")), source))
+    return blocks
+
+
+def build_trace_text_blocks(
+    title_node: etree._Element | None,
+    abstract_node: etree._Element | None,
+    *,
+    fallback_title: str,
+    fallback_sections: list[dict[str, str]],
+    excluded_sections: set[str] | None = None,
+) -> tuple[list[TraceTextBlock], bool]:
+    blocks: list[TraceTextBlock] = []
+    title_source = _preserve_text(title_node, excluded_sections) if title_node is not None else fallback_title
+    if title_source:
+        blocks.append(TraceTextBlock("title", "Title", "title", 0, title_source, title_source))
+
+    abstract_blocks: list[tuple[str, str, str]] = []
+    if abstract_node is not None:
+        sec_nodes = [child for child in abstract_node.iterchildren() if _local_name(child.tag) == "sec"]
+        if sec_nodes:
+            for sec in sec_nodes:
+                label_node = next(
+                    (child for child in sec.iterchildren() if _local_name(child.tag) in {"title", "label"}),
+                    None,
+                )
+                label = _canonical_label(_preserve_text(label_node) if label_node is not None else "Section")
+                content_nodes = _top_level_trace_nodes(sec)
+                if content_nodes:
+                    for content_node in content_nodes:
+                        source = _preserve_text(content_node, excluded_sections)
+                        if source:
+                            abstract_blocks.append((label, TRACE_BLOCK_TAGS[_local_name(content_node.tag)], source))
+                else:
+                    source = _preserve_text(sec, excluded_sections)
+                    label_source = _preserve_text(label_node) if label_node is not None else ""
+                    if label_source and source.startswith(label_source):
+                        source = source[len(label_source) :].strip()
+                    if source:
+                        abstract_blocks.append((label, "paragraph", source))
+        else:
+            content_nodes = _top_level_trace_nodes(abstract_node)
+            if content_nodes:
+                for content_node in content_nodes:
+                    source = _preserve_text(content_node, excluded_sections)
+                    if not source or re.fullmatch(r"e\d+", source, re.IGNORECASE):
+                        continue
+                    for label, preserved in _split_preserved_structured_block(source):
+                        abstract_blocks.append((label, TRACE_BLOCK_TAGS[_local_name(content_node.tag)], preserved))
+            else:
+                source = _preserve_text(abstract_node, excluded_sections)
+                if source:
+                    abstract_blocks.append(("Abstract", "fallback_abstract", source))
+
+    fallback = False
+    if not abstract_blocks:
+        fallback = bool(fallback_sections)
+        abstract_blocks = [
+            (section.get("section", "") or "Abstract", "fallback_abstract", section.get("text", ""))
+            for section in fallback_sections
+            if section.get("text", "")
+        ]
+    for index, (label, block_type, source) in enumerate(abstract_blocks):
+        blocks.append(TraceTextBlock("abstract", label, block_type, index, source, source))
+    return blocks, fallback
 
 
 def _excluded_sections_present(root: etree._Element) -> set[str]:
@@ -321,13 +430,24 @@ def _extract_article_root(tree: etree._ElementTree | etree._Element, source_file
         path_stem(source_file),
     )
     doi = _string_from_xpath(metadata_root, ".//*[local-name()='article-id'][@pub-id-type='doi'][1]")
-    title = first_nonempty(
-        _string_from_xpath(metadata_root, ".//*[local-name()='title-group'][1]/*[local-name()='article-title'][1]"),
-        _string_from_xpath(metadata_root, ".//*[local-name()='article-title'][1]"),
+    title_node = _first_node(
+        metadata_root,
+        [
+            ".//*[local-name()='title-group'][1]/*[local-name()='article-title'][1]",
+            ".//*[local-name()='article-title'][1]",
+        ],
     )
+    title = normalize_whitespace("".join(title_node.itertext())) if title_node is not None else ""
     abstract_node = _first_node(metadata_root, [".//*[local-name()='abstract'][1]"])
     excluded_sections = _excluded_sections_present(root)
     abstract_sections, structured, abstract_text = extract_abstract_sections(abstract_node, "", excluded_sections)
+    trace_text_blocks, trace_fallback = build_trace_text_blocks(
+        title_node,
+        abstract_node,
+        fallback_title=title,
+        fallback_sections=abstract_sections,
+        excluded_sections=excluded_sections,
+    )
     keywords = _extract_keywords(metadata_root)
     author_nodes = _all_nodes(metadata_root, [".//*[local-name()='contrib-group'][1]/*[local-name()='contrib'][@contrib-type='author' or @contrib-type='presenter']", ".//*[local-name()='author'][@contrib-type='author']"])
     authors = unique_preserve_order(_format_author_node(node) for node in author_nodes)
@@ -369,6 +489,14 @@ def _extract_article_root(tree: etree._ElementTree | etree._Element, source_file
                     severity="warning",
                 )
             )
+    if trace_fallback:
+        warnings.append(
+            ParseWarning(
+                warning_code="llm_trace_preprocessing_fallback",
+                warning_message="Lossless XML trace blocks were unavailable; best available parsed text was used.",
+                field_name="abstract_text",
+            )
+        )
     parse_status = "parsed_with_warnings" if warnings else "parsed"
     return ParsedRecord(
         source_file=source_file,
@@ -389,6 +517,8 @@ def _extract_article_root(tree: etree._ElementTree | etree._Element, source_file
         excluded_sections=sorted(excluded_sections),
         parse_status=parse_status,
         parse_warnings=warnings,
+        trace_text_blocks=trace_text_blocks,
+        trace_preprocessing_fallback=trace_fallback,
     )
 
 
@@ -414,10 +544,18 @@ def _extract_article_set_root(tree: etree._ElementTree, source_file: str) -> Par
         path_stem(source_file),
     )
     doi = _string_from_xpath(article, ".//*[local-name()='article_id_list'][1]/*[local-name()='article_id'][@id_type='doi'][1]")
-    title = _string_from_xpath(article, ".//*[local-name()='article_title'][1]")
+    title_node = _first_node(article, [".//*[local-name()='article_title'][1]"])
+    title = normalize_whitespace("".join(title_node.itertext())) if title_node is not None else ""
     abstract_node = _first_node(article, [".//*[local-name()='abstract'][1]"])
     excluded_sections = _excluded_sections_present(article)
     abstract_sections, structured, abstract_text = extract_abstract_sections(abstract_node, "", excluded_sections)
+    trace_text_blocks, trace_fallback = build_trace_text_blocks(
+        title_node,
+        abstract_node,
+        fallback_title=title,
+        fallback_sections=abstract_sections,
+        excluded_sections=excluded_sections,
+    )
     keywords = _extract_keywords(article)
     author_nodes = _all_nodes(article, [".//*[local-name()='author_list'][1]/*[local-name()='author']", ".//*[local-name()='contrib-group'][1]/*[local-name()='contrib'][@contrib-type='author']"])
     authors = unique_preserve_order(_format_author_node(node) for node in author_nodes)
@@ -461,6 +599,14 @@ def _extract_article_set_root(tree: etree._ElementTree, source_file: str) -> Par
                     severity="warning",
                 )
             )
+    if trace_fallback:
+        warnings.append(
+            ParseWarning(
+                warning_code="llm_trace_preprocessing_fallback",
+                warning_message="Lossless XML trace blocks were unavailable; best available parsed text was used.",
+                field_name="abstract_text",
+            )
+        )
     parse_status = "parsed_with_warnings" if warnings else "parsed"
     return ParsedRecord(
         source_file=source_file,
@@ -481,6 +627,8 @@ def _extract_article_set_root(tree: etree._ElementTree, source_file: str) -> Par
         excluded_sections=sorted(excluded_sections),
         parse_status=parse_status,
         parse_warnings=warnings,
+        trace_text_blocks=trace_text_blocks,
+        trace_preprocessing_fallback=trace_fallback,
     )
 
 

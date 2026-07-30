@@ -70,7 +70,9 @@ class LLMTraceBatchScriptTests(unittest.TestCase):
                     {
                         "record_id": "A",
                         "traces": [{
-                            "rule_id": "LLM-001",
+                            "match_type": "semantic_variant",
+                            "mapped_rule_id": "LLM-001",
+                            "category": "ai_self_identification",
                             "matched_text": "As an AI language model",
                             "section_or_field": "Abstract",
                             "confidence": 0.99,
@@ -85,16 +87,18 @@ class LLMTraceBatchScriptTests(unittest.TestCase):
         rows = validate_model_response(raw, records, "B0001", "test-model")
 
         self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["rule_id"], "LLM-001")
-        self.assertEqual(rows[0]["severity"], "high")
-        self.assertIn("As an AI language model", rows[0]["evidence_snippet"])
+        self.assertEqual(rows[0].mapped_rule_id, "LLM-001")
+        self.assertEqual(rows[0].severity, "high")
+        self.assertEqual(rows[0].matched_text, "As an AI language model")
 
     def test_unknown_rule_or_fabricated_text_is_rejected(self) -> None:
         record = _record("A", "Patients experienced durable clinical responses.")
         base = {
             "record_id": "A",
             "traces": [{
-                "rule_id": "LLM-999",
+                "match_type": "semantic_variant",
+                "mapped_rule_id": "LLM-999",
+                "category": "ai_self_identification",
                 "matched_text": "Patients",
                 "section_or_field": "Abstract",
                 "confidence": 0.9,
@@ -104,7 +108,7 @@ class LLMTraceBatchScriptTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_model_response(json.dumps({"results": [base]}), [record], "B1", "model")
 
-        base["traces"][0]["rule_id"] = "LLM-001"
+        base["traces"][0]["mapped_rule_id"] = "LLM-001"
         base["traces"][0]["matched_text"] = "fabricated assistant phrase"
         with self.assertRaises(ValueError):
             validate_model_response(json.dumps({"results": [base]}), [record], "B1", "model")
@@ -154,7 +158,9 @@ class LLMTraceBatchScriptTests(unittest.TestCase):
                             start = section["text"].lower().index(phrase.lower())
                             exact = section["text"][start:start + len(phrase)]
                             traces.append({
-                                "rule_id": rule_id,
+                                "match_type": "semantic_variant",
+                                "mapped_rule_id": rule_id,
+                                "category": next(rule.category for rule in RULES if rule.rule_id == rule_id),
                                 "matched_text": exact,
                                 "section_or_field": section["section"],
                                 "confidence": 0.95,

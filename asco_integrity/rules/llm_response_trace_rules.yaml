@@ -1,0 +1,359 @@
+rules:
+  - rule_id: LLM-001
+    category: ai_self_identification
+    signal_level: strong
+    severity: high
+    priority_eligible: true
+    requires_validation: false
+    confidence: 0.99
+    regex_patterns:
+      - '\bas (?:an ai(?: language)?|a large language|an artificial intelligence) model\b'
+      - '\bas an ai assistant\b'
+    semantic_description: The speaker explicitly identifies itself as an AI, language model, or AI assistant.
+    positive_examples: ["As an AI language model, I cannot provide medical advice."]
+    negative_examples: ["The study evaluated an AI language model."]
+    version: 1
+  - rule_id: LLM-002
+    category: ai_self_identification
+    signal_level: strong
+    severity: high
+    priority_eligible: true
+    requires_validation: false
+    confidence: 0.98
+    regex_patterns:
+      - '\bi am an? (?:ai|language|artificial intelligence) model\b'
+    semantic_description: The speaker states that it is an AI or language model.
+    positive_examples: ["I am a language model."]
+    negative_examples: ["I am an investigator studying language models."]
+    version: 1
+  - rule_id: LLM-003
+    category: knowledge_disclaimer
+    signal_level: strong
+    severity: high
+    priority_eligible: true
+    requires_validation: false
+    confidence: 0.98
+    regex_patterns: ['\bas of my last knowledge (?:update|cutoff)\b']
+    semantic_description: The response refers to the assistant's last knowledge update or cutoff.
+    positive_examples: ["As of my last knowledge update, this may have changed."]
+    negative_examples: ["As of the last database update, 20 cases were enrolled."]
+    version: 1
+  - rule_id: LLM-004
+    category: knowledge_disclaimer
+    signal_level: strong
+    severity: high
+    priority_eligible: true
+    requires_validation: false
+    confidence: 0.98
+    regex_patterns: ['\bmy knowledge cutoff\b']
+    semantic_description: The response explicitly mentions the assistant's knowledge cutoff.
+    positive_examples: ["My knowledge cutoff is June 2024."]
+    negative_examples: ["The database cutoff was June 2024."]
+    version: 1
+  - rule_id: LLM-005
+    category: capability_disclaimer
+    signal_level: contextual
+    severity: high
+    priority_eligible: true
+    requires_validation: true
+    confidence: 0.95
+    regex_patterns:
+      - '\bi (?:do not|don[''’]t) have (?:the ability to browse|browsing(?: access)?|access to (?:current|real[- ]time) information)\b'
+      - '\bi (?:cannot|can[''’]t|am unable to) browse the internet\b'
+    semantic_description: The speaker disclaims the ability to browse or obtain current information.
+    positive_examples: ["I cannot browse the internet or verify current information."]
+    negative_examples: ["Investigators could not access the registry."]
+    version: 1
+  - rule_id: LLM-006
+    category: capability_disclaimer
+    signal_level: contextual
+    severity: high
+    priority_eligible: true
+    requires_validation: true
+    confidence: 0.95
+    regex_patterns:
+      - '\bi (?:cannot|can[''’]t|am unable to) access (?:current|real[- ]time|patient[- ]level) (?:data|information)\b'
+      - '\bi (?:cannot|can[''’]t|am unable to) access external (?:records|databases)\b'
+      - '\bi (?:cannot|can[''’]t|am unable to) verify current information\b'
+    semantic_description: The speaker disclaims access to current, real-time, patient-level, or external data.
+    positive_examples: ["I cannot access patient-level data."]
+    negative_examples: ["The study team could not access patient-level data."]
+    version: 1
+  - rule_id: LLM-007
+    category: capability_disclaimer
+    signal_level: contextual
+    severity: medium
+    priority_eligible: true
+    requires_validation: true
+    confidence: 0.88
+    regex_patterns: ['\bi cannot provide (?:medical advice|patient-specific recommendations|real[- ]time information)\b']
+    semantic_description: The speaker gives a capability or safety disclaimer directed to a requester.
+    positive_examples: ["I cannot provide medical advice."]
+    negative_examples: ["This tool cannot provide patient-specific recommendations."]
+    version: 1
+  - rule_id: LLM-008
+    category: response_preamble
+    signal_level: contextual
+    severity: medium
+    priority_eligible: true
+    requires_validation: true
+    confidence: 0.90
+    regex_patterns: ['\bcertainly,?\s+here is\b']
+    semantic_description: A conversational assistant preamble introduces an answer.
+    positive_examples: ["Certainly, here is the requested summary."]
+    negative_examples: ["The report is certainly important."]
+    version: 1
+  - rule_id: LLM-009
+    category: response_preamble
+    signal_level: strong
+    severity: high
+    priority_eligible: true
+    requires_validation: false
+    confidence: 0.95
+    regex_patterns:
+      - '\bhere is the revised (?:abstract|version)\b'
+      - '\bhere[''’]s a revised version\b'
+      - '\bthe revised abstract is provided below\b'
+      - '\bbelow is an improved version\b'
+    semantic_description: The text introduces a revised or improved abstract supplied to a requester.
+    positive_examples: ["Here is the revised abstract:"]
+    negative_examples: ["The revised abstract was approved."]
+    version: 1
+  - rule_id: LLM-010
+    category: response_preamble
+    signal_level: strong
+    severity: high
+    priority_eligible: true
+    requires_validation: false
+    confidence: 0.95
+    regex_patterns:
+      - '\bhere is the rewritten (?:version|abstract)\b'
+      - '\bbelow is the rewritten abstract\b'
+    semantic_description: The text introduces a rewritten response or abstract.
+    positive_examples: ["Below is the rewritten abstract."]
+    negative_examples: ["The abstract was rewritten after review."]
+    version: 1
+  - rule_id: LLM-011
+    category: response_preamble
+    signal_level: contextual
+    severity: medium
+    priority_eligible: true
+    requires_validation: true
+    confidence: 0.88
+    regex_patterns: ['\bsure,?\s+here(?:[''’]s| is)\b']
+    semantic_description: A conversational assistant preamble begins with an affirmative response.
+    positive_examples: ["Sure, here's the revision."]
+    negative_examples: ["We are sure this result is robust."]
+    version: 1
+  - rule_id: LLM-012
+    category: response_preamble
+    signal_level: contextual
+    severity: medium
+    priority_eligible: true
+    requires_validation: true
+    confidence: 0.90
+    regex_patterns: ['\bcertainly!\s+below is\b']
+    semantic_description: An enthusiastic assistant preamble introduces content below.
+    positive_examples: ["Certainly! Below is the abstract."]
+    negative_examples: ["The value is certainly below the threshold."]
+    version: 1
+  - rule_id: LLM-013
+    category: response_closing
+    signal_level: strong
+    severity: high
+    priority_eligible: true
+    requires_validation: false
+    confidence: 0.95
+    regex_patterns: ['\bplease let me know if you would like me to\b']
+    semantic_description: The response closes by offering more work to the requester.
+    positive_examples: ["Please let me know if you would like me to shorten it."]
+    negative_examples: ["Participants let the team know if symptoms changed."]
+    version: 1
+  - rule_id: LLM-014
+    category: response_closing
+    signal_level: strong
+    severity: high
+    priority_eligible: true
+    requires_validation: false
+    confidence: 0.92
+    regex_patterns: ['\bthe final answer is provided above\b']
+    semantic_description: The response refers to a final answer elsewhere in the chat.
+    positive_examples: ["The final answer is provided above."]
+    negative_examples: ["The final result is shown above."]
+    version: 1
+  - rule_id: LLM-015
+    category: response_disclosure
+    signal_level: contextual
+    severity: medium
+    priority_eligible: true
+    requires_validation: true
+    confidence: 0.88
+    regex_patterns: ['\bthis response can be adapted to the requested\b']
+    semantic_description: The speaker discusses adapting its response to a request.
+    positive_examples: ["This response can be adapted to the requested format."]
+    negative_examples: ["Treatment response can be adapted to disease burden."]
+    version: 1
+  - rule_id: LLM-016
+    category: response_disclosure
+    signal_level: strong
+    severity: high
+    priority_eligible: true
+    requires_validation: false
+    confidence: 0.94
+    regex_patterns:
+      - '\bi have (?:revised|rewritten) the (?:abstract|text)(?: to improve clarity and academic tone)?\b'
+    semantic_description: The speaker discloses revising or rewriting the submitted text.
+    positive_examples: ["I have revised the abstract."]
+    negative_examples: ["We revised the abstract after peer review."]
+    version: 1
+  - rule_id: LLM-017
+    category: prompt_leakage
+    signal_level: strong
+    severity: high
+    priority_eligible: true
+    requires_validation: false
+    confidence: 0.95
+    regex_patterns:
+      - '\brewrite (?:this|the following) abstract\b'
+      - '\bgenerate an abstract based on\b'
+    semantic_description: An explicit instruction asks for an abstract to be rewritten or generated.
+    positive_examples: ["Rewrite the following abstract."]
+    negative_examples: ["We rewrote this abstract for publication."]
+    version: 1
+  - rule_id: LLM-018
+    category: prompt_leakage
+    signal_level: strong
+    severity: high
+    priority_eligible: true
+    requires_validation: false
+    confidence: 0.94
+    regex_patterns:
+      - '\bimprove (?:the )?grammar\b'
+      - '\bmake this more academic\b'
+    semantic_description: A leaked editing instruction asks for grammatical or academic rewriting.
+    positive_examples: ["Improve the grammar."]
+    negative_examples: ["Editing improved the grammar."]
+    version: 1
+  - rule_id: LLM-019
+    category: prompt_leakage
+    signal_level: strong
+    severity: high
+    priority_eligible: true
+    requires_validation: false
+    confidence: 0.94
+    regex_patterns: ['\bsummarize the following\b']
+    semantic_description: A leaked instruction asks the assistant to summarize supplied content.
+    positive_examples: ["Summarize the following."]
+    negative_examples: ["The following results summarize the cohort."]
+    version: 1
+  - rule_id: LLM-020
+    category: prompt_leakage
+    signal_level: strong
+    severity: high
+    priority_eligible: true
+    requires_validation: false
+    confidence: 0.94
+    regex_patterns:
+      - '\bdo not (?:highlight negatives|mention limitations)\b'
+    semantic_description: A leaked instruction asks for unfavorable information to be omitted.
+    positive_examples: ["Do not mention limitations."]
+    negative_examples: ["The authors did not mention limitations."]
+    version: 1
+  - rule_id: LLM-021
+    category: prompt_leakage
+    signal_level: strong
+    severity: high
+    priority_eligible: true
+    requires_validation: false
+    confidence: 0.94
+    regex_patterns: ['\bpositive review only\b']
+    semantic_description: A leaked instruction demands a positive-only review.
+    positive_examples: ["Positive review only."]
+    negative_examples: ["Only positive reviews were included."]
+    version: 1
+  - rule_id: LLM-022
+    category: interface_residue
+    signal_level: strong
+    severity: high
+    priority_eligible: true
+    requires_validation: false
+    confidence: 0.98
+    regex_patterns: ['\bregenerate response\b']
+    semantic_description: Copied chat interface text offers to regenerate a response.
+    positive_examples: ["Regenerate response"]
+    negative_examples: ["Cells regenerate in response to therapy."]
+    version: 1
+  - rule_id: LLM-023
+    category: interface_residue
+    signal_level: strong
+    severity: high
+    priority_eligible: true
+    requires_validation: false
+    confidence: 0.96
+    regex_patterns: ['\bcopy response\b']
+    semantic_description: Copied chat interface text offers to copy a response.
+    positive_examples: ["Copy response"]
+    negative_examples: ["We retained a copy; response data were archived."]
+    version: 1
+  - rule_id: LLM-024
+    category: interface_residue
+    signal_level: contextual
+    severity: low
+    priority_eligible: true
+    requires_validation: true
+    confidence: 0.55
+    regex_patterns: ['(?im)^[ \t]*new chat[ \t]*$']
+    semantic_description: A standalone copied interface label starts a new chat.
+    positive_examples: ["New chat"]
+    negative_examples: ["A new chat intervention was tested."]
+    version: 1
+  - rule_id: LLM-025
+    category: response_preamble
+    signal_level: supporting
+    severity: low
+    priority_eligible: false
+    requires_validation: true
+    confidence: 0.55
+    regex_patterns: ['\b(?:it is|it[''’]s) (?:important|essential) to note(?: that)?\b']
+    semantic_description: Generic assistant-like framing may support stronger response-residue evidence.
+    positive_examples: ["It is important to note that this is not medical advice."]
+    negative_examples: ["It is important to note that survival improved."]
+    version: 1
+  - rule_id: LLM-026
+    category: conversation_residue
+    signal_level: strong
+    severity: high
+    priority_eligible: true
+    requires_validation: false
+    confidence: 0.98
+    regex_patterns: ['(?im)^[ \t]*(?:user|assistant|system|human)[ \t]*:']
+    semantic_description: A line-anchored role label exposes prompt-response dialogue structure.
+    positive_examples: ["User:\nRewrite the following abstract.\n\nAssistant:"]
+    negative_examples: ["The user requested medical advice during the usability study."]
+    version: 1
+  - rule_id: LLM-027
+    category: formatting_residue
+    signal_level: supporting
+    severity: low
+    priority_eligible: false
+    requires_validation: true
+    confidence: 0.55
+    regex_patterns: ['(?m)(?:^|(?<=:))[ \t]*#{3,}[ \t]+\S.*$']
+    semantic_description: An unexplained Markdown heading is supporting formatting residue.
+    positive_examples: ["### Background"]
+    negative_examples: ["Background: The study enrolled 20 patients."]
+    version: 1
+  - rule_id: LLM-028
+    category: formatting_residue
+    signal_level: supporting
+    severity: low
+    priority_eligible: false
+    requires_validation: true
+    confidence: 0.55
+    regex_patterns:
+      - '(?m)^[ \t]*---+[ \t]*$'
+      - '(?m)^[ \t]*```[^\n]*$'
+    semantic_description: Markdown separators or code fences provide supporting formatting residue.
+    positive_examples: ["---", "```"]
+    negative_examples: ["Twenty patients had grade 3-4 events."]
+    version: 1

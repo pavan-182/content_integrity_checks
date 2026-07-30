@@ -176,13 +176,13 @@ Empty rules, rules without usable tokens, and unqualified single-token rules are
 
 ## 7. Stage 4 — Per-record deterministic detection
 
-Both rule-based detectors inspect the title and abstract text.
+Tortured-phrase detection inspects the backward-compatible normalized title and abstract text. LLM response-trace detection inspects preserved title and paragraph/preformatted blocks.
 
 ### 7.1 LLM response traces
 
-Every regex match becomes a `Finding` containing the matched text, nearby evidence, source field, category, severity, confidence, and rule ID. Matches inside quoted text are skipped because a quotation may be discussing an example rather than leaking assistant output.
+Rules load from the shared versioned YAML catalogue. Every regex match retains its exact block, section, local source span, complete sentence or paragraph context, quotation context, and rule metadata before conversion to `Finding`. Quoted evidence is retained and requires validation.
 
-This detector identifies explicit residue only. It does not infer that otherwise normal prose was written by AI.
+`--detect-llm-semantic` additionally discovers source-verified semantic variants and novel occurrence candidates across every eligible record. This detector identifies explicit residue only. It does not infer that otherwise normal prose was written by AI.
 
 ### 7.2 Tortured phrases
 
@@ -202,7 +202,7 @@ Numerical and study-design contradiction detectors run locally on every comparab
 
 ## 8. Stage 5 — Optional context validation
 
-When `--validate-llm` is enabled, each LLM-trace and tortured-phrase finding is sent individually to GPT-OSS 20B through the IntelliHub chat-completions endpoint. The model receives only:
+When `--validate-llm` is enabled, tortured phrases and only validation-eligible LLM traces are sent individually to GPT-OSS 20B through the IntelliHub chat-completions endpoint. The LLM response-trace validator receives exact source span, sentence, neighboring sentences, full paragraph, block, section, category, match type, rule ID, and quotation context. The generic validator receives:
 
 - matched text;
 - expected term, when applicable;
@@ -212,7 +212,7 @@ When `--validate-llm` is enabled, each LLM-trace and tortured-phrase finding is 
 
 The expected response is strict JSON with a status of `confirmed`, `rejected`, or `uncertain`, plus a one-sentence editorial reason. Requests use zero temperature, a 120-second timeout, and up to three attempts with exponential backoff. Unusable responses and exhausted request failures become `uncertain` rather than removing the original finding.
 
-Validation is **annotate-only**. It populates `validation_status`, `validation_reason`, and `validated_by`; it does not suppress findings, validate template clusters, or change risk scoring. Without `--validate-llm`, these fields remain blank.
+Validation never deletes audit findings or validates template clusters. Confirmed, rejected, and uncertain LLM statuses do affect only the LLM reviewer-priority contribution: rejected findings are excluded, uncertain semantic candidates remain Low, and supporting findings never contribute independently. Tortured-phrase behavior remains annotate-only. Without validation, ambiguous LLM findings remain pending while high-precision deterministic findings use `not_required`.
 
 ## 9. Stage 6 — Pair-first template detection
 
@@ -224,7 +224,7 @@ The temporary legacy implementation runs only with `--compare-legacy-template-cl
 
 ## 10. Stage 7 — Risk aggregation
 
-Risk is computed once per record from rule findings, optional low-severity nonsense candidates, and one template concern regardless of how many pair signals or family memberships support it. Context-validation annotations do not affect it.
+Risk is computed once per record from active rule findings, optional low-severity nonsense candidates, and one template concern regardless of how many pair signals or family memberships support it. LLM findings first collapse to one validation-aware reviewer-priority signal.
 
 | Condition | Overall risk |
 |---|---|
@@ -306,7 +306,7 @@ Deterministic results are reproducible for the same code, inputs, dictionary, an
 - Level A recall is limited to the supplied dictionary; Level B considers only sentences passing its narrow gene/drug co-occurrence gate.
 - The LLM detector recognizes explicit residue patterns, not general AI authorship.
 - Template weights and thresholds are transparent heuristics; the synthetic sweep does not replace calibration on labelled ASCO data.
-- Validator output can vary because it is model-generated, but it cannot alter deterministic risk in the current design.
+- Validator output can vary because it is model-generated; rejected LLM candidates remain auditable but are removed from active LLM priority.
 - Records from unexpected XML roots retain raw text but do not receive full schema-specific metadata extraction.
 
 ## 15. Verification
@@ -324,12 +324,15 @@ python -m unittest discover -s tests -v
 | Module | Responsibility |
 |---|---|
 | `asco_integrity/pipeline.py` | Orchestration, aggregation, CLI configuration, and output assembly |
-| `asco_integrity/xml_parser.py` | XML discovery, schema-specific extraction, abstract normalization, warnings |
-| `asco_integrity/detectors/llm_trace.py` | Built-in LLM residue rules and matching |
+| `asco_integrity/xml_parser.py` | XML discovery, backward-compatible normalized extraction, lossless trace blocks, warnings |
+| `asco_integrity/detectors/llm_trace.py` | Deterministic response-residue matching from the shared YAML catalogue |
+| `asco_integrity/detectors/llm_trace_semantic.py` | Opt-in semantic variants, novel candidates, batching, and exact evidence verification |
+| `asco_integrity/detectors/llm_trace_fusion.py` | Deterministic–semantic deduplication and LLM priority |
 | `asco_integrity/detectors/tortured_phrase.py` | Dictionary loading, query interpretation, indexing, and matching |
 | `asco_integrity/detectors/nonsense_candidate.py` | Opt-in sentence prefiltering and GPT-OSS candidate annotation |
 | `asco_integrity/template_detection.py` | Masking, candidate generation, similarity, and clustering |
 | `asco_integrity/validators/context_validator.py` | Optional IntelliHub/GPT-OSS finding validation |
+| `asco_integrity/validators/llm_trace_validator.py` | Selective response-residue validation with source context |
 | `asco_integrity/aggregation/risk_engine.py` | Record-level risk rules |
 | `asco_integrity/reporting.py` | JSONL, CSV, and Excel generation |
 | `asco_integrity/models.py` | Records, findings, validation results, and cluster-member data models |

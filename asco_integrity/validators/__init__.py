@@ -9,6 +9,11 @@ from .context_validator import (
     SYSTEM_PROMPT,
     build_gpt_oss_client,
 )
+from .llm_trace_validator import (
+    LLMTraceValidator,
+    apply_llm_trace_validation,
+    requires_llm_trace_validation,
+)
 
 __all__ = [
     "ContextValidator",
@@ -18,4 +23,7 @@ __all__ = [
     "PROMPT_VERSION",
     "SYSTEM_PROMPT",
     "build_gpt_oss_client",
+    "LLMTraceValidator",
+    "apply_llm_trace_validation",
+    "requires_llm_trace_validation",
 ]
