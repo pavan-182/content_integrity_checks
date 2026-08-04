@@ -7,11 +7,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from asco_integrity.detectors.numerical_contradiction import (
+from content_integrity.detectors.numerical_contradiction import (
     detect_numerical_contradictions,
     extract_numerical_claims,
 )
-from asco_integrity.models import ParsedRecord
+from content_integrity.models import ParsedRecord
 from scripts.detect_numerical_contradictions import CSV_COLUMNS
 
 

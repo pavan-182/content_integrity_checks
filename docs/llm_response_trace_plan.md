@@ -155,7 +155,7 @@ Verify these facts against the current code before editing. Use the repository a
 
 Current file:
 
-`asco_integrity/xml_parser.py`
+`content_integrity/xml_parser.py`
 
 The parser already:
 
@@ -187,7 +187,7 @@ The semantic script currently consumes `record.abstract_sections`, but those sec
 
 Current file:
 
-`asco_integrity/detectors/llm_trace.py`
+`content_integrity/detectors/llm_trace.py`
 
 Current behaviour:
 
@@ -278,7 +278,7 @@ Do not add these fields to `Finding` solely for this implementation.
 
 Current file:
 
-`asco_integrity/validators/context_validator.py`
+`content_integrity/validators/context_validator.py`
 
 The current validator receives:
 
@@ -711,7 +711,7 @@ Quoted or ambiguous evidence should normally require validation.
 
 Create:
 
-`asco_integrity/rules/llm_response_trace_rules.yaml`
+`content_integrity/rules/llm_response_trace_rules.yaml`
 
 Add package files as required.
 
@@ -813,7 +813,7 @@ Record catalogue version and checksum in run metadata.
 
 Refactor:
 
-`asco_integrity/detectors/llm_trace.py`
+`content_integrity/detectors/llm_trace.py`
 
 The deterministic detector must consume preserved `TraceTextBlock`-equivalent objects.
 
@@ -952,7 +952,7 @@ Add tests for:
 
 Create:
 
-`asco_integrity/detectors/llm_trace_semantic.py`
+`content_integrity/detectors/llm_trace_semantic.py`
 
 Move reusable behaviour from:
 
@@ -1249,7 +1249,7 @@ Store detector and discovery provenance in:
 
 Create a fusion module, for example:
 
-`asco_integrity/detectors/llm_trace_fusion.py`
+`content_integrity/detectors/llm_trace_fusion.py`
 
 Deduplicate using:
 
@@ -1358,7 +1358,7 @@ Validate:
 
 Either:
 
-* create `asco_integrity/validators/llm_trace_validator.py`; or
+* create `content_integrity/validators/llm_trace_validator.py`; or
 * extend the generic validator with optional LLM-specific fields.
 
 Do not break tortured-phrase validation.
@@ -1545,7 +1545,7 @@ All findings must continue to appear in:
 
 Extend `REVIEW_FINDINGS_COLUMNS` in:
 
-`asco_integrity/reporting.py`
+`content_integrity/reporting.py`
 
 Add:
 
@@ -1866,7 +1866,7 @@ No unit test may call the real model endpoint.
 Use repository conventions, but a suitable structure is:
 
 ```text
-asco_integrity/
+content_integrity/
 ├── detectors/
 │   ├── llm_trace.py
 │   ├── llm_trace_semantic.py

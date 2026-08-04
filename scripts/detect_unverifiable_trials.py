@@ -8,16 +8,16 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from asco_integrity.detectors.unverifiable_trial import (
+from content_integrity.detectors.unverifiable_trial import (
     CLINICAL_TRIALS_GOV,
     DEFAULT_MAX_RETRIES,
     DEFAULT_TIMEOUT_SECONDS,
     ClinicalTrialsGovClient,
     detect_unverifiable_trials,
 )
-from asco_integrity.reporting import write_csv
-from asco_integrity.utils import dedupe_records
-from asco_integrity.xml_parser import discover_xml_files, parse_xml_records
+from content_integrity.reporting import write_csv
+from content_integrity.utils import dedupe_records
+from content_integrity.xml_parser import discover_xml_files, parse_xml_records
 
 
 CSV_COLUMNS = [

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from asco_integrity.detectors.exact_text_reuse import _determine_confidence, detect_exact_text_reuse
-from asco_integrity.models import ParsedRecord
+from content_integrity.detectors.exact_text_reuse import _determine_confidence, detect_exact_text_reuse
+from content_integrity.models import ParsedRecord
 
 
 def _record(record_id: str, methods: str, results: str, **kwargs) -> ParsedRecord:

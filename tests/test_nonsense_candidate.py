@@ -7,10 +7,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from asco_integrity.detectors.nonsense_candidate import NonsenseCandidateDetector
-from asco_integrity.models import ParsedRecord
-from asco_integrity.pipeline import run_default_pipeline
-from asco_integrity.xml_parser import parse_xml
+from content_integrity.detectors.nonsense_candidate import NonsenseCandidateDetector
+from content_integrity.models import ParsedRecord
+from content_integrity.pipeline import run_default_pipeline
+from content_integrity.xml_parser import parse_xml
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -88,7 +88,7 @@ class NonsenseCandidateTests(unittest.TestCase):
             input_dir.mkdir()
             (input_dir / fixture.name).write_bytes(fixture.read_bytes())
             default_result = run_default_pipeline(input_dir, ROOT / "🤷_tortured.csv", Path(directory) / "default")
-            with patch("asco_integrity.pipeline.build_gpt_oss_client", return_value=StubClient()):
+            with patch("content_integrity.pipeline.build_gpt_oss_client", return_value=StubClient()):
                 enabled_result = run_default_pipeline(
                     input_dir,
                     ROOT / "🤷_tortured.csv",

@@ -49,7 +49,7 @@ tests/fixtures/eval_corpus/
 
 **Scope:** dictionary-miss detection only. Never overrides or auto-confirms — same annotate/candidate pattern as `context_validator.py`.
 
-**New file:** `asco_integrity/detectors/nonsense_candidate.py`
+**New file:** `content_integrity/detectors/nonsense_candidate.py`
 
 Logic:
 1. Run existing Level A dictionary matcher first (unchanged).
@@ -78,7 +78,7 @@ Logic:
 
 ## Item 3 — Dashboard sheet in the Excel workbook
 
-**File:** `asco_integrity/reporting.py`
+**File:** `content_integrity/reporting.py`
 
 Add one new sheet, `Dashboard`, built purely from data already computed in-memory during the run (no new detector calls, no new pass over records):
 
@@ -102,7 +102,7 @@ Implementation: build these as plain pandas `groupby().size()` on the same dataf
 
 **Do this before Item 2**, since Item 2 depends on it, but it's small enough to land as its own commit first.
 
-**File:** `asco_integrity/xml_parser.py` or `asco_integrity/utils.py` (wherever section text is assembled into `combined raw detector text`)
+**File:** `content_integrity/xml_parser.py` or `content_integrity/utils.py` (wherever section text is assembled into `combined raw detector text`)
 
 Change:
 - Confirm today: does `full_text` / detector input already exclude author lists, affiliations, and reference/citation blocks? If XML tags for these (e.g. `contrib-group`, `aff`, `ref-list`) are currently included in the text handed to detectors, exclude them explicitly at parse time — same way `table-wrap` is already excluded per section 4.2 of the design doc.

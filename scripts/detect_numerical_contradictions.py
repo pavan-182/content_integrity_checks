@@ -8,13 +8,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from asco_integrity.detectors.numerical_contradiction import (
+from content_integrity.detectors.numerical_contradiction import (
     PERCENTAGE_TOLERANCE,
     detect_numerical_contradictions,
 )
-from asco_integrity.reporting import write_csv
-from asco_integrity.utils import dedupe_records
-from asco_integrity.xml_parser import discover_xml_files, parse_xml_records
+from content_integrity.reporting import write_csv
+from content_integrity.utils import dedupe_records
+from content_integrity.xml_parser import discover_xml_files, parse_xml_records
 
 
 CSV_COLUMNS = [

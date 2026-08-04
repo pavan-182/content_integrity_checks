@@ -10,15 +10,15 @@ from unittest.mock import patch
 
 from openpyxl import load_workbook
 
-from asco_integrity.detectors import built_in_llm_rules, build_tortured_rule_index, detect_llm_trace, detect_tortured_phrases, load_tortured_rules
-from asco_integrity.models import Finding, ParsedRecord
-from asco_integrity.pipeline import _aggregate_findings, run_default_pipeline
-from asco_integrity.reporting import FINDINGS_COLUMNS, REVIEW_FINDINGS_COLUMNS
-from asco_integrity.template_detection import _candidate_pairs, _content_class, _similarity, build_normalized_text, build_skeleton_text, cluster_templates
-from asco_integrity.validators import ContextValidator
-from asco_integrity.validators.context_validator import _parse_validator_payload
-from asco_integrity.xml_parser import parse_xml, parse_xml_records
-from asco_integrity.utils import dedupe_records
+from content_integrity.detectors import built_in_llm_rules, build_tortured_rule_index, detect_llm_trace, detect_tortured_phrases, load_tortured_rules
+from content_integrity.models import Finding, ParsedRecord
+from content_integrity.pipeline import _aggregate_findings, run_default_pipeline
+from content_integrity.reporting import FINDINGS_COLUMNS, REVIEW_FINDINGS_COLUMNS
+from content_integrity.template_detection import _candidate_pairs, _content_class, _similarity, build_normalized_text, build_skeleton_text, cluster_templates
+from content_integrity.validators import ContextValidator
+from content_integrity.validators.context_validator import _parse_validator_payload
+from content_integrity.xml_parser import parse_xml, parse_xml_records
+from content_integrity.utils import dedupe_records
 
 
 def _write_temp_file(directory: Path, name: str, content: str) -> Path:
@@ -701,7 +701,7 @@ class PipelineTests(unittest.TestCase):
             )
 
             stub_client = StubClient()
-            with patch("asco_integrity.pipeline.build_gpt_oss_client", return_value=stub_client):
+            with patch("content_integrity.pipeline.build_gpt_oss_client", return_value=stub_client):
                 result = run_default_pipeline(
                     input_dir=input_dir,
                     tortured_dictionary_path=dict_path,

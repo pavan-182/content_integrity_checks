@@ -32,17 +32,17 @@ Add a **Validator** layer that wraps detector output. It never generates finding
 | PRD §10 requirement | Module | Status |
 |---|---|---|
 | Parse XML + metadata | `xml_parser.py` | implemented |
-| Detect known tortured phrases, show expected term | `asco_integrity/detectors/tortured_phrase.py` | implemented |
-| Detect LLM traces / chatbot residue | `asco_integrity/detectors/llm_trace.py` | implemented |
-| Compare abstracts, detect templates | `asco_integrity/template_detection.py` | implemented for the current batch |
-| Generate overall content risk | `asco_integrity/aggregation/risk_engine.py` | implemented |
+| Detect known tortured phrases, show expected term | `content_integrity/detectors/tortured_phrase.py` | implemented |
+| Detect LLM traces / chatbot residue | `content_integrity/detectors/llm_trace.py` | implemented |
+| Compare abstracts, detect templates | `content_integrity/template_detection.py` | implemented for the current batch |
+| Generate overall content risk | `content_integrity/aggregation/risk_engine.py` | implemented |
 | Show why risk was assigned | `aggregation/review_reason.py` | deferred |
-| Validate a candidate finding against context | `asco_integrity/validators/context_validator.py` | implemented |
+| Validate a candidate finding against context | `content_integrity/validators/context_validator.py` | implemented |
 
 ## 4. Data model
 
 ```python
-# asco_integrity/models.py — additions
+# content_integrity/models.py — additions
 
 @dataclass(slots=True)
 class ValidationResult:
@@ -140,12 +140,12 @@ The summary sheet adds `tortured_confirmed_count`, `tortured_rejected_count`, `t
 ## 7. Implementation Status
 
 The current codebase covers the V1 flow end to end:
-- `asco_integrity/xml_parser.py` parses `article`, `article_set`, and fallback XML roots into `ParsedRecord` objects.
-- `asco_integrity/detectors/tortured_phrase.py` and `asco_integrity/detectors/llm_trace.py` run the rule-based detectors.
-- `asco_integrity/template_detection.py` clusters abstracts from the current input batch only. It does not yet compare against a historical or external corpus.
-- `asco_integrity/pipeline.py` wires parsing, detectors, clustering, optional validation, and report generation together.
-- `asco_integrity/reporting.py` writes the JSONL, CSV, and workbook outputs, including the validation columns and `template_cluster` rows on the findings sheet.
-- `asco_integrity/validators/context_validator.py` adds the opt-in GPT-OSS 20B validation pass for `tortured_phrase` and `llm_response_trace` findings.
+- `content_integrity/xml_parser.py` parses `article`, `article_set`, and fallback XML roots into `ParsedRecord` objects.
+- `content_integrity/detectors/tortured_phrase.py` and `content_integrity/detectors/llm_trace.py` run the rule-based detectors.
+- `content_integrity/template_detection.py` clusters abstracts from the current input batch only. It does not yet compare against a historical or external corpus.
+- `content_integrity/pipeline.py` wires parsing, detectors, clustering, optional validation, and report generation together.
+- `content_integrity/reporting.py` writes the JSONL, CSV, and workbook outputs, including the validation columns and `template_cluster` rows on the findings sheet.
+- `content_integrity/validators/context_validator.py` adds the opt-in GPT-OSS 20B validation pass for `tortured_phrase` and `llm_response_trace` findings.
 - The validator writes `validation_status`, `validation_reason`, and `validated_by`; aggregation uses the status rules in §2 without hiding detailed findings.
 - The validator now uses a larger completion budget and can recover JSON from fenced or wrapped gateway responses.
 - The generated outputs include the compact reviewer queue `integrity_findings.csv`, its full diagnostic counterpart `detailed_findings.csv`, native numerical/design/trial reports, and the existing parsed-record, template, dictionary, warning, metadata, and workbook reports.

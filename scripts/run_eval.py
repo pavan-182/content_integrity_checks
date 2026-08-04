@@ -12,8 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from asco_integrity.pipeline import run_default_pipeline
-from asco_integrity.template_clustering import canonical_pair_key
+from content_integrity.pipeline import run_default_pipeline
+from content_integrity.template_clustering import canonical_pair_key
 
 
 CORPUS = ROOT / "tests" / "fixtures" / "eval_corpus"

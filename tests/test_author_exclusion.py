@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from asco_integrity.detectors import built_in_llm_rules, detect_llm_trace
-from asco_integrity.xml_parser import parse_xml
+from content_integrity.detectors import built_in_llm_rules, detect_llm_trace
+from content_integrity.xml_parser import parse_xml
 
 
 class AuthorExclusionTests(unittest.TestCase):

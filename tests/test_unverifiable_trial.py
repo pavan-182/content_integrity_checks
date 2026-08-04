@@ -11,14 +11,14 @@ import urllib.error
 from dataclasses import asdict, replace
 from pathlib import Path
 
-from asco_integrity.detectors.unverifiable_trial import (
+from content_integrity.detectors.unverifiable_trial import (
     CLINICAL_TRIALS_GOV,
     ClinicalTrialsGovClient,
     RegistryLookupResult,
     detect_unverifiable_trials,
     extract_trial_reference_claims,
 )
-from asco_integrity.models import ParsedRecord
+from content_integrity.models import ParsedRecord
 from scripts.detect_unverifiable_trials import CSV_COLUMNS
 
 

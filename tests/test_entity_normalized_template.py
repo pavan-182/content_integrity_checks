@@ -5,13 +5,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from asco_integrity.detectors.entity_normalized_template import (
+from content_integrity.detectors.entity_normalized_template import (
     _representation,
     _section_candidate_pairs,
     detect_entity_normalized_templates,
 )
-from asco_integrity.models import ParsedRecord
-from asco_integrity.utils import text_tokens
+from content_integrity.models import ParsedRecord
+from content_integrity.utils import text_tokens
 from scripts.detect_entity_normalized_templates import main as cli_main
 
 

@@ -10,25 +10,25 @@ from unittest.mock import patch
 
 from openpyxl import load_workbook
 
-from asco_integrity.detectors import built_in_llm_rules, detect_llm_trace_candidates
-from asco_integrity.detectors.llm_trace import candidate_to_finding
-from asco_integrity.detectors.llm_trace_fusion import (
+from content_integrity.detectors import built_in_llm_rules, detect_llm_trace_candidates
+from content_integrity.detectors.llm_trace import candidate_to_finding
+from content_integrity.detectors.llm_trace_fusion import (
     fuse_llm_trace_candidates,
     llm_reviewer_priority,
 )
-from asco_integrity.detectors.llm_trace_semantic import (
+from content_integrity.detectors.llm_trace_semantic import (
     SYSTEM_PROMPT,
     detect_semantic_traces,
     validate_model_response,
 )
-from asco_integrity.models import ParsedRecord, TraceTextBlock
-from asco_integrity.pipeline import run_default_pipeline
-from asco_integrity.rules import load_llm_trace_rules
-from asco_integrity.validators.llm_trace_validator import (
+from content_integrity.models import ParsedRecord, TraceTextBlock
+from content_integrity.pipeline import run_default_pipeline
+from content_integrity.rules import load_llm_trace_rules
+from content_integrity.validators.llm_trace_validator import (
     LLMTraceValidator,
     apply_llm_trace_validation,
 )
-from asco_integrity.xml_parser import parse_xml
+from content_integrity.xml_parser import parse_xml
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -459,7 +459,7 @@ class PipelineIntegrationTests(unittest.TestCase):
                 "Fingerprint - Tortured Phrase,Expected Text,Nb Retrieved Papers\n",
                 encoding="utf-8",
             )
-            with patch("asco_integrity.pipeline.build_gpt_oss_client", return_value=SemanticClient()):
+            with patch("content_integrity.pipeline.build_gpt_oss_client", return_value=SemanticClient()):
                 result = run_default_pipeline(
                     input_dir=input_dir,
                     tortured_dictionary_path=dictionary,

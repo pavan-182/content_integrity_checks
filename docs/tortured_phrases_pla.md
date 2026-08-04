@@ -23,13 +23,13 @@ pavan-182/content_integrity_checks
 Read these files before modifying anything:
 
 ```text
-asco_integrity/detectors/tortured_phrase.py
-asco_integrity/validators/context_validator.py
-asco_integrity/aggregation/risk_engine.py
-asco_integrity/pipeline.py
-asco_integrity/models.py
-asco_integrity/reporting.py
-asco_integrity/detectors/nonsense_candidate.py
+content_integrity/detectors/tortured_phrase.py
+content_integrity/validators/context_validator.py
+content_integrity/aggregation/risk_engine.py
+content_integrity/pipeline.py
+content_integrity/models.py
+content_integrity/reporting.py
+content_integrity/detectors/nonsense_candidate.py
 tests/test_pipeline.py
 ```
 
@@ -239,7 +239,7 @@ Do not claim this is overlapping-finding consolidation. It is exact duplicate co
 File:
 
 ```text
-asco_integrity/validators/context_validator.py
+content_integrity/validators/context_validator.py
 ```
 
 Update exception handling so that genuine model uncertainty remains different from technical or parsing failure.
@@ -301,7 +301,7 @@ Do not broadly catch `Exception` unless the current repository conventions requi
 File:
 
 ```text
-asco_integrity/models.py
+content_integrity/models.py
 ```
 
 No major schema redesign is required.
@@ -334,7 +334,7 @@ Do not add dictionary quality, source provenance, biomedical context, or other P
 Prefer a small private helper close to the aggregation logic in:
 
 ```text
-asco_integrity/pipeline.py
+content_integrity/pipeline.py
 ```
 
 Example:
@@ -369,7 +369,7 @@ If risk eligibility already belongs naturally in `risk_engine.py`, it may be pla
 File:
 
 ```text
-asco_integrity/pipeline.py
+content_integrity/pipeline.py
 ```
 
 Inside `_aggregate_findings()` or the equivalent aggregation path, create clearly named collections.
@@ -456,7 +456,7 @@ Add a separate candidate count to the abstract-level output.
 File:
 
 ```text
-asco_integrity/detectors/tortured_phrase.py
+content_integrity/detectors/tortured_phrase.py
 ```
 
 Add a small exact duplicate consolidation step before returning findings.

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
-from asco_integrity.pipeline import run_default_pipeline
+from content_integrity.pipeline import run_default_pipeline
 
 
 ROOT = Path(__file__).resolve().parents[1]

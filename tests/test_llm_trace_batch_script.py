@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from asco_integrity.models import ParsedRecord
-from asco_integrity.xml_parser import parse_xml
+from content_integrity.models import ParsedRecord
+from content_integrity.xml_parser import parse_xml
 from scripts.detect_llm_response_traces_llm import (
     RULES,
     SYSTEM_PROMPT,

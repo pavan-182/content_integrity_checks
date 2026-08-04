@@ -7,13 +7,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from asco_integrity.detectors.design_contradiction import (
+from content_integrity.detectors.design_contradiction import (
     DesignValidationResult,
     build_study_design_profile,
     detect_design_contradictions,
     extract_study_design_claims,
 )
-from asco_integrity.models import ParsedRecord
+from content_integrity.models import ParsedRecord
 from scripts.detect_design_contradictions import CSV_COLUMNS
 
 

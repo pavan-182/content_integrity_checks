@@ -1,7 +1,7 @@
 # ASCO Content Integrity Screening Pipeline
 
 **Status:** Current implementation  
-**Purpose:** Technical description of the batch workflow implemented in `asco_integrity`  
+**Purpose:** Technical description of the batch workflow implemented in `content_integrity`
 **Primary entry point:** `scripts/run_pipeline.py`
 
 **Diagram set:** [`docs/PIPELINE_DIAGRAMS.md`](PIPELINE_DIAGRAMS.md)
@@ -323,17 +323,17 @@ python -m unittest discover -s tests -v
 
 | Module | Responsibility |
 |---|---|
-| `asco_integrity/pipeline.py` | Orchestration, aggregation, CLI configuration, and output assembly |
-| `asco_integrity/xml_parser.py` | XML discovery, backward-compatible normalized extraction, lossless trace blocks, warnings |
-| `asco_integrity/detectors/llm_trace.py` | Deterministic response-residue matching from the shared YAML catalogue |
-| `asco_integrity/detectors/llm_trace_semantic.py` | Opt-in semantic variants, novel candidates, batching, and exact evidence verification |
-| `asco_integrity/detectors/llm_trace_fusion.py` | Deterministic–semantic deduplication and LLM priority |
-| `asco_integrity/detectors/tortured_phrase.py` | Dictionary loading, query interpretation, indexing, and matching |
-| `asco_integrity/detectors/nonsense_candidate.py` | Opt-in sentence prefiltering and GPT-OSS candidate annotation |
-| `asco_integrity/template_detection.py` | Masking, candidate generation, similarity, and clustering |
-| `asco_integrity/validators/context_validator.py` | Optional IntelliHub/GPT-OSS finding validation |
-| `asco_integrity/validators/llm_trace_validator.py` | Selective response-residue validation with source context |
-| `asco_integrity/aggregation/risk_engine.py` | Record-level risk rules |
-| `asco_integrity/reporting.py` | JSONL, CSV, and Excel generation |
-| `asco_integrity/models.py` | Records, findings, validation results, and cluster-member data models |
-| `asco_integrity/utils.py` | Shared normalization, formatting, and deduplication helpers |
+| `content_integrity/pipeline.py` | Orchestration, aggregation, CLI configuration, and output assembly |
+| `content_integrity/xml_parser.py` | XML discovery, backward-compatible normalized extraction, lossless trace blocks, warnings |
+| `content_integrity/detectors/llm_trace.py` | Deterministic response-residue matching from the shared YAML catalogue |
+| `content_integrity/detectors/llm_trace_semantic.py` | Opt-in semantic variants, novel candidates, batching, and exact evidence verification |
+| `content_integrity/detectors/llm_trace_fusion.py` | Deterministic–semantic deduplication and LLM priority |
+| `content_integrity/detectors/tortured_phrase.py` | Dictionary loading, query interpretation, indexing, and matching |
+| `content_integrity/detectors/nonsense_candidate.py` | Opt-in sentence prefiltering and GPT-OSS candidate annotation |
+| `content_integrity/template_detection.py` | Masking, candidate generation, similarity, and clustering |
+| `content_integrity/validators/context_validator.py` | Optional IntelliHub/GPT-OSS finding validation |
+| `content_integrity/validators/llm_trace_validator.py` | Selective response-residue validation with source context |
+| `content_integrity/aggregation/risk_engine.py` | Record-level risk rules |
+| `content_integrity/reporting.py` | JSONL, CSV, and Excel generation |
+| `content_integrity/models.py` | Records, findings, validation results, and cluster-member data models |
+| `content_integrity/utils.py` | Shared normalization, formatting, and deduplication helpers |

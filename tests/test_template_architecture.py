@@ -4,10 +4,10 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from asco_integrity.models import Finding, ParsedRecord
-from asco_integrity.pipeline import _aggregate_findings, _family_rows, _pair_finding_rows
-from asco_integrity.reporting import PAIR_COLUMNS, write_csv
-from asco_integrity.template_clustering import (
+from content_integrity.models import Finding, ParsedRecord
+from content_integrity.pipeline import _aggregate_findings, _family_rows, _pair_finding_rows
+from content_integrity.reporting import PAIR_COLUMNS, write_csv
+from content_integrity.template_clustering import (
     PairFinding,
     cluster_template_findings,
     merge_pair_findings,

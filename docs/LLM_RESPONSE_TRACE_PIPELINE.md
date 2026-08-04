@@ -28,7 +28,7 @@ Excluded XML content remains limited to known non-abstract metadata: author/cont
 
 ## Shared rule catalogue
 
-`asco_integrity/rules/llm_response_trace_rules.yaml` is the only production rule catalogue. The loader validates required fields, controlled categories, severity, signal level, regex syntax, descriptions, and duplicate IDs. Deterministic regexes and semantic prompt descriptions are generated from it. Run metadata records its version, SHA-256 checksum, and rule count.
+`content_integrity/rules/llm_response_trace_rules.yaml` is the only production rule catalogue. The loader validates required fields, controlled categories, severity, signal level, regex syntax, descriptions, and duplicate IDs. Deterministic regexes and semantic prompt descriptions are generated from it. Run metadata records its version, SHA-256 checksum, and rule count.
 
 Rules are classified as:
 

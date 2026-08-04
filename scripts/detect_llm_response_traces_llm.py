@@ -13,8 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from asco_integrity.detectors.llm_trace import candidate_to_finding
-from asco_integrity.detectors.llm_trace_semantic import (
+from content_integrity.detectors.llm_trace import candidate_to_finding
+from content_integrity.detectors.llm_trace_semantic import (
     DEFAULT_INPUT_TOKEN_BUDGET,
     DEFAULT_MAX_OUTPUT_TOKENS,
     DEFAULT_MAX_RECORDS_PER_BATCH,
@@ -32,10 +32,10 @@ from asco_integrity.detectors.llm_trace_semantic import (
     pack_batches,
     validate_model_response,
 )
-from asco_integrity.models import ParsedRecord
-from asco_integrity.utils import dedupe_records, normalize_whitespace
-from asco_integrity.validators.context_validator import build_gpt_oss_client
-from asco_integrity.xml_parser import discover_xml_files, parse_xml_records
+from content_integrity.models import ParsedRecord
+from content_integrity.utils import dedupe_records, normalize_whitespace
+from content_integrity.validators.context_validator import build_gpt_oss_client
+from content_integrity.xml_parser import discover_xml_files, parse_xml_records
 
 
 CSV_COLUMNS = [
