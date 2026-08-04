@@ -1,4 +1,4 @@
-# ######<> POC
+# <######> POC
 
 The pipeline parses XML, runs deterministic checks, optionally uses the configured endpoint for semantic discovery and validation, and writes CSV, JSONL, and Excel review outputs.
 
