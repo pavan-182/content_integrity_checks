@@ -42,6 +42,13 @@ from .detectors.unverifiable_trial import (
     TrialVerificationResult,
     detect_unverifiable_trials,
 )
+from .enriched_reporting import (
+    ABSTRACT_REPORT_COLUMNS,
+    FAMILY_REPORT_COLUMNS,
+    PAIR_REPORT_COLUMNS,
+    REPORT_VERSION,
+    build_enriched_reports,
+)
 from .template_clustering import (
     CONFIDENCE_RANK,
     PairFinding,
@@ -678,6 +685,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     entity_template_findings = detect_entity_normalized_templates(records)
     pair_findings = merge_pair_findings(exact_template_findings, entity_template_findings)
     template_rows = cluster_template_findings(pair_findings, records)
+    enriched_pair_rows, enriched_family_rows, enriched_abstract_rows = build_enriched_reports(records)
     field_inventory_rows, root_summary_rows = _inventory_rows(records)
     abstract_summary_rows = _aggregate_findings(records, findings, pair_findings, template_rows, llm_rules)
     findings_rows = _findings_rows(findings)
@@ -757,6 +765,9 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         ("legacy_similarity_threshold", config.legacy_similarity_threshold),
         ("nonsense_candidate_detection", "enabled" if config.detect_nonsense_candidates else "disabled"),
         ("clinical_trial_registry_lookup", "enabled" if config.verify_trials else "local_checks_only"),
+        ("enriched_report_version", REPORT_VERSION),
+        ("enriched_pair_count", len(enriched_pair_rows)),
+        ("enriched_family_count", len(enriched_family_rows)),
         ("limitations", "Rule-based screening flags explicit LLM response traces, known tortured phrases, and repeated abstract skeletons; optional GPT-OSS stages only annotate candidates, and the pipeline does not detect AI-generated authorship."),
         ("excluded_scope", "AI-generated text detection"),
     ]
@@ -817,6 +828,21 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         output_dir / "template_pair_findings.csv",
         template_finding_rows,
         PAIR_COLUMNS,
+    )
+    output_paths["enriched_pairs_csv"] = write_csv(
+        output_dir / "enriched_template_pairs.csv",
+        enriched_pair_rows,
+        PAIR_REPORT_COLUMNS,
+    )
+    output_paths["enriched_families_csv"] = write_csv(
+        output_dir / "enriched_template_families.csv",
+        enriched_family_rows,
+        FAMILY_REPORT_COLUMNS,
+    )
+    output_paths["enriched_abstracts_csv"] = write_csv(
+        output_dir / "enriched_template_abstracts.csv",
+        enriched_abstract_rows,
+        ABSTRACT_REPORT_COLUMNS,
     )
     if config.compare_legacy_template_clustering:
         from .template_detection import cluster_templates

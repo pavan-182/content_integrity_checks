@@ -8,7 +8,7 @@ from .pair_classification import PairClassification, classify_pairs
 
 
 FAMILY_VERSION = "asco-suspicious-families-v1"
-ELIGIBLE_CLASSES = {"possible_template_reuse", "possible_related_duplicate"}
+ELIGIBLE_CLASSES = {"possible_template_reuse"}
 MIN_EDGE_SCORE = 0.75
 
 

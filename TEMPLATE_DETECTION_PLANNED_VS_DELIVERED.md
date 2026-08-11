@@ -10,10 +10,10 @@ The original goal was to turn template detection from a broad masked-similarity 
 
 Work Items 1–15 were completed as code, tests, validation utilities, and exported artifacts. Work Item 16 remains deliberately deferred research.
 
-The final repository contains two related paths:
+The final repository contains one default runner with two coordinated output layers:
 
 1. **Production batch runner:** `scripts/run_pipeline.py` parses a directory of XML files, runs the production integrity checks, consolidates exact-text and entity-normalized template evidence, builds verified families, assigns record-level risk, and creates CSV/JSONL/Excel reports.
-2. **Advanced template work-item toolchain:** Work Items 3–15 add reusable features, routed candidates, evidence tiers, study context, transparent classifications, suspicious-family rules, editorial priorities, enriched reports, entity substitutions, and signal-validation exports. These modules exist and are tested, but the complete Work Item 5–15 chain is not yet wired into the default production runner as one end-to-end path.
+2. **Advanced review layer:** The default runner now calls the Work Items 5–14 route, evidence, context, classification, priority, substitution, and family modules through `build_enriched_reports`, producing enriched pair, family, and abstract CSVs. Work Item 15 remains an offline validation gate and does not run as production detection.
 
 The system is usable now as a candidate-generation and editorial-triage tool. High and very-high template candidates are the strongest review queue. Medium local entity-substitution candidates still contain oncology genre noise and require manual review.
 
@@ -107,6 +107,7 @@ Each run writes:
 - `parsed_records.jsonl` and `parsed_records.csv`;
 - `integrity_findings.csv` and `detailed_findings.csv`;
 - `template_pair_findings.csv` and `template_clusters.csv`;
+- `enriched_template_pairs.csv`, `enriched_template_families.csv`, and `enriched_template_abstracts.csv`;
 - `numerical_contradictions.csv` and `design_contradictions.csv`;
 - `trial_verification.csv`;
 - `pattern_dictionary.csv`, `parse_warnings.csv`, and `run_metadata.jsonl`; and

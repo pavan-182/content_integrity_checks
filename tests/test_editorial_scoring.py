@@ -17,6 +17,7 @@ class EditorialScoringTests(unittest.TestCase):
         self.assertEqual(assign_editorial_priority(_classification("possible_template_reuse", 0.75)).review_priority, "Medium")
         self.assertEqual(assign_editorial_priority(_classification("possible_related_duplicate", 0.85)).review_priority, "High")
         self.assertEqual(assign_editorial_priority(_classification("possible_companion_analysis", 1.0)).review_priority, "Low")
+        self.assertEqual(assign_editorial_priority(_classification("possible_related_work", 1.0)).review_priority, "Low")
 
 
 if __name__ == "__main__":

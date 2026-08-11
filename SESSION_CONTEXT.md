@@ -35,12 +35,14 @@ Detect suspicious abstract-template reuse in ASCO XML abstracts using transparen
 ## Final production decision and validation
 
 - The production template detector remains deterministic/hybrid: exact text reuse plus entity-normalized local template matching.
+- The default runner now also executes the advanced route/evidence/context/classification/priority/substitution/family chain through `build_enriched_reports` and writes `enriched_template_pairs.csv`, `enriched_template_families.csv`, and `enriched_template_abstracts.csv`.
 - Generic sponsor, statistical, Methods, and common oncology phrases are excluded from rare-phrase evidence.
 - Merged exact/entity evidence keeps the strongest confidence; duplicate detector evidence does not promote confidence.
 - Shared trial IDs route to `possible_companion_analysis`; shared authors/affiliations route to `possible_related_work`. Only `possible_template_reuse` pairs can create suspicious families or template risk.
 - Unsupported registry notices remain visible for manual verification but do not contribute to integrity-risk scoring.
 - The final labelled benchmark is 81 predicted pairs: 63 TP, 11 FP, 21 FN, 83 TN; precision 85.1%, recall 75.0%, F1 79.7% (178 automatic labels; 2 manual labels excluded).
 - The final real-ASCO run contains 13 unique template-pair rows (26 directional CSV rows), all routed as related/companion work, 0 suspicious families, 519 abstracts with `template_flag=No`, and no sponsor/statistical boilerplate evidence.
+- The wired enriched run contains 2,382 routed candidate pairs: 2,381 `insufficient_evidence`, 1 `possible_related_work` at Low priority, and 0 advanced suspicious families.
 - Full regression suite: 203 tests passed.
 
 ### Work Item 1

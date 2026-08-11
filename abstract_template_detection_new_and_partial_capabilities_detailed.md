@@ -17,6 +17,7 @@ Validation results:
 
 - Reviewer-labelled benchmark: 85.1% precision, 75.0% recall, 79.7% F1 (178 automatic labels; 2 manual labels excluded).
 - Real-ASCO corpus: 519 abstracts, 13 unique related/companion pairs, 0 suspicious families, and no sponsor/statistical boilerplate evidence.
+- The default runner now writes the integrated advanced review chain: 2,382 routed candidate pairs, 2,381 insufficient-evidence pairs, 1 possible-related-work pair at Low priority, 519 abstract summaries, and 0 advanced suspicious families.
 - Full regression suite: 203 tests passed.
 - Updated architecture diagram: `template_detection_low_level.html`.
 

@@ -34,8 +34,8 @@ def assign_editorial_priority(classification: PairClassification) -> EditorialPr
     score = classification.review_score
     if classification.pair_class == "insufficient_evidence":
         priority, reason = "None", "No primary evidence."
-    elif classification.pair_class == "possible_companion_analysis":
-        priority, reason = "Low", "Aligned companion context caps priority; context does not increase suspicion."
+    elif classification.pair_class in {"possible_companion_analysis", "possible_related_work"}:
+        priority, reason = "Low", "Aligned related-study context caps priority; context does not increase suspicion."
     elif score >= HIGH_THRESHOLD:
         priority, reason = "High", "Exact or substantial primary evidence meets the 0.85 high-priority band."
     elif score >= MEDIUM_THRESHOLD:

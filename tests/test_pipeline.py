@@ -487,6 +487,9 @@ class PipelineTests(unittest.TestCase):
             self.assertTrue(result.output_paths["parsed_jsonl"].exists())
             self.assertTrue(result.output_paths["findings_csv"].exists())
             self.assertTrue(result.output_paths["detailed_findings_csv"].exists())
+            self.assertTrue(result.output_paths["enriched_pairs_csv"].exists())
+            self.assertTrue(result.output_paths["enriched_families_csv"].exists())
+            self.assertTrue(result.output_paths["enriched_abstracts_csv"].exists())
             with result.output_paths["findings_csv"].open(newline="", encoding="utf-8") as handle:
                 self.assertEqual(next(csv.reader(handle)), REVIEW_FINDINGS_COLUMNS)
             with result.output_paths["detailed_findings_csv"].open(newline="", encoding="utf-8") as handle:

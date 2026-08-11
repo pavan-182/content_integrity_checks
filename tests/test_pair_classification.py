@@ -20,6 +20,7 @@ class PairClassificationTests(unittest.TestCase):
         self.assertEqual(classify_pair(_score(), _context("likely_companion_analysis")).pair_class, "insufficient_evidence")
         self.assertEqual(classify_pair(_score("exact_results_section"), _context("likely_companion_analysis")).pair_class, "possible_related_duplicate")
         self.assertEqual(classify_pair(_score("substantial_shared_original_block"), _context("likely_companion_analysis")).pair_class, "possible_companion_analysis")
+        self.assertEqual(classify_pair(_score("substantial_shared_original_block"), _context("likely_same_study")).pair_class, "possible_related_work")
         self.assertEqual(classify_pair(_score("strong_masked_body_with_original_support"), _context("no_structured_context")).pair_class, "possible_template_reuse")
 
 

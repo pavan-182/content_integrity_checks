@@ -19,9 +19,9 @@ class FamilyClusteringTests(unittest.TestCase):
             _pair("E", "F", "possible_companion_analysis", 1.0),
             _pair("G", "H", "possible_template_reuse", 0.65),
         ])
-        self.assertEqual({row.record_id for row in rows}, {"A", "B", "C", "D"})
+        self.assertEqual({row.record_id for row in rows}, {"A", "B", "C"})
         self.assertEqual({row.representative_record_id for row in rows}, {"B"})
-        self.assertEqual(next(row.member_status for row in rows if row.record_id == "D"), "outlier")
+        self.assertEqual(next(row.member_status for row in rows if row.record_id == "A"), "member")
 
 
 if __name__ == "__main__":

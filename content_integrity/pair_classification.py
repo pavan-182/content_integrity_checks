@@ -64,6 +64,10 @@ def classify_pair(score: TieredEvidenceScore, context: StudyContextComparison) -
         pair_class = "possible_companion_analysis"
         rule_path = "primary evidence + aligned study context + endpoint/companion difference -> possible companion analysis"
         limitations = "Companion context is an interpretation and remains subject to editorial review."
+    elif related_context:
+        pair_class = "possible_related_work"
+        rule_path = "primary evidence + related-study context -> possible related work"
+        limitations = "Related-study context explains the overlap but remains subject to editorial review."
     else:
         pair_class = "possible_template_reuse"
         rule_path = "primary evidence + no aligned companion explanation -> possible template reuse"
