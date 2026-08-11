@@ -64,7 +64,7 @@ The detailed template workflow planned the following stages:
 | 8 | Tiered evidence scoring | Complete. Primary evidence is required; Results/Conclusions receive stronger support; context cannot create a finding. |
 | 9 | Same-study and companion context | Complete. Trial, registry, dates, sample, population, treatment, endpoint, author, and affiliation context is exported without raising evidence scores. |
 | 10 | Transparent pair classification | Complete. Versioned rules produce template-reuse, related-duplicate, companion, or insufficient-evidence outcomes. |
-| 11 | Suspicious family clustering | Complete. Only eligible high-scoring pair classes create edges; representatives and transitive outliers are checked. |
+| 11 | Suspicious family clustering | Complete. Only high-scoring `possible_template_reuse` edges participate; components require at least three abstracts, and representatives and transitive outliers are checked. |
 | 12 | Editorial priority | Complete. Auditable evidence bands map to High, Medium, Low, or None; context and family size do not raise priority. |
 | 13 | Enriched reporting | Complete. Pair, family, and abstract schemas join routes, evidence, context, classifications, priorities, and family state. |
 | 14 | Rich entity substitutions | Complete. Shared, side-specific, and likely substituted typed values retain supporting sentences. |
@@ -103,14 +103,14 @@ Each run writes:
 
 - `parsed_records.jsonl` and `parsed_records.csv`;
 - `integrity_findings.csv` and `detailed_findings.csv`;
-- `template_pair_findings.csv` and `template_clusters.csv`;
+- `template_pair_findings.csv`, `template_pair_candidates.csv`, and `template_clusters.csv`;
 - `enriched_template_pairs.csv`, `enriched_template_families.csv`, and `enriched_template_abstracts.csv`;
 - `numerical_contradictions.csv` and `design_contradictions.csv`;
 - `trial_verification.csv`;
 - `pattern_dictionary.csv`, `parse_warnings.csv`, and `run_metadata.jsonl`; and
 - `content_integrity_screening_poc.xlsx`.
 
-Template pair CSV rows are directional for abstract-level review. Two rows normally represent one canonical pair and must not be counted as two independent findings.
+`template_pair_findings.csv` contains only reviewable findings and writes two directional rows per canonical pair with one stable `pair_id`. `template_pair_candidates.csv` and `enriched_template_pairs.csv` retain one canonical row per routed candidate, including insufficient-evidence candidates.
 
 ## 5. NER decision and final behavior
 
@@ -194,9 +194,11 @@ The final production run processed:
 - 519 total records;
 - 0 parse warnings or failures;
 - 2,382 routed candidate pairs;
+- 2,369 insufficient-evidence candidates, retained outside the reviewer findings file;
 - 13 authoritative finding pairs: 9 possible template reuse and 4 possible related work;
+- 26 directional reviewer rows sharing 13 stable pair IDs;
 - 8 High, 1 Medium, and 4 Low priorities;
-- 8 suspicious families;
+- 1 verified 3-member suspicious family;
 - 6 numerical contradiction candidates; and
 - 5 trial references requiring manual verification because their registries are unsupported by the V1 automated adapter.
 
@@ -206,10 +208,11 @@ Review package:
 
 - `outputs/canonical_real_asco_20260811/content_integrity_screening_poc.xlsx`
 - `outputs/canonical_real_asco_20260811/template_pair_findings.csv`
+- `outputs/canonical_real_asco_20260811/template_pair_candidates.csv`
 - `outputs/canonical_real_asco_20260811/template_clusters.csv`
 - `outputs/canonical_real_asco_20260811/template_detector_evidence.csv`
 
-Run identity: base commit `21354bb502f9dbf19c22369470a3e388cb3f1e4f`, dirty worktree `true`, input manifest SHA-256 `184062685d22daf76c141665f04056ec0d9e6d9f77a3a140629dcb8c83fb5425`, default local config, timestamp `2026-08-11T10:46:52.755588+00:00`. The metadata file records the complete config. The 13 authoritative findings exactly match the 13 unique detector-evidence pairs.
+`run_metadata.jsonl` records the clean commit SHA, `code_worktree_dirty=false`, input manifest SHA-256, complete config, and timestamp. The workbook reconciles to the CSVs: 26 template-pair rows, 1 family row, and 519 abstract-summary rows.
 
 ## 8. Performance issue found and fixed
 
@@ -244,9 +247,8 @@ The shortest responsible next path is:
 
 1. Have reviewers label the 13 authoritative real-ASCO finding pairs, starting with the 8 High and 1 Medium candidates.
 2. Use those labels to recalibrate medium local entity-substitution behavior, especially generic one-sentence oncology matches.
-3. Commit the authoritative-pipeline change and regenerate the release artifact so `code_worktree_dirty` is false.
-4. Run a representative scale test before claiming readiness for approximately 6,000 abstracts.
-5. Start Work Item 16 only if reviewer evidence shows a specific recall gap that the existing direct and entity-normalized methods cannot cover.
+3. Run a representative scale test before claiming readiness for approximately 6,000 abstracts.
+4. Start Work Item 16 only if reviewer evidence shows a specific recall gap that the existing direct and entity-normalized methods cannot cover.
 
 ## 11. Final assessment
 

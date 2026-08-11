@@ -58,7 +58,8 @@ def build_suspicious_families(classifications: list[PairClassification]) -> list
         components.append(sorted(members))
 
     output = []
-    for index, members in enumerate(sorted(components, key=lambda values: (-len(values), values)), start=1):
+    verified_components = [members for members in components if len(members) >= 3]
+    for index, members in enumerate(sorted(verified_components, key=lambda values: (-len(values), values)), start=1):
         member_set = set(members)
         family_edges = {pair: score for pair, score in edge_scores.items() if set(pair) <= member_set}
         representative = min(

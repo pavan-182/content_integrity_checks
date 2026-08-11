@@ -50,6 +50,7 @@ from .enriched_reporting import (
     PAIR_REPORT_COLUMNS,
     REPORT_VERSION,
     build_enriched_reports,
+    directional_finding_rows,
 )
 from .template_clustering import (
     CONFIDENCE_RANK,
@@ -802,6 +803,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     enriched_pair_rows, enriched_family_rows, enriched_abstract_rows = build_enriched_reports(
         records, [*exact_template_findings, *entity_template_findings]
     )
+    reviewer_pair_rows = directional_finding_rows(enriched_pair_rows)
     field_inventory_rows, root_summary_rows = _inventory_rows(records)
     abstract_summary_rows = _aggregate_findings(records, findings, [], [], llm_rules)
     _apply_authoritative_template_results(abstract_summary_rows, enriched_pair_rows, enriched_abstract_rows)
@@ -892,6 +894,9 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         ("clinical_trial_registry_lookup", "enabled" if config.verify_trials else "local_checks_only"),
         ("enriched_report_version", REPORT_VERSION),
         ("enriched_pair_count", len(enriched_pair_rows)),
+        ("template_finding_pair_count", len(reviewer_pair_rows) // 2),
+        ("template_finding_directional_row_count", len(reviewer_pair_rows)),
+        ("template_insufficient_evidence_count", sum(row["review_priority"] == "None" for row in enriched_pair_rows)),
         ("enriched_family_count", len(enriched_family_rows)),
         ("limitations", "Rule-based screening flags explicit LLM response traces, known tortured phrases, and repeated abstract skeletons; optional GPT-OSS stages only annotate candidates, and the pipeline does not detect AI-generated authorship."),
         ("excluded_scope", "AI-generated text detection"),
@@ -951,6 +956,11 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     )
     output_paths["template_pairs_csv"] = write_csv(
         output_dir / "template_pair_findings.csv",
+        reviewer_pair_rows,
+        PAIR_REPORT_COLUMNS,
+    )
+    output_paths["template_pair_candidates_csv"] = write_csv(
+        output_dir / "template_pair_candidates.csv",
         enriched_pair_rows,
         PAIR_REPORT_COLUMNS,
     )
@@ -1002,7 +1012,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         root_summary_rows=root_summary_rows,
         abstract_summary_rows=abstract_summary_rows,
         findings_rows=integrity_finding_rows,
-        pair_rows=enriched_pair_rows,
+        pair_rows=reviewer_pair_rows,
         cluster_rows=enriched_family_rows,
         dictionary_rows=dictionary_rows,
         parse_warning_rows=parse_warning_rows,

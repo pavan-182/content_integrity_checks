@@ -436,15 +436,25 @@ class PipelineTests(unittest.TestCase):
             with result.output_paths["template_pairs_csv"].open(newline="", encoding="utf-8") as handle:
                 rows = list(csv.DictReader(handle))
 
-            self.assertEqual(len(rows), 1)
-            self.assertEqual({rows[0]["left_record_id"], rows[0]["right_record_id"]}, {"TPL-A", "TPL-B"})
-            self.assertEqual(rows[0]["pair_class"], "possible_template_reuse")
-            self.assertEqual(rows[0]["editor_label"], "not_reviewed")
+            self.assertEqual(len(rows), 2)
+            self.assertEqual({row["pair_id"] for row in rows}, {"PAIR-TPL-A--TPL-B"})
+            self.assertEqual(
+                {(row["left_record_id"], row["right_record_id"]) for row in rows},
+                {("TPL-A", "TPL-B"), ("TPL-B", "TPL-A")},
+            )
+            self.assertEqual({row["pair_class"] for row in rows}, {"possible_template_reuse"})
+            self.assertTrue(all(row["review_priority"] != "None" for row in rows))
+            self.assertTrue(all(row["editor_label"] == "not_reviewed" for row in rows))
+
+            with result.output_paths["template_pair_candidates_csv"].open(newline="", encoding="utf-8") as handle:
+                candidates = list(csv.DictReader(handle))
+            self.assertEqual(len(candidates), 1)
 
             workbook = load_workbook(result.output_paths["workbook"])
             worksheet = workbook["Template Pairs"]
             headers = [cell.value for cell in worksheet[1]]
             editor_column = headers.index("editor_label") + 1
+            self.assertEqual(worksheet.max_row - 1, len(rows))
             self.assertEqual(worksheet.cell(2, editor_column).value, "not_reviewed")
             self.assertIn("acceptable_overlap", worksheet.data_validations.dataValidation[0].formula1)
             summaries = {row["record_id"]: row for row in result.abstract_summary_rows}
@@ -453,8 +463,8 @@ class PipelineTests(unittest.TestCase):
                 {row["strongest_pair_classification"] for row in summaries.values()},
                 {rows[0]["pair_class"]},
             )
-            self.assertEqual(result.abstract_summary_rows[0]["template_cluster_flag"], "Yes")
-            self.assertEqual(result.abstract_summary_rows[1]["template_cluster_flag"], "Yes")
+            self.assertEqual(result.abstract_summary_rows[0]["template_cluster_flag"], "No")
+            self.assertEqual(result.abstract_summary_rows[1]["template_cluster_flag"], "No")
 
     def test_full_pipeline_creates_workbook(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir_str:
@@ -490,6 +500,7 @@ class PipelineTests(unittest.TestCase):
             self.assertTrue(result.output_paths["findings_csv"].exists())
             self.assertTrue(result.output_paths["detailed_findings_csv"].exists())
             self.assertTrue(result.output_paths["enriched_pairs_csv"].exists())
+            self.assertTrue(result.output_paths["template_pair_candidates_csv"].exists())
             self.assertTrue(result.output_paths["enriched_families_csv"].exists())
             self.assertTrue(result.output_paths["enriched_abstracts_csv"].exists())
             with result.output_paths["findings_csv"].open(newline="", encoding="utf-8") as handle:

@@ -11,6 +11,22 @@ def _pair(left: str, right: str, pair_class: str, score: float) -> PairClassific
 
 
 class FamilyClusteringTests(unittest.TestCase):
+    def test_strong_pair_is_not_a_family(self) -> None:
+        self.assertEqual(
+            build_suspicious_families([_pair("A", "B", "possible_template_reuse", 0.9)]),
+            [],
+        )
+
+    def test_three_compatible_strong_pairs_form_one_family(self) -> None:
+        rows = build_suspicious_families([
+            _pair("A", "B", "possible_template_reuse", 0.9),
+            _pair("A", "C", "possible_template_reuse", 0.9),
+            _pair("B", "C", "possible_template_reuse", 0.9),
+        ])
+        self.assertEqual({row.family_id for row in rows}, {"FAM-0001"})
+        self.assertEqual({row.record_id for row in rows}, {"A", "B", "C"})
+        self.assertEqual({row.family_size for row in rows}, {3})
+
     def test_only_strong_eligible_edges_connect_and_transitive_outlier_is_marked(self) -> None:
         rows = build_suspicious_families([
             _pair("A", "B", "possible_template_reuse", 0.9),

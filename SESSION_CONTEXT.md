@@ -41,9 +41,10 @@ Detect suspicious abstract-template reuse in ASCO XML abstracts using transparen
 - Shared authors or affiliations alone do not suppress template reuse. Related-work classifications require structured study context; exact body/Results reuse retains precedence.
 - Unsupported registry notices remain visible for manual verification but do not contribute to integrity-risk scoring.
 - The final labelled benchmark is 81 predicted pairs: 63 TP, 11 FP, 21 FN, 83 TN; precision 85.1%, recall 75.0%, F1 79.7% (178 automatic labels; 2 manual labels excluded).
-- Canonical 519-record run: `outputs/canonical_real_asco_20260811`, based on `21354bb502f9dbf19c22369470a3e388cb3f1e4f` plus the current dirty worktree, corpus SHA-256 `184062685d22daf76c141665f04056ec0d9e6d9f77a3a140629dcb8c83fb5425`, default local config, at `2026-08-11T10:46:52.755588+00:00`.
-- That run contains 2,382 routed pairs: 2,369 insufficient, 9 possible template reuse, and 4 possible related work. The 13 authoritative findings exactly equal the 13 unique raw detector pairs; priorities are 8 High, 1 Medium, and 4 Low, with 8 suspicious families.
-- Full regression suite: 203 tests passed.
+- Canonical 519-record run: `outputs/canonical_real_asco_20260811`. Its `run_metadata.jsonl` records the clean commit SHA, corpus SHA-256, complete config, and timestamp.
+- That run contains 2,382 canonical routed pairs: 2,369 insufficient candidates and 13 unique findings (9 possible template reuse, 4 possible related work). The reviewer CSV/workbook contain 26 directional rows sharing 13 stable pair IDs; priorities are 8 High, 1 Medium, and 4 Low.
+- One verified 3-member family is reported. Two-abstract pair findings do not receive family IDs. All 519 abstracts remain in `Abstract Summary`.
+- Full regression suite: 206 tests passed.
 
 ### Work Item 1
 
@@ -109,7 +110,7 @@ Implemented in `content_integrity/template_features.py`:
 
 ### Work Item 11
 
-- `content_integrity.family_clustering.cluster_suspicious_families` creates graph edges only for `possible_template_reuse` and `possible_related_duplicate` pairs with review score at least 0.75.
+- `content_integrity.family_clustering.cluster_suspicious_families` creates graph edges only for `possible_template_reuse` pairs with review score at least 0.75; components smaller than three abstracts are not families.
 - Each component selects an evidence-weighted representative; members without a direct eligible edge to it are marked as outliers. Companion and insufficient-evidence pairs remain excluded from family edges.
 - `outputs/local_regional_suspicious_families.csv` contains only its schema header because the supplied corpus has no eligible classified edges.
 
@@ -162,4 +163,4 @@ python3 scripts/create_entity_annotation_sample.py \
 python3 -m unittest tests.test_entity_extraction tests.test_entity_normalized_template tests.test_pipeline
 ```
 
-The latest full test run passed 203 tests. The pipeline tests intentionally log mocked validator failures while still passing.
+The latest full test run passed 206 tests. The pipeline tests intentionally log mocked validator failures while still passing.

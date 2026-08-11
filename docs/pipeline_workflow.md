@@ -251,9 +251,10 @@ Every run creates these files in the configured output directory:
 | `numerical_contradictions.csv` | Native detailed numerical-contradiction findings |
 | `design_contradictions.csv` | Native detailed study-design contradiction findings |
 | `trial_verification.csv` | All discovered trial references and their verification outcomes |
-| `template_pair_findings.csv` | Authoritative enriched pair rows with routes, detector evidence, classification, priority, context, and substitutions |
+| `template_pair_findings.csv` | Reviewable authoritative findings only, with two directional rows sharing one stable pair ID |
+| `template_pair_candidates.csv` | One canonical row per routed candidate, including insufficient-evidence candidates |
 | `template_detector_evidence.csv` | Raw merged exact-text and entity-normalized evidence retained for audit |
-| `template_clusters.csv` | Authoritative suspicious-family rows |
+| `template_clusters.csv` | Authoritative verified family rows for groups of at least three abstracts |
 | `enriched_template_*.csv` | Compatibility copies of the authoritative pair, family, and abstract views |
 | `pattern_dictionary.csv` | Effective LLM and tortured-phrase rules used by the run |
 | `parse_warnings.csv` | Parser warnings and record-ID deduplication actions |
@@ -272,7 +273,7 @@ The workbook contains nine sheets:
 8. **Parse Warnings** — ingestion and data-quality issues; and
 9. **Run Metadata** — configuration and audit context.
 
-Renamed fields: `similarity_score` is not used for new families; use `family_confidence`, `edge_density`, and `median_pair_confidence`. `template_cluster_similarity_score` is removed from the abstract summary. `template_cluster_flag` now means visible family membership only; `template_flag` means at least one accepted pair.
+`template_cluster_flag` means membership in a verified family of at least three abstracts; `template_flag` means at least one accepted pair finding.
 
 The Python-only `run_default_pipeline(similarity_threshold=...)` argument is retained temporarily as a deprecated alias for `legacy_similarity_threshold`; it never changes production pair detection.
 

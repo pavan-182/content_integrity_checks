@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
-from .candidate_routes import generate_candidate_pairs
 from .editorial_scoring import assign_editorial_priority
 from .entity_substitutions import collect_entity_substitutions
 from .evidence_scoring import score_pair_evidence
@@ -16,7 +15,7 @@ from .study_context import compare_study_context
 
 REPORT_VERSION = "asco-enriched-report-v1"
 PAIR_REPORT_COLUMNS = [
-    "report_version", "left_record_id", "right_record_id", "left_title", "right_title", "retrieval_routes",
+    "report_version", "pair_id", "left_record_id", "right_record_id", "left_title", "right_title", "retrieval_routes",
     "pair_class", "editorial_score", "review_priority", "rule_path", "detector_evidence", "primary_evidence", "supporting_evidence",
     "contextual_evidence", "direct_evidence", "masked_title_similarity", "original_title_similarity",
     "masked_body_similarity", "original_body_similarity", "strongest_section", "strongest_masked_section_similarity",
@@ -39,6 +38,24 @@ ABSTRACT_REPORT_COLUMNS = [
 
 def _joined(values: tuple[str, ...]) -> str:
     return " | ".join(values)
+
+
+def directional_finding_rows(pair_rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    rows = []
+    swapped = {
+        "left_record_id": "right_record_id", "left_title": "right_title",
+        "left_family_status": "right_family_status", "left_only_entities": "right_only_entities",
+        "left_supporting_sentences": "right_supporting_sentences",
+    }
+    for pair in pair_rows:
+        if pair["review_priority"] == "None":
+            continue
+        rows.append(pair)
+        reverse = dict(pair)
+        for left, right in swapped.items():
+            reverse[left], reverse[right] = pair[right], pair[left]
+        rows.append(reverse)
+    return rows
 
 
 def build_enriched_reports(
@@ -65,6 +82,7 @@ def build_enriched_reports(
         left_family, right_family = family_lookup.get(item.left_record_id), family_lookup.get(item.right_record_id)
         pair_rows.append({
             "report_version": REPORT_VERSION,
+            "pair_id": f"PAIR-{min(item.left_record_id, item.right_record_id)}--{max(item.left_record_id, item.right_record_id)}",
             "left_record_id": item.left_record_id,
             "right_record_id": item.right_record_id,
             "left_title": record_lookup[item.left_record_id].title,
