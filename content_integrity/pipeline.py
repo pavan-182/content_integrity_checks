@@ -72,6 +72,7 @@ RISK_INELIGIBLE_VALIDATION_STATUSES = {
     "validation_failed",
     "candidate",
 }
+RISK_INELIGIBLE_CHECK_TYPES = {"unsupported_registry_manual_verification"}
 
 
 def _normalized_validation_status(finding: Finding) -> str:
@@ -79,7 +80,10 @@ def _normalized_validation_status(finding: Finding) -> str:
 
 
 def _is_risk_eligible_finding(finding: Finding) -> bool:
-    return _normalized_validation_status(finding) not in RISK_INELIGIBLE_VALIDATION_STATUSES
+    return (
+        finding.check_type not in RISK_INELIGIBLE_CHECK_TYPES
+        and _normalized_validation_status(finding) not in RISK_INELIGIBLE_VALIDATION_STATUSES
+    )
 
 
 @dataclass(slots=True)
@@ -223,6 +227,15 @@ def _inventory_rows(records: list[ParsedRecord]) -> tuple[list[dict[str, Any]], 
             "notes": "Useful as metadata context, not a primary detector input.",
         },
         {
+            "field_name": "trial_ids",
+            "primary_xml_path": "abstract/title text matched as NCT########",
+            "present_count": sum(1 for record in records if record.trial_ids),
+            "present_pct": f"{sum(1 for record in records if record.trial_ids) / total * 100:.1f}%",
+            "example_value": next((to_pipe_string(record.trial_ids) for record in records if record.trial_ids), ""),
+            "useful_for_poc": "yes",
+            "notes": "Captured from title and abstract text for provenance and later verification.",
+        },
+        {
             "field_name": "authors",
             "primary_xml_path": "contrib-group/contrib | author_list/author",
             "present_count": sum(1 for record in records if record.authors),
@@ -316,8 +329,10 @@ def _aggregate_findings(
         design_findings = [finding for finding in record_findings if finding.detector_type == "design_contradiction"]
         trial_findings = [finding for finding in record_findings if finding.detector_type == "unverifiable_clinical_trial"]
         matched_pairs = pair_map.get(record.record_id, [])
+        risk_pairs = [pair for pair in matched_pairs if pair.pair_classification == "possible_template_reuse"]
+        related_pairs = [pair for pair in matched_pairs if pair.pair_classification != "possible_template_reuse"]
         cluster_row = cluster_map.get(record.record_id)
-        template_flag = bool(matched_pairs)
+        template_flag = bool(risk_pairs)
         cluster_flag = cluster_row is not None
         strongest_pair = max(
             matched_pairs,
@@ -329,9 +344,18 @@ def _aggregate_findings(
             default=None,
         )
         template_severity = max(
-            (pair.severity for pair in matched_pairs),
+            (pair.severity for pair in risk_pairs),
             key=severity_rank,
             default="none",
+        )
+        strongest_risk_pair = max(
+            risk_pairs,
+            key=lambda pair: (
+                CONFIDENCE_RANK.get(pair.confidence, 0),
+                severity_rank(pair.severity),
+                pair.pair_id,
+            ),
+            default=None,
         )
         risk_eligible_non_llm_findings = [
             finding
@@ -349,9 +373,9 @@ def _aggregate_findings(
                 highest_severity = finding.severity
         if severity_rank(llm_priority) > severity_rank(highest_severity):
             highest_severity = llm_priority.lower()
-        if strongest_pair:
-            if severity_rank(strongest_pair.severity) > severity_rank(highest_severity):
-                highest_severity = strongest_pair.severity
+        if strongest_risk_pair:
+            if severity_rank(strongest_risk_pair.severity) > severity_rank(highest_severity):
+                highest_severity = strongest_risk_pair.severity
         risk_finding_count = (
             len(risk_eligible_non_llm_findings)
             + (1 if llm_priority != "None" else 0)
@@ -379,6 +403,7 @@ def _aggregate_findings(
                 "authors": to_pipe_string(record.authors),
                 "affiliations": to_pipe_string(record.affiliations),
                 "keywords": to_pipe_string(record.keywords),
+                "trial_ids": to_pipe_string(record.trial_ids),
                 "schema_type": record.schema_type,
                 "abstract_section_count": record.abstract_section_count,
                 "structured_abstract": record.structured_abstract,
@@ -393,7 +418,8 @@ def _aggregate_findings(
                 "unverifiable_trial_flag": "Yes" if trial_findings else "No",
                 "template_cluster_flag": "Yes" if cluster_flag else "No",
                 "template_flag": "Yes" if template_flag else "No",
-                "template_confidence": strongest_pair.confidence if strongest_pair else "none",
+                "related_or_companion_flag": "Yes" if related_pairs else "No",
+                "template_confidence": strongest_risk_pair.confidence if strongest_risk_pair else "none",
                 "template_review_priority": template_severity.title() if template_flag else "None",
                 "matched_abstract_count": len({other_record_id(pair, record.record_id) for pair in matched_pairs}),
                 "strongest_matched_record_id": other_record_id(strongest_pair, record.record_id) if strongest_pair else "",
@@ -421,6 +447,7 @@ def _aggregate_findings(
                 "strongest_match_weighted_section_similarity": strongest_pair.weighted_section_similarity if strongest_pair else "",
                 "strongest_match_variable_substitutions": strongest_pair.variable_substitutions if strongest_pair else "",
                 "strongest_match_relationship_context": strongest_pair.relationship_context if strongest_pair else "",
+                "strongest_pair_classification": strongest_pair.pair_classification if strongest_pair else "",
                 "strongest_match_evidence_excerpt": strongest_pair.evidence_excerpt if strongest_pair else "",
                 "strongest_match_review_status": strongest_pair.review_status if strongest_pair else "",
                 "primary_template_pattern": strongest_pair.primary_match_type if strongest_pair else "",
@@ -507,6 +534,7 @@ def _pair_finding_rows(pair_findings: list[PairFinding]) -> list[dict[str, Any]]
                     "weighted_section_similarity": round(pair.weighted_section_similarity, 3),
                     "variable_substitutions": pair.variable_substitutions,
                     "relationship_context": pair.relationship_context,
+                    "pair_classification": pair.pair_classification,
                     "review_status": pair.review_status,
                     "editor_label": "not_reviewed",
                     "editor_notes": "",
@@ -748,6 +776,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
             "title",
             "abstract_text",
             "keywords",
+            "trial_ids",
             "authors",
             "affiliations",
             "journal",

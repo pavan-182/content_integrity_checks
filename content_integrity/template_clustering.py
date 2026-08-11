@@ -33,6 +33,7 @@ class PairFinding:
     weighted_section_similarity: float = 0.0
     variable_substitutions: str = ""
     relationship_context: str = ""
+    pair_classification: str = "possible_template_reuse"
     evidence_excerpt: str = ""
     review_status: str = "candidate"
     evidence: str = ""
@@ -57,9 +58,22 @@ def _severity(confidence: str, relationship_context: str) -> str:
         or "explicitly declare a related study" in context
     ):
         return "low"
-    if "author" in context or "affiliation" in context:
+    if "overlapping authors:" in context or "shared affiliations:" in context:
         return "medium" if confidence in {"high", "very_high"} else "low"
     return "high" if confidence in {"high", "very_high"} else "medium"
+
+
+def _pair_classification(relationship_context: str) -> str:
+    context = relationship_context.lower()
+    if (
+        "shared trial id:" in context
+        or "declared related analysis" in context
+        or "explicitly declare a related study" in context
+    ):
+        return "possible_companion_analysis"
+    if "overlapping authors:" in context or "shared affiliations:" in context:
+        return "possible_related_work"
+    return "possible_template_reuse"
 
 
 def _evidence_excerpt(item: Any) -> str:
@@ -85,8 +99,6 @@ def merge_pair_findings(exact_findings: list[Any], entity_findings: list[Any]) -
         )
         primary = source[0]
         confidence = primary.confidence
-        if len(source) > 1:
-            confidence = CONFIDENCE_BY_RANK[min(4, _confidence(primary.confidence) + 1)]
         supporting = sorted({item.match_type for item in source})
         sections = sorted({section for item in source for section in item.matched_sections})
         relationship = "; ".join(sorted({item.relationship_context for item in source if item.relationship_context}))
@@ -120,6 +132,7 @@ def merge_pair_findings(exact_findings: list[Any], entity_findings: list[Any]) -
                 weighted_section_similarity=max(getattr(item, "weighted_section_similarity", 0.0) for item in source),
                 variable_substitutions="; ".join(sorted({item.variable_substitutions for item in source if getattr(item, "variable_substitutions", "")})),
                 relationship_context=relationship,
+                pair_classification=_pair_classification(relationship),
                 evidence_excerpt="; ".join(sorted({_evidence_excerpt(item) for item in source if _evidence_excerpt(item)})),
                 review_status=primary.review_status,
                 evidence="; ".join(sorted({item.evidence for item in source if item.evidence})),
@@ -167,8 +180,11 @@ def cluster_template_findings(pair_findings: list[PairFinding], records: list[Pa
     record_ids = {record.record_id for record in records}
     edges = [
         finding for finding in pair_findings
-        if finding.confidence in {"high", "very_high"}
-        or (finding.confidence == "medium" and len(finding.supporting_match_types) > 1)
+        if finding.pair_classification == "possible_template_reuse"
+        and (
+            finding.confidence in {"high", "very_high"}
+            or (finding.confidence == "medium" and len(finding.supporting_match_types) > 1)
+        )
     ]
     adjacency: dict[str, set[str]] = {record_id: set() for record_id in record_ids}
     for edge in edges:

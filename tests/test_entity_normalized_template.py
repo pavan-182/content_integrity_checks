@@ -6,8 +6,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from content_integrity.detectors.entity_normalized_template import (
+    _could_reach_similarity,
     _representation,
+    _rare_title_candidate_pairs,
     _section_candidate_pairs,
+    _title_candidate_pairs,
     detect_entity_normalized_templates,
 )
 from content_integrity.models import ParsedRecord
@@ -82,6 +85,14 @@ def _templated_pair(**kwargs) -> list[ParsedRecord]:
 
 
 class EntityNormalizedTemplateTests(unittest.TestCase):
+    def test_research_sponsor_boilerplate_is_removed(self) -> None:
+        record = ParsedRecord("a.xml", record_id="A", abstract_text="Research Sponsor: None.")
+        self.assertEqual(_representation(record).normalized, "")
+
+    def test_local_similarity_bound_skips_only_impossible_matches(self) -> None:
+        self.assertTrue(_could_reach_similarity("shared masked sentence", "shared masked sentence", 0.63))
+        self.assertFalse(_could_reach_similarity("alpha beta gamma", "delta epsilon zeta", 0.63))
+
     def test_same_structure_with_different_drug_and_cancer_triggers(self) -> None:
         findings = detect_entity_normalized_templates(_templated_pair())
         self.assertEqual(len(findings), 1)
@@ -123,6 +134,65 @@ class EntityNormalizedTemplateTests(unittest.TestCase):
                 results="Among 312 eligible cases, survival varied by prior treatment and disease burden.",
                 conclusions="Real-world outcomes support individualized sequencing of available therapies.",
             ),
+        ]
+        self.assertEqual(detect_entity_normalized_templates(records), [])
+
+    def test_unstructured_abstract_uses_local_template_evidence(self) -> None:
+        shared = (
+            "We measured {gene} expression using quantitative polymerase chain reaction, "
+            "then evaluated cell proliferation, apoptosis, migration, invasion, tumour growth, "
+            "target binding, pathway activation, and rescue after treatment with {drug} in "
+            "cultured cells and xenograft models."
+        )
+        records = [
+            ParsedRecord(
+                f"{record_id}.xml",
+                record_id=record_id,
+                abstract_text=f"{opening} {shared.format(gene=gene, drug=drug)} {ending}",
+                abstract_sections=[],
+            )
+            for record_id, gene, drug, opening, ending in (
+                (
+                    "A", "EGFR", "osimertinib",
+                    "A prospective lung cancer programme enrolled adults at regional hospitals.",
+                    "The findings warrant a randomized clinical trial.",
+                ),
+                (
+                    "B", "HER2", "trastuzumab",
+                    "Archived breast tumour samples were obtained from a separate registry.",
+                    "Future laboratory work should examine resistance mechanisms.",
+                ),
+            )
+        ]
+        finding = detect_entity_normalized_templates(records)[0]
+        self.assertEqual(finding.match_type, "local_entity_substitution")
+        self.assertIn("strongest local match", finding.evidence)
+
+    def test_local_match_without_document_support_does_not_trigger(self) -> None:
+        shared = (
+            "We measured {gene} expression in tumour samples and quantified proliferation "
+            "apoptosis migration invasion target binding pathway activation rescue response "
+            "and durable growth suppression after treatment with {drug} across cultured "
+            "cells xenograft models and independent validation cohorts using prespecified assays."
+        )
+
+        def unrelated_tail(prefix: str) -> str:
+            return " ".join(
+                f"{prefix}word{index} {prefix}detail{index} {prefix}finding{index} "
+                f"{prefix}context{index} {prefix}analysis{index} {prefix}outcome{index}."
+                for index in range(30)
+            )
+
+        records = [
+            ParsedRecord(
+                f"{record_id}.xml",
+                record_id=record_id,
+                abstract_text=shared.format(gene=gene, drug=drug) + " " + unrelated_tail(prefix),
+            )
+            for record_id, gene, drug, prefix in (
+                ("A", "EGFR", "osimertinib", "alpha"),
+                ("B", "HER2", "trastuzumab", "beta"),
+            )
         ]
         self.assertEqual(detect_entity_normalized_templates(records), [])
 
@@ -294,6 +364,37 @@ class EntityNormalizedTemplateTests(unittest.TestCase):
         ]
         representations = {record.record_id: _representation(record) for record in records}
         self.assertEqual(_section_candidate_pairs(representations), {("A", "B")})
+
+    def test_masked_titles_create_candidate_pairs(self) -> None:
+        records = [
+            ParsedRecord(
+                f"{record_id}.xml",
+                record_id=record_id,
+                title=title,
+                abstract_text="Distinct body text with no shared scientific wording.",
+            )
+            for record_id, title in (
+                ("A", "Expression of EGFR predicts survival in lung cancer"),
+                ("B", "Expression of HER2 predicts survival in breast cancer"),
+            )
+        ]
+        self.assertEqual(_title_candidate_pairs(records), {("A", "B")})
+
+    def test_rare_raw_title_tokens_create_candidate_pairs(self) -> None:
+        records = [
+            ParsedRecord(
+                f"{record_id}.xml",
+                record_id=record_id,
+                title=title,
+                abstract_text="Unrelated abstract text.",
+            )
+            for record_id, title in (
+                ("A", "Ras ERK1 signaling in colorectal cancer"),
+                ("B", "Ras ERK1 signaling in gastric cancer"),
+                ("C", "Independent melanoma treatment study"),
+            )
+        ]
+        self.assertEqual(_rare_title_candidate_pairs(records), {("A", "B")})
 
     @patch("scripts.detect_entity_normalized_templates.write_csv")
     @patch("scripts.detect_entity_normalized_templates.detect_entity_normalized_templates")

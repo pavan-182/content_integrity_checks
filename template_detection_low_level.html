@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Template Detection — Low-Level Data Pipeline</title>
+  <style>
+    :root {
+      --navy: #0c2d63;
+      --blue: #1556a3;
+      --blue-soft: #eef5ff;
+      --ink: #172033;
+      --muted: #526176;
+      --line: #b9c9df;
+      --green: #2d7a35;
+      --green-soft: #eff9ec;
+      --purple: #6741a6;
+      --purple-soft: #f5efff;
+      --amber: #d78a00;
+      --amber-soft: #fff8e9;
+      --red: #c52727;
+      --shadow: 0 8px 24px rgb(12 45 99 / 9%);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #e9eef5;
+      font: 14px/1.42 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .page {
+      width: min(1800px, calc(100% - 32px));
+      margin: 16px auto;
+      padding: 24px;
+      background: #fff;
+      border: 1px solid #cad5e4;
+      box-shadow: 0 18px 50px rgb(20 42 75 / 12%);
+    }
+
+    header { text-align: center; }
+    h1 {
+      margin: 0;
+      color: var(--navy);
+      font-size: clamp(25px, 3vw, 44px);
+      line-height: 1.05;
+      letter-spacing: -.035em;
+    }
+    .subtitle { margin: 8px auto 20px; color: var(--muted); font-size: 15px; font-style: italic; }
+
+    .summary {
+      display: grid;
+      grid-template-columns: 230px repeat(3, minmax(180px, 1fr)) 2.4fr;
+      align-items: stretch;
+      border: 1.5px solid var(--blue);
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    .summary > div { padding: 14px 18px; border-left: 1px solid var(--line); }
+    .summary > div:first-child { border: 0; }
+    .summary-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: #fff;
+      background: linear-gradient(135deg, var(--navy), var(--blue));
+      font-size: 17px;
+      font-weight: 850;
+      line-height: 1.15;
+      letter-spacing: .02em;
+    }
+    .summary-icon { font-size: 35px; }
+    .eyebrow { display: block; margin-bottom: 4px; color: var(--navy); font-size: 11px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+    .summary p { margin: 0; font-size: 12px; }
+
+    .legend-row, .flow-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; }
+    .legend-item { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; font-size: 11px; }
+    .arrow { display: inline-block; width: 34px; height: 3px; background: var(--blue); position: relative; }
+    .arrow::after { content: ""; position: absolute; right: -1px; top: -5px; border: 7px solid transparent; border-left-color: var(--blue); }
+    .arrow.parallel { background: transparent; border-top: 3px solid var(--blue); border-bottom: 3px solid var(--blue); height: 12px; }
+    .arrow.dotted { height: 0; background: none; border-top: 3px dotted var(--blue); }
+    .diamond { width: 18px; height: 18px; border: 2px solid var(--ink); transform: rotate(45deg); background: #fff; }
+
+    .change-key {
+      display: flex;
+      align-items: center;
+      gap: 12px 22px;
+      margin-top: 12px;
+      padding: 10px 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #f8fafc;
+    }
+    .change-key h3 { margin-right: auto; color: var(--navy); text-transform: uppercase; }
+    .status { display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px; border: 1px solid; border-radius: 999px; font-size: 9px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+    .status.new { color: #075f68; border-color: #55bbc2; background: #e7fbfc; }
+    .status.done { color: #205f28; border-color: #7ab86c; background: var(--green-soft); }
+    .status.improve { color: #8c5300; border-color: #e5a53c; background: #fff6df; }
+    .status.validate { color: #6840a1; border-color: #a783d4; background: #f5efff; }
+    .status.defer { color: #5c6675; border-color: #aab3c0; background: #f1f3f6; }
+    .stage-status { display: flex; flex-wrap: wrap; gap: 5px; margin: -4px 0 10px 41px; }
+    .change {
+      margin-top: 10px;
+      padding: 8px 9px;
+      border-left: 4px solid;
+      border-radius: 4px;
+      font-size: 10px;
+    }
+    .change.new { border-color: #28a2aa; background: #eafafb; }
+    .change.done { border-color: #4c9a52; background: var(--green-soft); }
+    .change.improve { border-color: #d99019; background: #fff8e9; }
+    .change.validate { border-color: #8057b8; background: #f7f1ff; }
+    .change strong { display: block; margin-bottom: 2px; text-transform: uppercase; }
+
+    .evaluation-gate {
+      display: grid;
+      grid-template-columns: 210px 1fr auto;
+      align-items: center;
+      gap: 16px;
+      margin-top: 14px;
+      padding: 12px 16px;
+      border: 1.5px dashed var(--purple);
+      border-radius: 10px;
+      background: var(--purple-soft);
+    }
+    .evaluation-gate h3 { color: var(--purple); text-transform: uppercase; }
+    .evaluation-gate p { margin: 0; font-size: 11px; }
+    .deferred-shelf { margin-top: 8px; padding: 8px 12px; border-left: 4px solid #9aa4b2; background: #f3f5f7; color: #4f5a69; font-size: 10px; }
+
+    .pipeline { margin-top: 18px; }
+    .pipeline-row {
+      display: grid;
+      grid-template-columns: 1.15fr 1.05fr .9fr 2.05fr 1.22fr;
+      gap: 16px;
+      align-items: stretch;
+      margin-bottom: 16px;
+    }
+    .pipeline-row.bottom { grid-template-columns: 1.05fr 1.2fr 1.65fr 1.08fr 1.25fr; }
+
+    .stage {
+      position: relative;
+      min-width: 0;
+      padding: 16px;
+      border: 1.5px solid var(--blue);
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: var(--shadow);
+    }
+    .stage:not(:last-child)::after {
+      content: "➜";
+      position: absolute;
+      z-index: 3;
+      top: 44%;
+      right: -21px;
+      color: var(--blue);
+      font-size: 28px;
+      font-weight: 900;
+    }
+    .stage-head { display: flex; align-items: flex-start; gap: 10px; margin: -4px 0 12px; }
+    .number {
+      flex: 0 0 31px;
+      display: grid;
+      place-items: center;
+      width: 31px;
+      height: 31px;
+      border-radius: 50%;
+      color: #fff;
+      background: var(--navy);
+      font-size: 16px;
+      font-weight: 900;
+    }
+    h2 { margin: 3px 0 0; color: var(--navy); font-size: 14px; line-height: 1.15; text-transform: uppercase; }
+    h3 { margin: 0; font-size: 13px; line-height: 1.2; }
+    .meta { display: grid; gap: 4px; margin-bottom: 10px; font-size: 11px; }
+    .meta strong { color: var(--ink); }
+    .stage h4 { margin: 10px 0 3px; font-size: 11px; }
+    ul { margin: 4px 0 0; padding-left: 17px; }
+    li { margin: 2px 0; }
+    .stage li, .stage p { font-size: 11px; }
+
+    .note {
+      margin-top: 12px;
+      padding: 8px 10px;
+      border-radius: 7px;
+      border: 1px solid;
+      font-size: 11px;
+    }
+    .output { border-color: #7ab86c; background: var(--green-soft); color: #205f28; }
+    .why { border-color: #efbd5a; background: var(--amber-soft); }
+
+    .fanout { padding: 12px; background: var(--blue-soft); }
+    .fanout > .stage-head { margin: 0 2px 10px; }
+    .fanout-grid { display: grid; gap: 10px; height: calc(100% - 42px); }
+    .detector {
+      display: grid;
+      grid-template-columns: 1fr 125px;
+      gap: 12px;
+      padding: 13px;
+      border: 1.5px solid;
+      border-radius: 10px;
+      background: #fff;
+    }
+    .detector.direct { border-color: #6cb56d; background: linear-gradient(90deg, #fff, #f6fff4); }
+    .detector.template { border-color: #9a70d0; background: linear-gradient(90deg, #fff, #faf5ff); }
+    .detector.research { border-style: dashed; border-color: #9a70d0; background: #fbf9ff; }
+    .detector.direct h3 { color: var(--green); }
+    .detector.template h3 { color: var(--purple); }
+    .detector.research h3 { color: var(--purple); }
+    .detector .meta { margin: 7px 0; }
+    .detector ul { font-size: 10px; }
+    .gate { padding-left: 12px; border-left: 1px solid currentColor; align-self: stretch; }
+    .gate-title { margin-bottom: 8px; font-size: 9px; font-weight: 800; }
+    .hit { display: flex; align-items: center; gap: 7px; margin: 8px 0; font-size: 10px; font-weight: 800; }
+    .hit::before { content: ""; width: 12px; height: 12px; transform: rotate(45deg); background: currentColor; }
+    .none { color: #39864a; } .medium { color: #dd8c00; } .strong { color: #cf332a; }
+    .fanout::after { content: ""; }
+
+    .context-link {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: -4px 0 12px 5.8%;
+      color: var(--blue);
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .context-link::before { content: "⋯⋯⋯↓"; font-size: 22px; letter-spacing: 2px; }
+
+    .severity { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
+    .severity span { padding: 4px; border: 1px solid; border-radius: 5px; text-align: center; font-size: 11px; font-weight: 800; }
+    .severity .high { color: var(--red); } .severity .med { color: #bd6c00; } .severity .low { color: var(--green); }
+
+    .support-grid { display: grid; grid-template-columns: 1.55fr .85fr .88fr; gap: 16px; margin: 4px 0 16px; }
+    .support {
+      padding: 14px 16px;
+      border: 1.5px solid var(--blue);
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: var(--shadow);
+    }
+    .support h3 { color: var(--navy); text-transform: uppercase; }
+    .object-flow { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 12px; }
+    .object { min-width: 66px; text-align: center; color: var(--navy); }
+    .object b { display: block; font-size: 25px; }
+    .object span { display: block; margin-top: 4px; color: var(--ink); font-size: 9px; line-height: 1.15; }
+    .chev { color: var(--blue); font-size: 20px; font-weight: 900; }
+    .support ul { font-size: 10px; }
+
+    .principles { display: grid; grid-template-columns: 1.55fr 1fr; gap: 16px; }
+    .principle-box, .limits { padding: 14px 16px; border: 1.5px solid var(--blue); border-radius: 12px; box-shadow: var(--shadow); }
+    .principle-list { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-top: 12px; }
+    .principle { display: flex; align-items: center; gap: 9px; font-size: 10px; }
+    .principle b { color: var(--navy); font-size: 26px; }
+    .limits { border-color: var(--red); }
+    .limits h3 { color: var(--red); }
+    .limit-list { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 12px; }
+    .limit { display: flex; gap: 7px; font-size: 10px; }
+    .limit b { color: var(--red); font-size: 20px; line-height: 1; }
+
+    @media (max-width: 1250px) {
+      .page { width: 100%; margin: 0; border: 0; }
+      .diagram-scroll { overflow-x: auto; padding-bottom: 10px; }
+      .diagram-inner { min-width: 1180px; }
+      .summary { grid-template-columns: 210px repeat(3, 180px) 1fr; }
+    }
+
+    @media print {
+      @page { size: A3 landscape; margin: 8mm; }
+      body { background: #fff; }
+      .page { width: 100%; margin: 0; padding: 0; border: 0; box-shadow: none; }
+      .diagram-inner { min-width: 0; }
+      .stage, .support, .principle-box, .limits, .summary { box-shadow: none; break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <h1>Template Detection — Low-Level Data Pipeline</h1>
+      <p class="subtitle">Implemented and validated state as of 11 August 2026—from source XML to reviewer-ready output.</p>
+    </header>
+
+    <div class="diagram-scroll">
+      <div class="diagram-inner">
+        <section class="summary" aria-label="Execution summary">
+          <div class="summary-title"><span class="summary-icon">⚙</span> EXECUTION<br>SUMMARY</div>
+          <div><span class="eyebrow">▰ Run mode</span><p>Batch pipeline over a full abstract corpus</p></div>
+          <div><span class="eyebrow">ϟ Main trigger</span><p>Starts after abstract ingestion and section extraction are available</p></div>
+          <div><span class="eyebrow">◎ Granularity</span><p>Per abstract → per candidate pair → whole corpus → export</p></div>
+          <div>
+            <span class="eyebrow">Visual legend</span>
+            <div class="legend-row">
+              <span class="legend-item"><i class="arrow"></i> Sequential</span>
+              <span class="legend-item"><i class="arrow parallel"></i> Parallel</span>
+              <span class="legend-item"><i class="arrow dotted"></i> Optional check</span>
+              <span class="legend-item"><i class="diamond"></i> Decision gate</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="change-key" aria-label="Capability status legend">
+          <h3>Capability update overlay</h3>
+          <span class="status new">● New step</span>
+          <span class="status done">✓ Implemented</span>
+          <span class="status improve">▲ Improve existing</span>
+          <span class="status validate">◆ Validate first</span>
+          <span class="status defer">○ Deferred / optional</span>
+        </section>
+
+        <section class="evaluation-gate" aria-label="Cross-cutting evaluation gate">
+          <h3>0 · Evaluation baseline</h3>
+          <p><strong>Validated baseline:</strong> the reviewer-labelled set covers exact, partial, reordered, entity-swapped, title-formula, paraphrased, companion/related, false-positive and negative-control pairs. Current automatic pair detection: <strong>85.1% precision, 75.0% recall and 79.7% F1</strong> (178 scored labels; 2 manual-review labels excluded). The 519-record real-ASCO run retained 13 legitimate related/companion pairs, created 0 suspicious families and emitted no sponsor/statistical boilerplate evidence.</p>
+          <span class="status done">Validated</span>
+        </section>
+        <aside class="deferred-shelf"><span class="status defer">Outside committed path</span> <strong>Deferred / optional:</strong> stylometry (support at 4C), historical-family matching (retrieval at 3), gated LLM ambiguity review (after 7), offline vocabulary discovery (outside the run), and LLM-generated reviewer summaries (at 10).</aside>
+
+        <section class="pipeline" aria-label="Template detection pipeline">
+          <div class="pipeline-row">
+            <article class="stage">
+              <div class="stage-head"><span class="number">1</span><h2>Input &amp; extraction</h2></div>
+              <div class="stage-status"><span class="status done">Implemented</span></div>
+              <div class="meta"><span><strong>Trigger:</strong> new batch / corpus refresh</span><span><strong>Runs as:</strong> sequential per source file</span></div>
+              <h4>Key subprocesses</h4>
+              <ul><li>Ingest ASCO publication XML</li><li>Assign abstract ID</li><li>Extract title and abstract body</li><li>Detect section headings</li><li>Store lossless source text and metadata</li><li>Create one structured abstract record</li></ul>
+              <div class="note output"><strong>Output:</strong> structured abstract table.</div>
+              <div class="change improve"><strong>Capability update</strong>Retain original spans and extraction provenance for title, body, sections, authors, affiliations, trial IDs and related-study context.</div>
+              <div class="note why"><strong>Why:</strong> standardize incoming submissions so later matching operates on comparable units.</div>
+            </article>
+
+            <article class="stage">
+              <div class="stage-head"><span class="number">2</span><h2>Normalization &amp; feature extraction</h2></div>
+              <div class="stage-status"><span class="status done">Implemented</span></div>
+              <div class="meta"><span><strong>Trigger:</strong> a structured abstract record exists</span><span><strong>Runs as:</strong> sequential per abstract</span></div>
+              <h4>Key subprocesses</h4>
+              <ul><li>Create normalized title, body and section views</li><li>Keep original text and character offsets for evidence</li><li>Extract typed entities: gene, drug, disease, miRNA, lncRNA, protein, pathway, cell line, assay, endpoint, database, population and treatment class</li><li>Store value, type, section, sentence, method and version</li><li>Build one reusable, versioned feature object</li></ul>
+              <div class="note output"><strong>Output:</strong> reusable feature object: original + normalized + masked text, entities, context, signatures and versions.</div>
+              <div class="change new"><strong>New here</strong>Shared feature index becomes the single representation used by retrieval, comparison, classification, clustering, reporting and evaluation.</div>
+              <div class="note why"><strong>Why:</strong> improve comparability while preserving evidence.</div>
+            </article>
+
+            <article class="stage">
+              <div class="stage-head"><span class="number">3</span><h2>Candidate pair generation</h2></div>
+              <div class="stage-status"><span class="status done">Implemented routes</span><span class="status defer">Semantic/history deferred</span></div>
+              <div class="meta"><span><strong>Trigger:</strong> normalized corpus is ready</span><span><strong>Runs as:</strong> batch / whole corpus</span></div>
+              <h4>Key subprocesses</h4>
+              <ul><li>Retrieve with prefixes, entity shapes, hashes, section fingerprints and n-grams</li><li>Retrieve by masked-title signature and title shingles</li><li>Keep semantic embeddings and historical-family retrieval deferred</li><li>Cap common buckets and require minimum specificity</li><li>Deduplicate routes and record why every pair was retrieved</li></ul>
+              <div class="note output"><strong>Output:</strong> candidate-pair queue.</div>
+              <div class="change done"><strong>Production gate</strong>Only routes with measurable incremental recall and acceptable false-positive rates are enabled. Semantic and historical-family retrieval remain deferred.</div>
+              <div class="note why"><strong>Why:</strong> avoid O(N²) full comparison of the entire corpus.</div>
+            </article>
+
+            <article class="stage fanout">
+              <div class="stage-head"><span class="number">4</span><h2>Pair-level detection fan-out <small>(parallel on each candidate pair)</small></h2></div>
+              <div class="stage-status"><span class="status done">4A/4B implemented</span><span class="status done">4C evaluated</span></div>
+              <div class="fanout-grid">
+                <section class="detector direct">
+                  <div>
+                    <h3>4A &nbsp; Direct reuse detector <small>(Exact / Near-Exact)</small></h3>
+                    <div class="meta"><span><strong>Trigger:</strong> one candidate pair arrives</span><span><strong>Runs as:</strong> parallel branch per candidate pair</span></div>
+                    <ul><li>Full abstract exact-match check</li><li>Section exact-match checks</li><li>Multi-sentence overlap check</li><li>Long copied-block detection</li><li>Reordered sentence / paragraph similarity</li><li>Exclude boilerplate such as “Research Sponsor: None.”</li><li>Exclude generic statistical, methods and oncology phrases from rare-phrase evidence</li></ul>
+                    <div class="note output"><strong>Output:</strong> direct-reuse evidence packet.</div>
+                    <div class="note why"><strong>Why:</strong> catch straightforward copying that is easiest to explain.</div>
+                  </div>
+                  <aside class="gate"><div class="gate-title">Decision gate</div><div class="hit none">No hit</div><div class="hit medium">Medium hit</div><div class="hit strong">Strong hit</div></aside>
+                </section>
+
+                <section class="detector template">
+                  <div>
+                    <h3>4B &nbsp; Template / structured detector <small>(Value Substitution)</small></h3>
+                    <div class="meta"><span><strong>Trigger:</strong> same candidate pair arrives</span><span><strong>Runs as:</strong> parallel branch per candidate pair</span></div>
+                    <ul><li>Compare original and masked title, body and section structure</li><li>Use richer typed entities without losing original spans</li><li>Report shared, left-only, right-only and likely substituted values</li><li>Include entity type, explicit relationship slot, sentence and section</li><li>Require strong scaffold similarity plus original-text support</li><li>Reject generic title forms, weak patterns and Methods-only similarity</li></ul>
+                    <div class="note output"><strong>Output:</strong> template-reuse evidence packet.</div>
+                    <div class="note why"><strong>Why:</strong> detect reused templates hidden by swapping study-specific values.</div>
+                  </div>
+                  <aside class="gate"><div class="gate-title">Decision gate</div><div class="hit none">No hit</div><div class="hit medium">Medium hit</div><div class="hit strong">Strong hit</div></aside>
+                </section>
+
+                <section class="detector research">
+                  <div>
+                    <h3>4C &nbsp; Research signal detectors <small>(Supporting evidence only)</small></h3>
+                    <div class="meta"><span><strong>Trigger:</strong> offline signal-validation run</span><span><strong>Runs as:</strong> evaluated research branches; disabled in production</span></div>
+                    <ul><li>Molecular-axis signatures from explicit typed relationships</li><li>Distinctive ordered assay-workflow signatures</li><li>Endpoint bundles for support and companion context</li><li>Section-aware scientific-recipe signatures</li><li>Source sentence and section retained for every extracted signal</li></ul>
+                    <div class="note output"><strong>Output:</strong> supporting evidence only; never a finding by itself.</div>
+                    <div class="change done"><strong>4C outcome</strong>Molecular-axis signals were rejected for topic noise; assay workflows had no incremental positives and remain disabled; endpoint bundles produced no candidates. Stylometry remains deferred.</div>
+                  </div>
+                  <aside class="gate"><div class="gate-title">Research gate</div><div class="hit none">Reject</div><div class="hit medium">Recalibrate</div><div class="hit strong">Enable constrained</div></aside>
+                </section>
+              </div>
+            </article>
+
+            <article class="stage">
+              <div class="stage-head"><span class="number">⚖</span><h2>Evidence scoring &amp; section weighting</h2></div>
+              <div class="stage-status"><span class="status done">Implemented</span></div>
+              <div class="meta"><span><strong>Trigger:</strong> each detector branch emits a hit</span><span><strong>Runs as:</strong> parallel per detector result</span></div>
+              <h4>Key subprocesses</h4>
+              <ul><li>Separate <strong>primary</strong>, <strong>supporting</strong> and <strong>contextual</strong> evidence</li><li>Weight Results / Conclusions above Methods and generic content</li><li>Reward exactness, copied-block strength, distinctive title formulas and strong masked-body templates</li><li>Do not raise confidence when exact and entity detectors merge the same evidence</li><li>Never let supporting or contextual signals create high confidence alone</li></ul>
+              <div class="note output"><strong>Output:</strong> detector-level scored evidence.</div>
+              <div class="note why"><strong>Why:</strong> not every textual overlap is equally concerning.</div>
+            </article>
+          </div>
+
+          <div class="context-link">Optional side-check after a pair is flagged</div>
+
+          <div class="pipeline-row bottom">
+            <article class="stage">
+              <div class="stage-head"><span class="number">6</span><h2>Legitimacy context check</h2></div>
+              <div class="stage-status"><span class="status done">Implemented routing</span><span class="status defer">Endpoint research disabled</span></div>
+              <div class="meta"><span><strong>Trigger:</strong> after a pair is flagged, especially medium/high concern</span><span><strong>Runs as:</strong> side enrichment; can run in parallel with Stage 5</span></div>
+              <h4>Key subprocesses</h4>
+              <ul><li>Compare trial/protocol ID, registry/database, study period, sample size, population and treatment arms</li><li>Report shared-author count, overlap %, corresponding author, affiliations and apparently unrelated groups</li><li>Compare primary/secondary endpoints and explicit follow-up, subgroup, extension or companion wording</li><li>Route shared trial IDs as <strong>Possible companion analysis</strong></li><li>Route shared authors/affiliations as <strong>Possible related work</strong></li><li>Use context for routing; never erase exact full-abstract or Results evidence</li></ul>
+              <div class="note output"><strong>Output:</strong> context label + adjustment note.</div>
+              <div class="note why"><strong>Why:</strong> companion analyses can legitimately share language.</div>
+            </article>
+
+            <article class="stage">
+              <div class="stage-head"><span class="number">7</span><h2>Evidence merging &amp; transparent pair classification</h2></div>
+              <div class="stage-status"><span class="status done">Implemented</span></div>
+              <div class="meta"><span><strong>Trigger:</strong> detector scores and context are available</span><span><strong>Runs as:</strong> sequential per flagged pair</span></div>
+              <h4>Key subprocesses</h4>
+              <ul><li>Merge evidence into one canonical A–B pair without confidence promotion for duplicated evidence</li><li>Apply reproducible rules across primary, supporting and contextual evidence</li><li>Classify as Possible template reuse, Possible companion analysis or Possible related work</li><li>Record the complete rule path, limitations and uncertainty</li><li>Keep related/companion evidence visible but separate from integrity-risk findings</li></ul>
+              <div class="note output"><strong>Output:</strong> classified canonical pair with rule path and evidence tiers.</div>
+              <div class="change done"><strong>Implemented</strong>This product-facing class determines review routing and which pairs may create suspicious-family edges.</div>
+              <div class="note why"><strong>Why:</strong> reviewers need one consolidated item per pair.</div>
+            </article>
+
+            <article class="stage">
+              <div class="stage-head"><span class="number">8</span><h2>Family / cluster building</h2></div>
+              <div class="stage-status"><span class="status done">Implemented</span></div>
+              <div class="meta"><span><strong>Trigger:</strong> pair-level findings are finalized</span><span><strong>Runs as:</strong> batch / whole corpus aggregation</span></div>
+              <h4>Key subprocesses</h4>
+              <ul><li>Allow only <strong>Possible template reuse</strong> pairs to create suspicious-family edges</li><li>Keep related and companion pairs visible but outside suspicious-family edges</li><li>Choose a representative and verify every member against it</li><li>Break weak transitive links and identify outliers</li><li>Validate dominant title/body templates, substitutions and supporting family signatures</li></ul>
+              <div class="note output"><strong>Output:</strong> verified template families + remaining pairs.</div>
+              <div class="note why"><strong>Why:</strong> prevent weak chain effects and keep clusters tight.</div>
+              <div class="change done"><strong>Validated behavior</strong>Related and companion links remain reportable but cannot create suspicious families or increase integrity risk.</div>
+            </article>
+
+            <article class="stage">
+              <div class="stage-head"><span class="number">9</span><h2>Final scoring &amp; severity assignment</h2></div>
+              <div class="stage-status"><span class="status done">Validated baseline</span></div>
+              <div class="meta"><span><strong>Trigger:</strong> family structure and pair structure are fixed</span><span><strong>Runs as:</strong> sequential per pair / family</span></div>
+              <h4>Key subprocesses</h4>
+              <ul><li>Combine only independent detector evidence</li><li>Apply section weighting and transparent context adjustment</li><li>Use suspicious pair evidence—not related/companion links or family size alone—for risk</li><li>Keep unsupported-registry notices visible but exclude them from integrity-risk scoring</li><li>Calibrate thresholds on the reviewer-labelled baseline</li><li>Assign editorial priority: High / Medium / Low</li></ul>
+              <div class="severity"><span class="high">High</span><span class="med">Medium</span><span class="low">Low</span></div>
+              <div class="note output"><strong>Output:</strong> prioritized review record.</div>
+              <div class="note why"><strong>Why:</strong> help editors focus limited review time.</div>
+            </article>
+
+            <article class="stage">
+              <div class="stage-head"><span class="number">10</span><h2>Outputs for review</h2></div>
+              <div class="stage-status"><span class="status done">Implemented</span><span class="status defer">LLM summary optional</span></div>
+              <div class="meta"><span><strong>Trigger:</strong> end of run or export step</span><span><strong>Runs as:</strong> sequential export</span></div>
+              <h4>Key deliverables</h4>
+              <ul><li>Pair: class, rule path, retrieval route, evidence tiers, substitutions, same-dataset context and limitations</li><li>Family: representative, dominant templates, substitutions, density and outliers</li><li>Abstract: suspicious-template flag, separate related/companion flag, strongest finding and review status</li><li>Trial verification: unsupported-registry notices remain available for manual follow-up</li><li>Export versioned CSV and Excel reports for editorial triage</li></ul>
+              <div class="note output"><strong>Output:</strong> reviewer-ready integrity package.</div>
+              <div class="note why"><strong>Why:</strong> convert raw detections into actionable editorial review items.</div>
+            </article>
+          </div>
+        </section>
+
+        <section class="support-grid">
+          <div class="support">
+            <h3>Data object flow <small>(main artifacts through the pipeline)</small></h3>
+            <div class="object-flow">
+              <div class="object"><b>▤</b><span>Publication<br>XML</span></div><i class="chev">›</i>
+              <div class="object"><b>▦</b><span>Structured<br>abstract record</span></div><i class="chev">›</i>
+              <div class="object"><b>Aa</b><span>Versioned<br>feature objects</span></div><i class="chev">›</i>
+              <div class="object"><b>▼</b><span>Candidate-pair<br>queue</span></div><i class="chev">›</i>
+              <div class="object"><b>♢</b><span>Detector<br>evidence packets</span></div><i class="chev">›</i>
+              <div class="object"><b>↗</b><span>Canonical<br>pair findings</span></div><i class="chev">›</i>
+              <div class="object"><b>⌬</b><span>Pair<br>graph</span></div><i class="chev">›</i>
+              <div class="object"><b>♟</b><span>Verified families /<br>residual pairs</span></div><i class="chev">›</i>
+              <div class="object"><b>▣</b><span>Prioritized<br>review report</span></div>
+            </div>
+          </div>
+          <div class="support">
+            <h3>Sequential vs parallel execution</h3>
+            <ul><li>Stages 1 → 2 → 3 are sequential at batch level.</li><li>Stages 4A and 4B run for each candidate pair.</li><li>Stage 4C was evaluated offline and remains disabled.</li><li>Stage 5 scores each detector hit; Stage 6 can run as a side-check.</li><li>Stage 7 waits for 5 and 6, then classifies sequentially.</li><li>Stages 8 → 9 → 10 run after pair-level processing completes.</li></ul>
+          </div>
+          <div class="support">
+            <h3>Legend</h3>
+            <div class="legend-row" style="margin-top:12px"><span class="legend-item"><i class="arrow"></i> Sequential dependency</span><span class="legend-item"><i class="arrow parallel"></i> Parallel branches</span><span class="legend-item"><i class="arrow dotted"></i> Optional side-check</span><span class="legend-item"><i class="diamond"></i> Decision gate</span></div>
+          </div>
+        </section>
+
+        <footer class="principles">
+          <section class="principle-box">
+            <h3>Key design principles</h3>
+            <div class="principle-list"><div class="principle"><b>◎</b>High precision through multiple gates</div><div class="principle"><b>♢</b>Explainable and evidence-backed</div><div class="principle"><b>⚖</b>Prioritize Results / Conclusions</div><div class="principle"><b>♟</b>Account for legitimate study relationships</div><div class="principle"><b>⌁</b>Supports human review, not automatic judgment</div></div>
+          </section>
+          <section class="limits">
+            <h3>What this pipeline does not do</h3>
+            <div class="limit-list"><div class="limit"><b>×</b>Decide misconduct or intent</div><div class="limit"><b>×</b>Replace human editorial judgment</div><div class="limit"><b>×</b>Rely on AI alone for final decisions</div><div class="limit"><b>×</b>Verify scientific correctness of study results</div></div>
+          </section>
+        </footer>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

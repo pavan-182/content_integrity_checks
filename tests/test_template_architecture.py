@@ -21,6 +21,7 @@ def pair(
     match="entity_value_substitution",
     severity="high",
     sections=None,
+    classification="possible_template_reuse",
 ):
     return PairFinding(
         pair_id=f"PAIR-{left}--{right}",
@@ -35,6 +36,7 @@ def pair(
         confidence=confidence,
         severity=severity,
         matched_sections=sections or ["Results"],
+        pair_classification=classification,
     )
 
 
@@ -67,13 +69,13 @@ def detector_finding(check_type, confidence="high", relationship_context="none")
 
 
 class TemplateArchitectureTests(unittest.TestCase):
-    def test_both_detectors_merge_once_and_promote_confidence(self):
+    def test_both_detectors_merge_once_without_promoting_confidence(self):
         rows = merge_pair_findings(
             [detector_finding("exact_text_reuse", "high")],
             [detector_finding("entity_normalized_template", "high")],
         )
         self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0].confidence, "very_high")
+        self.assertEqual(rows[0].confidence, "high")
         self.assertEqual(
             rows[0].supporting_match_types,
             ["entity_normalized_template", "exact_text_reuse"],
@@ -151,7 +153,54 @@ class TemplateArchitectureTests(unittest.TestCase):
 
     def test_shared_trial_lowers_severity(self):
         finding = detector_finding("exact_text_reuse", relationship_context="shared trial ID: NCT12345678")
-        self.assertEqual(merge_pair_findings([finding], [])[0].severity, "low")
+        pair_finding = merge_pair_findings([finding], [])[0]
+        self.assertEqual(pair_finding.severity, "low")
+        self.assertEqual(pair_finding.pair_classification, "possible_companion_analysis")
+
+    def test_shared_authors_route_pair_as_related_work(self):
+        finding = detector_finding("exact_text_reuse", relationship_context="overlapping authors: 2")
+        self.assertEqual(
+            merge_pair_findings([finding], [])[0].pair_classification,
+            "possible_related_work",
+        )
+
+    def test_related_pair_is_reported_but_excluded_from_risk_and_families(self):
+        records = [ParsedRecord(source_file=f"{i}.xml", record_id=i) for i in ("A", "B", "C")]
+        related = [
+            pair("A", "B", classification="possible_related_work"),
+            pair("A", "C", classification="possible_related_work"),
+            pair("B", "C", classification="possible_related_work"),
+        ]
+        self.assertEqual(cluster_template_findings(related, records), [])
+        summary = _aggregate_findings(records, [], related, [])[0]
+        self.assertEqual(summary["template_flag"], "No")
+        self.assertEqual(summary["related_or_companion_flag"], "Yes")
+        self.assertEqual(summary["overall_content_risk"], "None")
+
+    def test_unsupported_registry_notice_does_not_raise_risk(self):
+        notice = Finding(
+            finding_id="TRV-1",
+            record_id="A",
+            source_file="A.xml",
+            detector_type="unverifiable_clinical_trial",
+            check_type="unsupported_registry_manual_verification",
+            category="unverifiable_clinical_trial",
+            matched_text="ACTRN12345678901234",
+            evidence_snippet="Manual registry verification is required.",
+            section_or_field="Abstract",
+            severity="low",
+            confidence=1.0,
+            rule_id="trial",
+        )
+        summary = _aggregate_findings(
+            [ParsedRecord(source_file="A.xml", record_id="A")],
+            [notice],
+            [],
+            [],
+        )[0]
+        self.assertEqual(summary["unverifiable_trial_flag"], "Yes")
+        self.assertEqual(summary["overall_content_risk"], "None")
+        self.assertEqual(summary["total_finding_count"], 0)
 
     def test_pair_evidence_prefers_the_actual_matched_sentences(self):
         finding = detector_finding("exact_text_reuse")

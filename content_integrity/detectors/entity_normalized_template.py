@@ -1,29 +1,24 @@
 from __future__ import annotations
 
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from difflib import SequenceMatcher
+from functools import lru_cache
 from hashlib import blake2b
 from itertools import combinations
 from typing import Any
 
+from ..entity_extraction import mask_text
 from ..models import ParsedRecord
 from ..template_matching_common import (
-    DATE_PATTERNS,
-    DRUG_SUFFIX_PATTERN,
-    EMAIL_PATTERN,
-    GENE_PATTERN,
-    NUMBER_PATTERN,
-    PERCENT_PATTERN,
     PLACEHOLDER_TOKEN_RE,
     PLACEHOLDER_TOKENS,
-    PVAL_PATTERN,
     SECTION_WEIGHTS,
     TRIAL_PATTERN,
-    URL_PATTERN,
     _candidate_pairs,
     _content_class,
+    _sentence_split,
     _shared_excerpt,
     _similarity,
 )
@@ -38,24 +33,18 @@ MINIMUM_SKELETON_WORDS = 30
 MAXIMUM_PLACEHOLDER_RATIO = 0.35
 MINIMUM_SUBSTITUTIONS = 1
 SECTION_SIMILARITY_THRESHOLD = 0.88
+LOCAL_MASKED_SIMILARITY_THRESHOLD = 0.75
+LOCAL_ORIGINAL_SUPPORT_THRESHOLD = 0.60
+LOCAL_SEQUENCE_SIMILARITY_THRESHOLD = 0.63
+MODERATE_LOCAL_MASKED_THRESHOLD = 0.63
+MODERATE_LOCAL_ORIGINAL_THRESHOLD = 0.54
+MODERATE_GLOBAL_MASKED_THRESHOLD = 0.27
+MODERATE_SHARED_SKELETON_WORDS = 60
+MINIMUM_GLOBAL_ORIGINAL_FOR_LOCAL = 0.20
+RARE_TITLE_TOKEN_DOCUMENT_FREQUENCY = 3
+TITLE_STOP_TOKENS = {"and", "the", "for", "from", "in", "of", "on", "to", "via", "with"}
+# ponytail: calibrated on the 93-pair ASCO baseline; re-fit when that baseline changes.
 
-EXPLICIT_GENE_PATTERN = re.compile(
-    r"\b(?:EGFR|ALK|KRAS|NRAS|BRAF|RET|ROS1|MET|PIK3CA|PTEN|TP53|APC)\b"
-)
-DISEASE_PATTERN = re.compile(
-    r"\b(?:(?:non-small[- ]cell|small[- ]cell)\s+lung|lung|breast|colorectal|"
-    r"colon|rectal|prostate|ovarian|pancreatic|gastric|endometrial|cervical|"
-    r"renal(?: cell)?|hepatocellular|urothelial|thyroid|head and neck)\s+"
-    r"(?:cancer|carcinoma)\b|\b(?:melanoma|mesothelioma|glioblastoma|"
-    r"multiple myeloma|hodgkin lymphoma|non-hodgkin lymphoma|acute myeloid "
-    r"leukemia|chronic lymphocytic leukemia)\b",
-    re.IGNORECASE,
-)
-BIOMARKER_PATTERN = re.compile(
-    r"\b(?:tumou?r mutational burden|microsatellite instability|mismatch repair "
-    r"deficien(?:cy|t)|circulating tumou?r DNA|minimal residual disease)\b",
-    re.IGNORECASE,
-)
 EXPLICIT_RELATION_RE = re.compile(
     r"\b(?:same|parent|companion|previously reported)\s+(?:trial|cohort|study|protocol)\b|"
     r"\b(?:analysis of|derived from)\s+the\s+(?:same|parent)\s+(?:trial|cohort|study)\b",
@@ -115,39 +104,16 @@ class _Representation:
 
 
 def _mask_and_capture(text: str) -> tuple[str, dict[str, tuple[str, ...]]]:
+    masked, entities = mask_text(text)
+    # Keep the calibrated detector's historical protein/gene equivalence while
+    # the exported representation retains the richer protein type.
+    masked = masked.replace("<PROTEIN>", "<GENE>")
+    masked = re.sub(r"<GENE>\s*-\s*(?=[a-z])", "<GENE> ", masked)
     captured: dict[str, list[str]] = defaultdict(list)
-    masked = normalize_whitespace(text)
-
-    def replace(pattern: re.Pattern[str], label: str, value: str) -> None:
-        nonlocal masked
-
-        def replacement(match: re.Match[str]) -> str:
-            captured[label].append(
-                normalize_whitespace(match.group(0)).rstrip("-") if label == "gene"
-                else normalize_whitespace(match.group(0))
-            )
-            return value
-
-        masked = pattern.sub(replacement, masked)
-
-    replace(TRIAL_PATTERN, "trial_id", "<TRIAL_ID>")
-    replace(GENE_PATTERN, "gene", "<GENE>")
-    replace(EXPLICIT_GENE_PATTERN, "gene", "<GENE>")
-    masked = masked.lower().replace("<trial_id>", "<TRIAL_ID>").replace("<gene>", "<GENE>")
-    masked = re.sub(r"<GENE>\s*-?\s*(?=[a-z])", "<GENE> ", masked)
-    replace(URL_PATTERN, "url", "<URL>")
-    replace(EMAIL_PATTERN, "email", "<EMAIL>")
-    for pattern in DATE_PATTERNS:
-        replace(pattern, "date", "<DATE>")
-    replace(PVAL_PATTERN, "pvalue", "<PVAL>")
-    replace(PERCENT_PATTERN, "percent", "<PCT>")
-    replace(DISEASE_PATTERN, "disease", "<DISEASE>")
-    replace(BIOMARKER_PATTERN, "biomarker", "<BIOMARKER>")
-    replace(DRUG_SUFFIX_PATTERN, "drug", "<DRUG>")
-    replace(NUMBER_PATTERN, "number", "<NUM>")
-    return normalize_whitespace(masked), {
-        label: tuple(values) for label, values in captured.items()
-    }
+    for entity in entities:
+        label = "gene" if entity.entity_type == "protein" else entity.entity_type
+        captured[label].append(entity.text.rstrip("-") if label == "gene" else entity.text)
+    return masked, {label: tuple(values) for label, values in captured.items()}
 
 
 def _representation(record: ParsedRecord) -> _Representation:
@@ -196,6 +162,77 @@ def _section_candidate_pairs(
         if len(members) >= 2
         for pair in combinations(sorted(members), 2)
     }
+
+
+def _title_candidate_pairs(records: list[ParsedRecord]) -> set[tuple[str, str]]:
+    exact: dict[str, list[str]] = defaultdict(list)
+    shingles: dict[tuple[str, ...], list[str]] = defaultdict(list)
+    for record in records:
+        masked = _mask_and_capture(record.title)[0]
+        if not masked:
+            continue
+        tokens = text_tokens(masked)
+        exact[blake2b(masked.encode(), digest_size=16).hexdigest()].append(record.record_id)
+        for index in range(len(tokens) - 3):
+            shingles[tuple(tokens[index:index + 4])].append(record.record_id)
+
+    pairs = {
+        pair
+        for members in exact.values()
+        if 2 <= len(members) <= 50
+        for pair in combinations(sorted(set(members)), 2)
+    }
+    shared: dict[tuple[str, str], int] = defaultdict(int)
+    for members in shingles.values():
+        unique = sorted(set(members))
+        if 2 <= len(unique) <= 50:
+            for pair in combinations(unique, 2):
+                shared[pair] += 1
+    pairs.update(pair for pair, count in shared.items() if count >= 2)
+    return pairs
+
+
+def _rare_title_tokens(records: list[ParsedRecord]) -> dict[str, set[str]]:
+    titles = {
+        record.record_id: set(text_tokens(normalize_for_matching(record.title)))
+        for record in records
+    }
+    frequency = Counter(token for tokens in titles.values() for token in tokens)
+    return {
+        record_id: {token for token in tokens if frequency[token] <= RARE_TITLE_TOKEN_DOCUMENT_FREQUENCY}
+        for record_id, tokens in titles.items()
+    }
+
+
+def _rare_title_candidate_pairs(records: list[ParsedRecord]) -> set[tuple[str, str]]:
+    tokens = _rare_title_tokens(records)
+    return {
+        pair
+        for pair in combinations(sorted(tokens), 2)
+        if len(tokens[pair[0]] & tokens[pair[1]]) >= 2
+    }
+
+
+def _assay_signature(text: str) -> set[str]:
+    normalized = normalize_for_matching(text)
+    patterns = {
+        "western_blot": ("western blot",),
+        "mtt": ("mtt",),
+        "colony_formation": ("colony formation", "cell colonies"),
+        "transwell": ("transwell",),
+        "chip": ("chromatin immunoprecipitation", "chip"),
+        "rt_qpcr": ("rt qpcr", "qrt pcr", "quantitative pcr"),
+    }
+    return {name for name, values in patterns.items() if any(value in normalized for value in values)}
+
+
+def _has_multi_arm_protocol(text: str) -> bool:
+    tokens = set(text_tokens(normalize_for_matching(text)))
+    return {"blank", "negative", "control"} <= tokens and any(
+        token.startswith("mimic") for token in tokens
+    ) and any(token.startswith("inhibitor") for token in tokens) and (
+        any(token.startswith("si") for token in tokens) or "small interfering" in normalize_for_matching(text)
+    )
 
 
 def _ngram_similarity(left: str, right: str, size: int = 5) -> float:
@@ -271,6 +308,43 @@ def _shared_skeleton_words(left: str, right: str) -> int:
         sum(token not in PLACEHOLDER_TOKENS for token in left_tokens[block.a:block.a + block.size])
         for block in SequenceMatcher(None, left_tokens, right_tokens, autojunk=False).get_matching_blocks()
     )
+
+
+def _local_windows(representation: _Representation, size: int) -> list[tuple[str, str]]:
+    sentences = _sentence_split(_non_generic_text(representation.original))
+    return [
+        (
+            normalize_for_matching(" ".join(sentences[index:index + size])),
+            _mask_and_capture(" ".join(sentences[index:index + size]))[0],
+        )
+        for index in range(len(sentences) - size + 1)
+    ]
+
+
+@lru_cache(maxsize=4096)
+def _token_counts(text: str) -> Counter[str]:
+    return Counter(text_tokens(text))
+
+
+def _could_reach_similarity(left: str, right: str, threshold: float) -> bool:
+    left_counts, right_counts = _token_counts(left), _token_counts(right)
+    total = sum(left_counts.values()) + sum(right_counts.values())
+    return bool(total) and 2 * sum((left_counts & right_counts).values()) / total >= threshold
+
+
+def _local_window_similarity(
+    left_windows: list[tuple[str, str]],
+    right_windows: list[tuple[str, str]],
+) -> tuple[float, float]:
+    best = (0.0, 0.0)
+    for left_original, left_masked in left_windows:
+        for right_original, right_masked in right_windows:
+            if not _could_reach_similarity(left_masked, right_masked, MODERATE_LOCAL_MASKED_THRESHOLD):
+                continue
+            masked = _similarity(left_masked, right_masked)
+            if masked > best[0]:
+                best = masked, _similarity(left_original, right_original)
+    return best
 
 
 def _relationship_context(left: ParsedRecord, right: ParsedRecord) -> tuple[str, str]:
@@ -363,17 +437,43 @@ def detect_entity_normalized_templates(
     maximum_placeholder_ratio: float = MAXIMUM_PLACEHOLDER_RATIO,
     minimum_substitutions: int = MINIMUM_SUBSTITUTIONS,
     section_similarity_threshold: float = SECTION_SIMILARITY_THRESHOLD,
+    rare_title_tokens: dict[str, set[str]] | None = None,
 ) -> list[EntityNormalizedTemplateFinding]:
     representations = {record.record_id: _representation(record) for record in records}
+    local_windows = {
+        record_id: {size: _local_windows(representation, size) for size in (1, 2)}
+        for record_id, representation in representations.items()
+    }
     lookup = {record.record_id: record for record in records}
     skeletons = {record_id: item.skeleton for record_id, item in representations.items()}
     normalized = {record_id: item.normalized for record_id, item in representations.items()}
     candidates = _candidate_pairs(records, skeletons, normalized)
     candidates.update(_section_candidate_pairs(representations))
+    candidates.update(_title_candidate_pairs(records))
+    candidates.update(_rare_title_candidate_pairs(records))
+    title_token_map = rare_title_tokens or _rare_title_tokens(records)
 
     findings: list[EntityNormalizedTemplateFinding] = []
     for left_id, right_id in sorted(candidates):
         left, right = representations[left_id], representations[right_id]
+        title_tokens = title_token_map[left_id] & title_token_map[right_id]
+        shared_title_terms = (
+            set(text_tokens(normalize_for_matching(lookup[left_id].title)))
+            & set(text_tokens(normalize_for_matching(lookup[right_id].title)))
+        ) - TITLE_STOP_TOKENS
+        shared_assays = _assay_signature(left.original) & _assay_signature(right.original)
+        assay_trigger = len(title_tokens) >= 2 and len(shared_assays) >= 5
+        multi_arm_trigger = (
+            len(shared_title_terms) >= 4
+            and _has_multi_arm_protocol(left.original)
+            and _has_multi_arm_protocol(right.original)
+        )
+        short_title_trigger = (
+            min(left.meaningful_word_count, right.meaningful_word_count) < minimum_skeleton_words
+            and len(title_tokens) >= 2
+            and any(any(character.isalpha() for character in token) and any(character.isdigit() for character in token) for token in title_tokens)
+            and any(token.isdigit() for token in title_tokens)
+        )
         if not left.normalized or not right.normalized:
             continue
         if left.original_normalized == right.original_normalized:
@@ -384,7 +484,10 @@ def detect_entity_normalized_templates(
             continue
         if _content_class(lookup[right_id], right.skeleton) in {"empty_or_unusable", "administrative_boilerplate"}:
             continue
-        if min(left.meaningful_word_count, right.meaningful_word_count) < minimum_skeleton_words:
+        if (
+            min(left.meaningful_word_count, right.meaningful_word_count) < minimum_skeleton_words
+            and not short_title_trigger
+        ):
             continue
 
         masked_similarity = _similarity(left.skeleton, right.skeleton)
@@ -410,17 +513,37 @@ def detect_entity_normalized_templates(
         ) >= section_similarity_threshold
         substitution_count, substitutions = _substitutions(left, right)
         shared_word_count = _shared_skeleton_words(left.skeleton, right.skeleton)
+        if (
+            substitution_count < minimum_substitutions
+            or shared_word_count < minimum_skeleton_words
+        ) and not (assay_trigger or multi_arm_trigger or short_title_trigger):
+            continue
+        local_masked, local_original = _local_window_similarity(
+            local_windows[left_id][1], local_windows[right_id][1]
+        )
+        sequence_masked, sequence_original = _local_window_similarity(
+            local_windows[left_id][2], local_windows[right_id][2]
+        )
         section_trigger = (
             len(matched_high_value) >= 2
             and high_value_section_similarity >= section_similarity_threshold
         )
-        if (
-            original_similarity < original_support_threshold
-            or substitution_count < minimum_substitutions
-            or shared_word_count < minimum_skeleton_words
-            or methods_only
-            or not (masked_similarity >= masked_similarity_threshold or section_trigger)
-        ):
+        global_trigger = (
+            original_similarity >= original_support_threshold
+            and not methods_only
+            and (masked_similarity >= masked_similarity_threshold or section_trigger)
+        )
+        local_trigger = (
+            (local_masked >= LOCAL_MASKED_SIMILARITY_THRESHOLD
+             and local_original >= LOCAL_ORIGINAL_SUPPORT_THRESHOLD)
+            or (sequence_masked >= LOCAL_SEQUENCE_SIMILARITY_THRESHOLD
+                and sequence_original >= LOCAL_ORIGINAL_SUPPORT_THRESHOLD)
+            or (local_masked >= MODERATE_LOCAL_MASKED_THRESHOLD
+                and local_original >= MODERATE_LOCAL_ORIGINAL_THRESHOLD
+                and masked_similarity >= MODERATE_GLOBAL_MASKED_THRESHOLD
+                and shared_word_count >= MODERATE_SHARED_SKELETON_WORDS)
+        ) and original_similarity >= MINIMUM_GLOBAL_ORIGINAL_FOR_LOCAL
+        if not (global_trigger or local_trigger or assay_trigger or multi_arm_trigger or short_title_trigger):
             continue
 
         confidence = determine_confidence(
@@ -432,6 +555,10 @@ def detect_entity_normalized_templates(
             original_support_threshold=original_support_threshold,
             section_similarity_threshold=section_similarity_threshold,
         )
+        if local_trigger and confidence == "medium" and local_masked >= 0.85:
+            confidence = "high"
+        if assay_trigger or multi_arm_trigger:
+            confidence = "high"
         relationship, relationship_strength = _relationship_context(
             lookup[left_id], lookup[right_id]
         )
@@ -441,12 +568,24 @@ def detect_entity_normalized_templates(
             if masked_similarity == 1.0
             else "shared_high_value_sections"
             if section_trigger
+            else "local_entity_substitution"
+            if local_trigger
+            else "shared_assay_protocol"
+            if assay_trigger
+            else "shared_multi_arm_protocol"
+            if multi_arm_trigger
+            else "title_related_duplicate"
+            if short_title_trigger
             else "entity_value_substitution"
         )
         evidence = (
             f"The abstracts have {masked_similarity:.0%} masked-skeleton similarity and "
             f"{original_similarity:.0%} original-text similarity, with "
-            f"{substitution_count} changed study-specific value(s)"
+            f"{substitution_count} changed study-specific value(s); the strongest local "
+            f"match has {local_masked:.0%} masked and {local_original:.0%} original similarity"
+            + (f"; shared assay signature: {', '.join(sorted(shared_assays))}" if assay_trigger else "")
+            + ("; both abstracts use the same multi-arm mimic/inhibitor protocol" if multi_arm_trigger else "")
+            + (f"; shared rare title tokens: {', '.join(sorted(title_tokens))}" if short_title_trigger else "")
             + (f"; matched sections: {', '.join(matched_sections)}." if matched_sections else ".")
         )
         review_reason = (

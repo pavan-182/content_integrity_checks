@@ -1,0 +1,4 @@
+Generic-workflow calibration on reviewed predictions
+positive contiguous non-generic overlap: min=3 max=12
+false-positive contiguous non-generic overlap: min=4 max=9
+No threshold can route a false positive to manual review while retaining every reviewed positive.

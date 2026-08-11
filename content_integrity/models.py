@@ -39,6 +39,7 @@ class ParsedRecord:
     abstract_sections: list[dict[str, str]] = field(default_factory=list)
     structured_abstract: bool = False
     keywords: list[str] = field(default_factory=list)
+    trial_ids: list[str] = field(default_factory=list)
     authors: list[str] = field(default_factory=list)
     affiliations: list[str] = field(default_factory=list)
     journal: str = ""

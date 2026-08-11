@@ -56,7 +56,7 @@ class PipelineTests(unittest.TestCase):
                   <title-group><article-title>Root abstract</article-title></title-group>
                   <contrib-group><contrib contrib-type="presenter"><name><surname>Root</surname><given-names>A</given-names></name></contrib><aff>Root Hospital</aff></contrib-group>
                   <copyright-year>2026</copyright-year>
-                  <abstract><p><bold>e1</bold></p><p><bold>Background: </bold>Root background. <bold>Methods: </bold>Root methods.</p></abstract>
+                  <abstract><p><bold>e1</bold></p><p><bold>Background: </bold>Root background. <bold>Methods: </bold>Root methods. NCT12345678.</p></abstract>
                   <kwd-group><kwd>root-keyword</kwd></kwd-group>
                 </article-meta>
               </front>
@@ -82,7 +82,11 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual((root.affiliations, nested.affiliations), (["Root Hospital"], ["Nested Hospital"]))
         self.assertEqual((root.keywords, nested.keywords), (["root-keyword"], ["nested-keyword"]))
         self.assertEqual((root.publication_year, nested.publication_year), ("2026", "2026"))
+        self.assertFalse(root.abstract_text.startswith("e1"))
+        self.assertFalse(nested.abstract_text.startswith("e2"))
         self.assertNotIn("REMOVE TABLE", nested.abstract_text)
+        self.assertEqual(root.trial_ids, ["NCT12345678"])
+        self.assertTrue(all(block.source_start is not None and block.source_end is not None for block in root.trace_text_blocks))
 
     def test_template_similarity_is_tokenized_and_symmetric(self) -> None:
         left = "results " + "patient response " * 120

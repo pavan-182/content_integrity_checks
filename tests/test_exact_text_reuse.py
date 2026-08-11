@@ -82,6 +82,33 @@ class ExactTextReuseTests(unittest.TestCase):
         )
         self.assertEqual(findings, [])
 
+    def test_detects_rare_exact_phrase_with_similar_local_wording(self) -> None:
+        shared = "cell lines compared with normal cell line overexpression of microRNA"
+        findings = detect_exact_text_reuse(
+            [
+                ParsedRecord(
+                    "a.xml",
+                    record_id="A",
+                    abstract_text=f"Expression was reduced in {shared} suppressed tumour growth in vitro.",
+                ),
+                ParsedRecord(
+                    "b.xml",
+                    record_id="B",
+                    abstract_text=f"Expression was lower in {shared} inhibited cancer growth in vivo.",
+                ),
+            ]
+        )
+        self.assertEqual(findings[0].match_type, "rare_exact_phrase")
+        self.assertTrue(any(shared.lower() in block for block in findings[0].matched_text_blocks))
+
+    def test_ignores_generic_statistical_rare_phrase(self) -> None:
+        shared = "Survival was estimated using Kaplan Meier methods and compared with log rank tests."
+        findings = detect_exact_text_reuse([
+            ParsedRecord("a.xml", record_id="A", abstract_text=f"Independent lung cohort. {shared}"),
+            ParsedRecord("b.xml", record_id="B", abstract_text=f"Unrelated breast registry. {shared}"),
+        ])
+        self.assertEqual(findings, [])
+
     def test_high_confidence_needs_sentences_or_coverage(self) -> None:
         self.assertEqual(_determine_confidence("multiple_uncommon_sentences", 3, 0.2), "high")
         self.assertEqual(_determine_confidence("substantial_shared_text", 0, 0.3), "high")

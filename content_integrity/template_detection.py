@@ -33,11 +33,13 @@ DRUG_SUFFIX_PATTERN = re.compile(
 URL_PATTERN = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
 EMAIL_PATTERN = re.compile(r"\b[\w.\-+]+@[\w.\-]+\.\w+\b")
 PLACEHOLDER_TOKEN_RE = re.compile(
-    r"<(URL|EMAIL|DATE|TRIAL_ID|PVAL|PCT|GENE|DRUG|DISEASE|BIOMARKER|NUM)>"
+    r"<(URL|EMAIL|DATE|TRIAL_ID|PVAL|PCT|GENE|PROTEIN|MIRNA|LNCRNA|DRUG|DISEASE|"
+    r"BIOMARKER|PATHWAY|CELL_LINE|ASSAY|ENDPOINT|REGISTRY|POPULATION|TREATMENT_CLASS|NUM)>"
 )
 PLACEHOLDER_TOKENS = {
     "url", "email", "date", "trial", "id", "pval", "pct", "gene", "drug",
-    "disease", "biomarker", "num",
+    "protein", "mirna", "lncrna", "disease", "biomarker", "pathway", "cell",
+    "line", "assay", "endpoint", "registry", "population", "treatment", "class", "num",
 }
 BOILERPLATE_RE = re.compile(r"\b(?:n a n a|not applicable|none|n a)\b")
 # ponytail: provisional transparent weights; replace after labelled ASCO calibration.

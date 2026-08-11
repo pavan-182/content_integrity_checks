@@ -1,0 +1,150 @@
+from __future__ import annotations
+
+from collections import defaultdict
+
+from .candidate_routes import generate_candidate_pairs
+from .editorial_scoring import assign_editorial_priority
+from .entity_substitutions import collect_entity_substitutions
+from .evidence_scoring import score_pair_evidence
+from .family_clustering import build_suspicious_families
+from .models import ParsedRecord
+from .pair_classification import classify_pairs
+from .pair_evidence import collect_pair_evidence
+from .study_context import compare_study_context
+
+
+REPORT_VERSION = "asco-enriched-report-v1"
+PAIR_REPORT_COLUMNS = [
+    "report_version", "left_record_id", "right_record_id", "left_title", "right_title", "retrieval_routes",
+    "pair_class", "editorial_score", "review_priority", "rule_path", "primary_evidence", "supporting_evidence",
+    "contextual_evidence", "direct_evidence", "masked_title_similarity", "original_title_similarity",
+    "masked_body_similarity", "original_body_similarity", "strongest_section", "strongest_masked_section_similarity",
+    "largest_shared_original_block_words", "context_interpretation", "shared_trial_ids", "shared_databases",
+    "shared_populations", "shared_endpoints", "explicit_companion_wording", "family_id", "left_family_status",
+    "right_family_status", "limitations", "priority_reason",
+    "shared_entities", "left_only_entities", "right_only_entities", "likely_substitutions",
+    "left_supporting_sentences", "right_supporting_sentences",
+]
+FAMILY_REPORT_COLUMNS = [
+    "report_version", "family_id", "family_size", "representative_record_id", "family_edge_score",
+    "accepted_edge_count", "member_ids", "outlier_record_ids", "excluded_pair_count",
+]
+ABSTRACT_REPORT_COLUMNS = [
+    "report_version", "record_id", "source_file", "title", "candidate_pair_count", "finding_pair_count",
+    "highest_review_priority", "strongest_matched_record_id", "family_id", "family_member_status", "reporting_note",
+]
+
+
+def _joined(values: tuple[str, ...]) -> str:
+    return " | ".join(values)
+
+
+def build_enriched_reports(records: list[ParsedRecord]) -> tuple[list[dict[str, object]], list[dict[str, object]], list[dict[str, object]]]:
+    evidence = collect_pair_evidence(records)
+    scores = score_pair_evidence(records, evidence)
+    contexts = compare_study_context(records)
+    substitutions = collect_entity_substitutions(records)
+    classifications = classify_pairs(records, scores, contexts)
+    priorities = [assign_editorial_priority(item) for item in classifications]
+    families = build_suspicious_families(classifications)
+    record_lookup = {record.record_id: record for record in records}
+    evidence_lookup = {(item.left_record_id, item.right_record_id): item for item in evidence}
+    context_lookup = {(item.left_record_id, item.right_record_id): item for item in contexts}
+    substitution_lookup = {(item.left_record_id, item.right_record_id): item for item in substitutions}
+    priority_lookup = {(item.left_record_id, item.right_record_id): item for item in priorities}
+    family_lookup = {item.record_id: item for item in families}
+
+    pair_rows = []
+    for item in classifications:
+        key = (item.left_record_id, item.right_record_id)
+        pair_evidence, context, priority, substitution = evidence_lookup[key], context_lookup[key], priority_lookup[key], substitution_lookup[key]
+        left_family, right_family = family_lookup.get(item.left_record_id), family_lookup.get(item.right_record_id)
+        pair_rows.append({
+            "report_version": REPORT_VERSION,
+            "left_record_id": item.left_record_id,
+            "right_record_id": item.right_record_id,
+            "left_title": record_lookup[item.left_record_id].title,
+            "right_title": record_lookup[item.right_record_id].title,
+            "retrieval_routes": _joined(pair_evidence.retrieval_routes),
+            "pair_class": item.pair_class,
+            "editorial_score": priority.editorial_score,
+            "review_priority": priority.review_priority,
+            "rule_path": item.rule_path,
+            "primary_evidence": _joined(item.primary_evidence),
+            "supporting_evidence": _joined(item.supporting_evidence),
+            "contextual_evidence": _joined(item.contextual_evidence),
+            "direct_evidence": _joined(pair_evidence.direct_evidence),
+            "masked_title_similarity": pair_evidence.masked_title_similarity,
+            "original_title_similarity": pair_evidence.original_title_similarity,
+            "masked_body_similarity": pair_evidence.masked_body_similarity,
+            "original_body_similarity": pair_evidence.original_body_similarity,
+            "strongest_section": pair_evidence.strongest_section,
+            "strongest_masked_section_similarity": pair_evidence.strongest_masked_section_similarity,
+            "largest_shared_original_block_words": pair_evidence.largest_shared_original_block_words,
+            "context_interpretation": context.context_interpretation,
+            "shared_trial_ids": _joined(context.shared_trial_ids),
+            "shared_databases": _joined(context.shared_databases),
+            "shared_populations": _joined(context.shared_populations),
+            "shared_endpoints": _joined(context.shared_endpoints),
+            "explicit_companion_wording": context.explicit_companion_wording,
+            "family_id": left_family.family_id if left_family and right_family and left_family.family_id == right_family.family_id else "",
+            "left_family_status": left_family.member_status if left_family else "",
+            "right_family_status": right_family.member_status if right_family else "",
+            "limitations": item.limitations,
+            "priority_reason": priority.priority_reason,
+            "shared_entities": substitution.shared_entities,
+            "left_only_entities": substitution.left_only_entities,
+            "right_only_entities": substitution.right_only_entities,
+            "likely_substitutions": substitution.likely_substitutions,
+            "left_supporting_sentences": substitution.left_supporting_sentences,
+            "right_supporting_sentences": substitution.right_supporting_sentences,
+        })
+
+    family_groups: dict[str, list] = defaultdict(list)
+    for item in families:
+        family_groups[item.family_id].append(item)
+    family_rows = [
+        {
+            "report_version": REPORT_VERSION,
+            "family_id": family_id,
+            "family_size": members[0].family_size,
+            "representative_record_id": members[0].representative_record_id,
+            "family_edge_score": members[0].family_edge_score,
+            "accepted_edge_count": members[0].accepted_edge_count,
+            "member_ids": _joined(tuple(sorted(item.record_id for item in members))),
+            "outlier_record_ids": _joined(tuple(sorted(item.record_id for item in members if item.member_status == "outlier"))),
+            "excluded_pair_count": members[0].excluded_pair_count,
+        }
+        for family_id, members in sorted(family_groups.items())
+    ]
+
+    linked: dict[str, list] = defaultdict(list)
+    for item in classifications:
+        linked[item.left_record_id].append(item)
+        linked[item.right_record_id].append(item)
+    priority_rank = {"None": 0, "Low": 1, "Medium": 2, "High": 3}
+    abstract_rows = []
+    for record in records:
+        matches = linked[record.record_id]
+        strongest = max(
+            matches,
+            key=lambda item: (priority_rank[priority_lookup[(item.left_record_id, item.right_record_id)].review_priority], item.review_score),
+            default=None,
+        )
+        family = family_lookup.get(record.record_id)
+        abstract_rows.append({
+            "report_version": REPORT_VERSION,
+            "record_id": record.record_id,
+            "source_file": record.source_file,
+            "title": record.title,
+            "candidate_pair_count": len(matches),
+            "finding_pair_count": sum(priority_lookup[(item.left_record_id, item.right_record_id)].review_priority != "None" for item in matches),
+            "highest_review_priority": priority_lookup[(strongest.left_record_id, strongest.right_record_id)].review_priority if strongest else "None",
+            "strongest_matched_record_id": (
+                strongest.right_record_id if strongest.left_record_id == record.record_id else strongest.left_record_id
+            ) if strongest else "",
+            "family_id": family.family_id if family else "",
+            "family_member_status": family.member_status if family else "",
+            "reporting_note": "No primary-evidence pair." if matches and not any(item.primary_evidence for item in matches) else "No routed candidate." if not matches else "Primary-evidence pair available for review.",
+        })
+    return pair_rows, family_rows, abstract_rows

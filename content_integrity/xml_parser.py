@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from pathlib import Path
 
 from lxml import etree
@@ -61,6 +62,7 @@ EXCLUDED_TEXT_TAGS = {
     "table-wrap": "tables",
 }
 TRACE_BLOCK_TAGS = {"p": "paragraph", "list-item": "list_item", "preformat": "preformatted"}
+TRIAL_ID_RE = re.compile(r"\bNCT\d{8}\b", re.IGNORECASE)
 
 
 def _local_name(tag: str) -> str:
@@ -253,6 +255,25 @@ def build_trace_text_blocks(
     return blocks, fallback
 
 
+def _trace_provenance(blocks: list[TraceTextBlock]) -> tuple[str, list[TraceTextBlock]]:
+    """Return a lossless record text and offsets for each trace block within it."""
+    separator = "\n\n"
+    parts: list[str] = []
+    traced: list[TraceTextBlock] = []
+    cursor = 0
+    for block in blocks:
+        source = block.source_text.strip()
+        if not source:
+            continue
+        if parts:
+            cursor += len(separator)
+        start = cursor
+        cursor += len(source)
+        parts.append(source)
+        traced.append(replace(block, source_text=source, source_start=start, source_end=cursor))
+    return separator.join(parts), traced
+
+
 def _excluded_sections_present(root: etree._Element) -> set[str]:
     return {
         excluded_name
@@ -344,6 +365,8 @@ def extract_abstract_sections(
         return explicit_sections, True, full_text
 
     paragraphs = _paragraph_texts(abstract_node, excluded_sections)
+    if paragraphs and re.fullmatch(r"[A-Za-z]*\d+(?:[._-][A-Za-z0-9]+)*", paragraphs[0]):
+        paragraphs = paragraphs[1:]
     collected_sections: list[dict[str, str]] = []
     structured = False
     for paragraph in paragraphs:
@@ -470,7 +493,8 @@ def _extract_article_root(tree: etree._ElementTree | etree._Element, source_file
         _string_from_xpath(metadata_root, ".//*[local-name()='history'][1]/*[local-name()='date'][@date-type='received'][1]/*[local-name()='year'][1]"),
         _string_from_xpath(metadata_root, ".//*[local-name()='copyright-year'][1]"),
     )
-    raw_text = join_nonempty([title, abstract_text], delimiter=" ")
+    raw_text, trace_text_blocks = _trace_provenance(trace_text_blocks)
+    trial_ids = unique_preserve_order(match.upper() for match in TRIAL_ID_RE.findall(f"{title} {abstract_text}"))
     warnings: list[ParseWarning] = []
     for field_name, value in (
         ("record_id", record_id),
@@ -508,6 +532,7 @@ def _extract_article_root(tree: etree._ElementTree | etree._Element, source_file
         abstract_sections=abstract_sections or [{"section": "Abstract", "text": abstract_text}],
         structured_abstract=structured,
         keywords=keywords,
+        trial_ids=trial_ids,
         authors=authors,
         affiliations=affiliations,
         journal=journal,
@@ -580,7 +605,8 @@ def _extract_article_set_root(tree: etree._ElementTree, source_file: str) -> Par
         _string_from_xpath(article, ".//*[local-name()='history'][1]/*[local-name()='date'][@date-type='received'][1]/*[local-name()='year'][1]"),
         year_from_date_text(article.get("export_date")),
     )
-    raw_text = join_nonempty([title, abstract_text], delimiter=" ")
+    raw_text, trace_text_blocks = _trace_provenance(trace_text_blocks)
+    trial_ids = unique_preserve_order(match.upper() for match in TRIAL_ID_RE.findall(f"{title} {abstract_text}"))
     warnings: list[ParseWarning] = []
     for field_name, value in (
         ("record_id", record_id),
@@ -618,6 +644,7 @@ def _extract_article_set_root(tree: etree._ElementTree, source_file: str) -> Par
         abstract_sections=abstract_sections or [{"section": "Abstract", "text": abstract_text}],
         structured_abstract=structured,
         keywords=keywords,
+        trial_ids=trial_ids,
         authors=authors,
         affiliations=affiliations,
         journal=journal,

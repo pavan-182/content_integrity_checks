@@ -8,7 +8,7 @@ from itertools import combinations
 from typing import Any
 
 from ..models import ParsedRecord
-from ..template_matching_common import TRIAL_PATTERN, _candidate_pairs, _sentence_split
+from ..template_matching_common import TRIAL_PATTERN, _candidate_pairs, _sentence_split, _similarity
 from ..utils import normalize_for_matching, normalize_label, normalize_whitespace, text_tokens
 
 
@@ -19,6 +19,9 @@ MEDIUM_COVERAGE = 0.15
 HIGH_COVERAGE = 0.30
 # ponytail: one shared sentence needs stronger coverage; calibrate on labelled editorial data.
 MIN_SINGLE_SENTENCE_COVERAGE = 0.40
+MIN_RARE_PHRASE_WORDS = 10
+MAX_RARE_PHRASE_DOCUMENT_FREQUENCY = 2
+MIN_RARE_PHRASE_SENTENCE_SIMILARITY = 0.57
 GENERIC_SENTENCES = {
     normalize_for_matching(text)
     for text in (
@@ -29,11 +32,28 @@ GENERIC_SENTENCES = {
 }
 GENERIC_SENTENCE_RE = re.compile(
     r"^(?:"
+    r"research sponsors?\b|"
     r"(?:clinical )?trial (?:registration|information)\b|"
     r"(?:this (?:study|work) (?:was )?)?funded by\b|"
     r"(?:conflicts? of interest|disclosures?)\b|"
     r"(?:the )?data cut(?:off| off) (?:date )?(?:was|is)\b|"
     r"(?:all )?patients? (?:provided|gave) (?:written )?informed consent\b"
+    r")",
+    re.IGNORECASE,
+)
+GENERIC_RARE_PHRASE_RE = re.compile(
+    r"(?:"
+    r"(?:recurrence free survival rfs )?(?:was|were) estimated using the kaplan meier method and|"
+    r"estimated using kaplan meier methods and compared (?:with|using) (?:the )?log rank tests?|"
+    r"kaplan meier methods and compared using the log rank test|"
+    r"(?:multivariable )?logistic regression (?:analyses were|was) used to (?:identify factors associated with|estimate adjusted odds ratios)|"
+    r"a two sided p value 0 05 was considered statistically significant|"
+    r"(?:hormone|estrogen) receptor positive human epidermal growth factor receptor 2 negative|"
+    r"absence of residual invasive disease in the breast and axillary lymph nodes|"
+    r"data were abstracted from the electronic medical record outcomes were summarized using descriptive statistics|"
+    r"breast cancer is one of the most common cancers among women|"
+    r"is a leading cause of cancer related mortality in the united states|"
+    r"remain limited we conducted a retrospective cohort study using the trinetx"
     r")",
     re.IGNORECASE,
 )
@@ -92,7 +112,15 @@ def _sections(record: ParsedRecord) -> dict[str, str]:
 
 def _is_generic_sentence(sentence: str) -> bool:
     normalized = normalize_for_matching(sentence)
-    return normalized in GENERIC_SENTENCES or bool(GENERIC_SENTENCE_RE.match(normalized))
+    scientific_match = GENERIC_RARE_PHRASE_RE.search(normalized)
+    return (
+        normalized in GENERIC_SENTENCES
+        or bool(GENERIC_SENTENCE_RE.match(normalized))
+        or (
+            scientific_match is not None
+            and len(text_tokens(normalized)) <= len(text_tokens(scientific_match.group(0))) + 4
+        )
+    )
 
 
 def _non_generic_text(text: str) -> str:
@@ -107,6 +135,22 @@ def _sentences(record: ParsedRecord) -> dict[str, str]:
             if normalized:
                 output.setdefault(normalized, sentence)
     return output
+
+
+def _ngrams(text: str, size: int) -> set[tuple[str, ...]]:
+    tokens = text_tokens(text)
+    return {tuple(tokens[index:index + size]) for index in range(len(tokens) - size + 1)}
+
+
+def _best_sentence_similarity(left: str, right: str) -> float:
+    return max(
+        (
+            _similarity(normalize_for_matching(left_sentence), normalize_for_matching(right_sentence))
+            for left_sentence in _sentence_split(left)
+            for right_sentence in _sentence_split(right)
+        ),
+        default=0.0,
+    )
 
 
 def _shared_coverage(
@@ -208,6 +252,13 @@ def detect_exact_text_reuse(
     lookup = {record.record_id: record for record in records}
     reuse_texts = {record.record_id: _non_generic_text(_record_text(record)) for record in records}
     normalized = {record_id: normalize_for_matching(text) for record_id, text in reuse_texts.items()}
+    phrase_ngrams = {
+        record_id: _ngrams(text, MIN_RARE_PHRASE_WORDS)
+        for record_id, text in normalized.items()
+    }
+    phrase_frequency = Counter(
+        ngram for record_ngrams in phrase_ngrams.values() for ngram in record_ngrams
+    )
     sentence_maps = {record.record_id: _sentences(record) for record in records}
     sentence_documents: dict[str, set[str]] = defaultdict(set)
     for record_id, sentences in sentence_maps.items():
@@ -247,6 +298,28 @@ def detect_exact_text_reuse(
         coverage, matched_blocks = _shared_coverage(
             reuse_texts[left_id], reuse_texts[right_id], uncommon, min_shared_block_words
         )
+        _, phrase_blocks = _shared_coverage(
+            reuse_texts[left_id], reuse_texts[right_id], set(), MIN_RARE_PHRASE_WORDS
+        )
+        phrase_blocks = [block for block in phrase_blocks if not GENERIC_RARE_PHRASE_RE.search(block)]
+        phrase_coverage = sum(len(text_tokens(block)) for block in phrase_blocks) / max(
+            1,
+            min(len(text_tokens(normalized[left_id])), len(text_tokens(normalized[right_id]))),
+        )
+        longest_phrase = max((len(text_tokens(block)) for block in phrase_blocks), default=0)
+        phrase_block_ngrams = {ngram for block in phrase_blocks for ngram in _ngrams(block, MIN_RARE_PHRASE_WORDS)}
+        has_rare_phrase = any(
+            phrase_frequency[ngram] <= MAX_RARE_PHRASE_DOCUMENT_FREQUENCY
+            for ngram in phrase_ngrams[left_id] & phrase_ngrams[right_id] & phrase_block_ngrams
+        )
+        rare_phrase = has_rare_phrase and (
+            longest_phrase > MIN_RARE_PHRASE_WORDS
+            or (
+                longest_phrase == MIN_RARE_PHRASE_WORDS
+                and _best_sentence_similarity(reuse_texts[left_id], reuse_texts[right_id])
+                >= MIN_RARE_PHRASE_SENTENCE_SIMILARITY
+            )
+        )
         exact_full = bool(normalized[left_id] and normalized[left_id] == normalized[right_id])
         section_labels = {normalize_for_matching(section) for section in exact_sections}
 
@@ -258,6 +331,9 @@ def detect_exact_text_reuse(
             match_type = "exact_methods_section"
         elif len(uncommon) >= min_shared_sentences:
             match_type = "multiple_uncommon_sentences"
+        elif rare_phrase:
+            match_type = "rare_exact_phrase"
+            coverage, matched_blocks = phrase_coverage, phrase_blocks
         elif coverage >= high_coverage:
             match_type = "substantial_shared_text"
         elif coverage >= min_shared_coverage:
@@ -268,12 +344,15 @@ def detect_exact_text_reuse(
             len(uncommon) == 1
             and not exact_full
             and not exact_sections
+            and not rare_phrase
             and coverage < MIN_SINGLE_SENTENCE_COVERAGE
         ):
             continue
 
         relationship, relation_strength = _relationship_context(left, right)
         confidence = _determine_confidence(match_type, len(uncommon), coverage)
+        if match_type == "rare_exact_phrase":
+            confidence = "high" if longest_phrase >= 12 else "medium"
         severity = _determine_severity(confidence, relation_strength)
         evidence = _build_evidence(match_type, len(uncommon), coverage, exact_sections)
         reason = (
