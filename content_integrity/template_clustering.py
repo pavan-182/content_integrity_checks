@@ -71,8 +71,6 @@ def _pair_classification(relationship_context: str) -> str:
         or "explicitly declare a related study" in context
     ):
         return "possible_companion_analysis"
-    if "overlapping authors:" in context or "shared affiliations:" in context:
-        return "possible_related_work"
     return "possible_template_reuse"
 
 

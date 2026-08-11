@@ -34,15 +34,15 @@ Detect suspicious abstract-template reuse in ASCO XML abstracts using transparen
 
 ## Final production decision and validation
 
-- The production template detector remains deterministic/hybrid: exact text reuse plus entity-normalized local template matching.
-- The default runner now also executes the advanced route/evidence/context/classification/priority/substitution/family chain through `build_enriched_reports` and writes `enriched_template_pairs.csv`, `enriched_template_families.csv`, and `enriched_template_abstracts.csv`.
+- Exact-text and entity-normalized detectors are evidence generators. The advanced route/evidence/context/classification/priority/family chain is the single authoritative decision path for template flags, priorities, families, CSVs, and workbook sheets.
+- The consolidated workbook's `Template Pairs`, `Template Clusters`, and `Abstract Summary` sheets now contain the authoritative enriched results; the raw merged detector output remains available as `template_detector_evidence.csv`.
 - Generic sponsor, statistical, Methods, and common oncology phrases are excluded from rare-phrase evidence.
 - Merged exact/entity evidence keeps the strongest confidence; duplicate detector evidence does not promote confidence.
-- Shared trial IDs route to `possible_companion_analysis`; shared authors/affiliations route to `possible_related_work`. Only `possible_template_reuse` pairs can create suspicious families or template risk.
+- Shared authors or affiliations alone do not suppress template reuse. Related-work classifications require structured study context; exact body/Results reuse retains precedence.
 - Unsupported registry notices remain visible for manual verification but do not contribute to integrity-risk scoring.
 - The final labelled benchmark is 81 predicted pairs: 63 TP, 11 FP, 21 FN, 83 TN; precision 85.1%, recall 75.0%, F1 79.7% (178 automatic labels; 2 manual labels excluded).
-- The final real-ASCO run contains 13 unique template-pair rows (26 directional CSV rows), all routed as related/companion work, 0 suspicious families, 519 abstracts with `template_flag=No`, and no sponsor/statistical boilerplate evidence.
-- The wired enriched run contains 2,382 routed candidate pairs: 2,381 `insufficient_evidence`, 1 `possible_related_work` at Low priority, and 0 advanced suspicious families.
+- Canonical 519-record run: `outputs/canonical_real_asco_20260811`, based on `21354bb502f9dbf19c22369470a3e388cb3f1e4f` plus the current dirty worktree, corpus SHA-256 `184062685d22daf76c141665f04056ec0d9e6d9f77a3a140629dcb8c83fb5425`, default local config, at `2026-08-11T10:46:52.755588+00:00`.
+- That run contains 2,382 routed pairs: 2,369 insufficient, 9 possible template reuse, and 4 possible related work. The 13 authoritative findings exactly equal the 13 unique raw detector pairs; priorities are 8 High, 1 Medium, and 4 Low, with 8 suspicious families.
 - Full regression suite: 203 tests passed.
 
 ### Work Item 1

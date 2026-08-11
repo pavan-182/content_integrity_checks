@@ -10,10 +10,7 @@ The original goal was to turn template detection from a broad masked-similarity 
 
 Work Items 1–15 were completed as code, tests, validation utilities, and exported artifacts. Work Item 16 remains deliberately deferred research.
 
-The final repository contains one default runner with two coordinated output layers:
-
-1. **Production batch runner:** `scripts/run_pipeline.py` parses a directory of XML files, runs the production integrity checks, consolidates exact-text and entity-normalized template evidence, builds verified families, assigns record-level risk, and creates CSV/JSONL/Excel reports.
-2. **Advanced review layer:** The default runner now calls the Work Items 5–14 route, evidence, context, classification, priority, substitution, and family modules through `build_enriched_reports`, producing enriched pair, family, and abstract CSVs. Work Item 15 remains an offline validation gate and does not run as production detection.
+The final repository contains one default authoritative path. Exact-text and entity-normalized detectors generate candidate evidence; `build_enriched_reports` merges those candidates with Work Items 5–14 retrieval, evidence, context, classification, priority, substitution, and family logic. Those advanced decisions drive template flags, priorities, families, canonical CSVs, and the consolidated workbook. Work Item 15 remains an offline validation gate.
 
 The system is usable now as a candidate-generation and editorial-triage tool. High and very-high template candidates are the strongest review queue. Medium local entity-substitution candidates still contain oncology genre noise and require manual review.
 
@@ -92,7 +89,7 @@ Its default path is local and deterministic. It performs:
 - tortured-phrase dictionary checks;
 - exact-text and rare-phrase template comparison;
 - entity-normalized template comparison;
-- canonical pair consolidation and verified family clustering;
+- authoritative enriched pair classification and verified family clustering;
 - numerical and study-design contradiction checks;
 - local clinical-trial reference checks;
 - record-level risk aggregation; and
@@ -196,9 +193,10 @@ The final production run processed:
 - 275 care-delivery abstracts;
 - 519 total records;
 - 0 parse warnings or failures;
-- 43 unique template candidate pairs represented by 86 directional rows;
-- 11 very-high, 20 high, and 12 medium candidates;
-- 4 high-confidence candidate families;
+- 2,382 routed candidate pairs;
+- 13 authoritative finding pairs: 9 possible template reuse and 4 possible related work;
+- 8 High, 1 Medium, and 4 Low priorities;
+- 8 suspicious families;
 - 6 numerical contradiction candidates; and
 - 5 trial references requiring manual verification because their registries are unsupported by the V1 automated adapter.
 
@@ -206,10 +204,12 @@ The run completed in 1 minute 52 seconds with approximately 231 MB peak memory. 
 
 Review package:
 
-- `outputs/real_asco_files_pipeline_20260811/content_integrity_screening_poc.xlsx`
-- `outputs/real_asco_files_pipeline_20260811/template_pair_findings.csv`
-- `outputs/real_asco_files_pipeline_20260811/template_clusters.csv`
-- `outputs/real_asco_files_pipeline_20260811/integrity_findings.csv`
+- `outputs/canonical_real_asco_20260811/content_integrity_screening_poc.xlsx`
+- `outputs/canonical_real_asco_20260811/template_pair_findings.csv`
+- `outputs/canonical_real_asco_20260811/template_clusters.csv`
+- `outputs/canonical_real_asco_20260811/template_detector_evidence.csv`
+
+Run identity: base commit `21354bb502f9dbf19c22369470a3e388cb3f1e4f`, dirty worktree `true`, input manifest SHA-256 `184062685d22daf76c141665f04056ec0d9e6d9f77a3a140629dcb8c83fb5425`, default local config, timestamp `2026-08-11T10:46:52.755588+00:00`. The metadata file records the complete config. The 13 authoritative findings exactly match the 13 unique detector-evidence pairs.
 
 ## 8. Performance issue found and fixed
 
@@ -242,14 +242,14 @@ The following remain outside the completed production scope:
 
 The shortest responsible next path is:
 
-1. Have reviewers label the 43 real-ASCO candidate pairs, starting with the 11 very-high and 20 high candidates.
+1. Have reviewers label the 13 authoritative real-ASCO finding pairs, starting with the 8 High and 1 Medium candidates.
 2. Use those labels to recalibrate medium local entity-substitution behavior, especially generic one-sentence oncology matches.
-3. Decide whether to wire the completed Work Item 5–15 route/evidence/classification modules into `scripts/run_pipeline.py` or keep them as a separate evaluation toolchain.
+3. Commit the authoritative-pipeline change and regenerate the release artifact so `code_worktree_dirty` is false.
 4. Run a representative scale test before claiming readiness for approximately 6,000 abstracts.
 5. Start Work Item 16 only if reviewer evidence shows a specific recall gap that the existing direct and entity-normalized methods cannot cover.
 
 ## 11. Final assessment
 
-What was planned was a transparent, high-precision, reviewer-first ASCO template-detection system. What was delivered is a functioning local production batch pipeline plus a broader set of tested template-research and reporting modules.
+What was planned was a transparent, high-precision, reviewer-first ASCO template-detection system. What was delivered is a functioning local production batch pipeline with one authoritative template decision path plus tested offline research utilities.
 
-The strongest current findings are useful for editorial triage, the output is auditable, the full Excel deliverable exists, and the pipeline now runs on real multi-file ASCO input. It is not yet an automatic finding system: medium entity-normalized matches remain noisy, the newest real corpus is unlabelled, full-scale performance is unproven, and the advanced Work Item 5–15 chain still needs a product decision before being integrated into the default runner.
+The strongest current findings are useful for editorial triage, the output is auditable, and the consolidated Excel deliverable contains the authoritative enriched pair, family, and abstract decisions. It is not an automatic misconduct system: the real corpus is unlabelled and full-scale performance remains unproven.

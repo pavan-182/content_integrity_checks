@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from typing import Any
 
 from .candidate_routes import generate_candidate_pairs
 from .editorial_scoring import assign_editorial_priority
@@ -16,7 +17,7 @@ from .study_context import compare_study_context
 REPORT_VERSION = "asco-enriched-report-v1"
 PAIR_REPORT_COLUMNS = [
     "report_version", "left_record_id", "right_record_id", "left_title", "right_title", "retrieval_routes",
-    "pair_class", "editorial_score", "review_priority", "rule_path", "primary_evidence", "supporting_evidence",
+    "pair_class", "editorial_score", "review_priority", "rule_path", "detector_evidence", "primary_evidence", "supporting_evidence",
     "contextual_evidence", "direct_evidence", "masked_title_similarity", "original_title_similarity",
     "masked_body_similarity", "original_body_similarity", "strongest_section", "strongest_masked_section_similarity",
     "largest_shared_original_block_words", "context_interpretation", "shared_trial_ids", "shared_databases",
@@ -24,6 +25,7 @@ PAIR_REPORT_COLUMNS = [
     "right_family_status", "limitations", "priority_reason",
     "shared_entities", "left_only_entities", "right_only_entities", "likely_substitutions",
     "left_supporting_sentences", "right_supporting_sentences",
+    "editor_label", "editor_notes",
 ]
 FAMILY_REPORT_COLUMNS = [
     "report_version", "family_id", "family_size", "representative_record_id", "family_edge_score",
@@ -31,7 +33,7 @@ FAMILY_REPORT_COLUMNS = [
 ]
 ABSTRACT_REPORT_COLUMNS = [
     "report_version", "record_id", "source_file", "title", "candidate_pair_count", "finding_pair_count",
-    "highest_review_priority", "strongest_matched_record_id", "family_id", "family_member_status", "reporting_note",
+    "highest_review_priority", "strongest_matched_record_id", "family_id", "family_size", "family_edge_score", "family_member_status", "reporting_note",
 ]
 
 
@@ -39,11 +41,13 @@ def _joined(values: tuple[str, ...]) -> str:
     return " | ".join(values)
 
 
-def build_enriched_reports(records: list[ParsedRecord]) -> tuple[list[dict[str, object]], list[dict[str, object]], list[dict[str, object]]]:
-    evidence = collect_pair_evidence(records)
+def build_enriched_reports(
+    records: list[ParsedRecord], detector_findings: list[Any] | None = None,
+) -> tuple[list[dict[str, object]], list[dict[str, object]], list[dict[str, object]]]:
+    evidence = collect_pair_evidence(records, detector_findings)
     scores = score_pair_evidence(records, evidence)
-    contexts = compare_study_context(records)
-    substitutions = collect_entity_substitutions(records)
+    contexts = compare_study_context(records, evidence)
+    substitutions = collect_entity_substitutions(records, evidence)
     classifications = classify_pairs(records, scores, contexts)
     priorities = [assign_editorial_priority(item) for item in classifications]
     families = build_suspicious_families(classifications)
@@ -70,6 +74,7 @@ def build_enriched_reports(records: list[ParsedRecord]) -> tuple[list[dict[str, 
             "editorial_score": priority.editorial_score,
             "review_priority": priority.review_priority,
             "rule_path": item.rule_path,
+            "detector_evidence": _joined(pair_evidence.detector_evidence),
             "primary_evidence": _joined(item.primary_evidence),
             "supporting_evidence": _joined(item.supporting_evidence),
             "contextual_evidence": _joined(item.contextual_evidence),
@@ -98,6 +103,8 @@ def build_enriched_reports(records: list[ParsedRecord]) -> tuple[list[dict[str, 
             "likely_substitutions": substitution.likely_substitutions,
             "left_supporting_sentences": substitution.left_supporting_sentences,
             "right_supporting_sentences": substitution.right_supporting_sentences,
+            "editor_label": "not_reviewed",
+            "editor_notes": "",
         })
 
     family_groups: dict[str, list] = defaultdict(list)
@@ -144,6 +151,8 @@ def build_enriched_reports(records: list[ParsedRecord]) -> tuple[list[dict[str, 
                 strongest.right_record_id if strongest.left_record_id == record.record_id else strongest.left_record_id
             ) if strongest else "",
             "family_id": family.family_id if family else "",
+            "family_size": family.family_size if family else 0,
+            "family_edge_score": family.family_edge_score if family else 0.0,
             "family_member_status": family.member_status if family else "",
             "reporting_note": "No primary-evidence pair." if matches and not any(item.primary_evidence for item in matches) else "No routed candidate." if not matches else "Primary-evidence pair available for review.",
         })

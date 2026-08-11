@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from collections import Counter, defaultdict
 from dataclasses import dataclass, fields
 from datetime import datetime, timezone
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -133,6 +135,27 @@ def _finding_sort_key(finding: Finding) -> tuple[str, str, str, str, int, int]:
         finding.severity,
         finding.finding_id,
     )
+
+
+def _git_revision() -> tuple[str, bool]:
+    try:
+        sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"], check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        dirty = bool(subprocess.run(
+            ["git", "status", "--porcelain"], check=True, capture_output=True, text=True,
+        ).stdout.strip())
+        return sha, dirty
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown", False
+
+
+def _input_manifest_checksum(paths: list[Path], root: Path) -> str:
+    digest = sha256()
+    for path in sorted(paths):
+        digest.update(str(path.relative_to(root)).encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()
 
 
 def _integrated_finding(result: Any) -> Finding:
@@ -487,6 +510,97 @@ def _aggregate_findings(
     return summary_rows
 
 
+def _apply_authoritative_template_results(
+    summary_rows: list[dict[str, Any]],
+    pair_rows: list[dict[str, object]],
+    abstract_rows: list[dict[str, object]],
+) -> None:
+    linked: dict[str, list[dict[str, object]]] = defaultdict(list)
+    for pair in pair_rows:
+        if pair["review_priority"] != "None":
+            linked[str(pair["left_record_id"])].append(pair)
+            linked[str(pair["right_record_id"])].append(pair)
+    abstract_lookup = {str(row["record_id"]): row for row in abstract_rows}
+    priority_rank = {"None": 0, "Low": 1, "Medium": 2, "High": 3}
+    risk_classes = {"possible_template_reuse", "possible_related_duplicate"}
+    related_classes = {"possible_related_work", "possible_companion_analysis", "possible_related_duplicate"}
+
+    for summary in summary_rows:
+        record_id = str(summary["record_id"])
+        pairs = linked[record_id]
+        risk_pairs = [pair for pair in pairs if pair["pair_class"] in risk_classes]
+        strongest = max(
+            pairs,
+            key=lambda pair: (priority_rank[str(pair["review_priority"])], float(pair["editorial_score"])),
+            default=None,
+        )
+        strongest_risk = max(
+            risk_pairs,
+            key=lambda pair: (priority_rank[str(pair["review_priority"])], float(pair["editorial_score"])),
+            default=None,
+        )
+        abstract = abstract_lookup[record_id]
+        template_flag = bool(risk_pairs)
+        previous_count = int(summary["total_finding_count"])
+        summary.update({
+            "template_flag": "Yes" if template_flag else "No",
+            "related_or_companion_flag": "Yes" if any(pair["pair_class"] in related_classes for pair in pairs) else "No",
+            "template_confidence": str(strongest_risk["review_priority"]).lower() if strongest_risk else "none",
+            "template_review_priority": strongest_risk["review_priority"] if strongest_risk else "None",
+            "matched_abstract_count": len(pairs),
+            "strongest_matched_record_id": (
+                strongest["right_record_id"] if strongest and strongest["left_record_id"] == record_id
+                else strongest["left_record_id"] if strongest else ""
+            ),
+            "strongest_matched_source_file": "",
+            "strongest_matched_title": (
+                strongest["right_title"] if strongest and strongest["left_record_id"] == record_id
+                else strongest["left_title"] if strongest else ""
+            ),
+            "strongest_match_pair_id": (
+                f"PAIR-{min(strongest['left_record_id'], strongest['right_record_id'])}--{max(strongest['left_record_id'], strongest['right_record_id'])}"
+                if strongest else ""
+            ),
+            "strongest_match_supporting_types": strongest["supporting_evidence"] if strongest else "",
+            "strongest_match_sections": strongest["strongest_section"] if strongest else "",
+            "strongest_match_sentence_count": "",
+            "strongest_match_shared_text_coverage": "",
+            "strongest_match_original_text_similarity": strongest["original_body_similarity"] if strongest else "",
+            "strongest_match_masked_skeleton_similarity": strongest["masked_body_similarity"] if strongest else "",
+            "strongest_match_ngram_similarity": "",
+            "strongest_match_high_value_section_similarity": strongest["strongest_masked_section_similarity"] if strongest else "",
+            "strongest_match_weighted_section_similarity": "",
+            "strongest_match_variable_substitutions": strongest["likely_substitutions"] if strongest else "",
+            "strongest_match_relationship_context": strongest["context_interpretation"] if strongest else "",
+            "strongest_pair_classification": strongest["pair_class"] if strongest else "",
+            "strongest_match_evidence_excerpt": strongest["direct_evidence"] if strongest else "",
+            "strongest_match_review_status": "candidate" if strongest else "",
+            "primary_template_pattern": strongest["primary_evidence"] if strongest else "",
+            "matched_sections": strongest["strongest_section"] if strongest else "",
+            "template_cluster_flag": "Yes" if abstract["family_id"] else "No",
+            "template_family_id": abstract["family_id"],
+            "template_family_size": abstract["family_size"],
+            "template_family_confidence": (
+                "high" if float(abstract["family_edge_score"]) >= 0.85 else "medium"
+            ) if abstract["family_id"] else "none",
+            "template_evidence_summary": strongest["rule_path"] if strongest else "",
+            "total_finding_count": previous_count + (1 if template_flag else 0),
+        })
+        if template_flag:
+            priority = str(strongest_risk["review_priority"])
+            summary["highest_severity"] = max(
+                (str(summary["highest_severity"]), priority), key=severity_rank,
+            )
+            summary["overall_content_risk"] = _risk_from_signals(
+                highest_signal_severity=str(summary["highest_severity"]),
+                detector_types={"template"} if previous_count == 0 else {"template", "other"},
+                total_finding_count=int(summary["total_finding_count"]),
+                template_cluster_flag=True,
+            )
+            summary["review_required"] = "Yes"
+            summary["review_reason"] = "Potential content integrity issue detected. Manual review recommended."
+
+
 def _findings_rows(findings: list[Finding]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for index, finding in enumerate(sorted(findings, key=_finding_sort_key), start=1):
@@ -685,15 +799,18 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     entity_template_findings = detect_entity_normalized_templates(records)
     pair_findings = merge_pair_findings(exact_template_findings, entity_template_findings)
     template_rows = cluster_template_findings(pair_findings, records)
-    enriched_pair_rows, enriched_family_rows, enriched_abstract_rows = build_enriched_reports(records)
+    enriched_pair_rows, enriched_family_rows, enriched_abstract_rows = build_enriched_reports(
+        records, [*exact_template_findings, *entity_template_findings]
+    )
     field_inventory_rows, root_summary_rows = _inventory_rows(records)
-    abstract_summary_rows = _aggregate_findings(records, findings, pair_findings, template_rows, llm_rules)
+    abstract_summary_rows = _aggregate_findings(records, findings, [], [], llm_rules)
+    _apply_authoritative_template_results(abstract_summary_rows, enriched_pair_rows, enriched_abstract_rows)
     findings_rows = _findings_rows(findings)
     titles_by_record = {record.record_id: record.title for record in records}
     for row in findings_rows:
         row["title"] = titles_by_record.get(row["record_id"], "")
     template_finding_rows = _pair_finding_rows(pair_findings)
-    integrity_finding_rows = sorted(findings_rows + template_finding_rows, key=_finding_row_sort_key)
+    integrity_finding_rows = sorted(findings_rows, key=_finding_row_sort_key)
     family_rows = _family_rows(template_rows)
     parse_warning_rows = _parse_warning_rows(records)
     parse_warning_rows.extend(
@@ -727,11 +844,15 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     )
     dictionary_rows = _dictionary_rows([rule.to_dict() for rule in llm_rules], [rule.to_dict() for rule in tortured_rules])
     now = datetime.now(timezone.utc)
+    commit_sha, worktree_dirty = _git_revision()
     catalogue_version, catalogue_checksum = catalogue_metadata()
     llm_findings = [finding for finding in findings if finding.detector_type == "llm_response_trace"]
     run_metadata_rows: list[tuple[str, Any]] = [
         ("run_date_utc", now.isoformat()),
+        ("code_commit_sha", commit_sha),
+        ("code_worktree_dirty", worktree_dirty),
         ("input_folder", str(config.input_dir)),
+        ("input_manifest_sha256", _input_manifest_checksum(xml_files, config.input_dir)),
         ("output_folder", str(config.output_dir)),
         ("total_files", len(xml_files)),
         ("parsed_successfully", sum(1 for record in records if record.parse_status == "parsed")),
@@ -763,6 +884,10 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         ("dictionary_version", config.dictionary_version),
         ("tortured_dictionary_path", str(config.tortured_dictionary_path)),
         ("legacy_similarity_threshold", config.legacy_similarity_threshold),
+        ("pipeline_config", json.dumps({
+            field.name: str(getattr(config, field.name)) if isinstance(getattr(config, field.name), Path) else getattr(config, field.name)
+            for field in fields(config)
+        }, sort_keys=True)),
         ("nonsense_candidate_detection", "enabled" if config.detect_nonsense_candidates else "disabled"),
         ("clinical_trial_registry_lookup", "enabled" if config.verify_trials else "local_checks_only"),
         ("enriched_report_version", REPORT_VERSION),
@@ -826,6 +951,11 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     )
     output_paths["template_pairs_csv"] = write_csv(
         output_dir / "template_pair_findings.csv",
+        enriched_pair_rows,
+        PAIR_REPORT_COLUMNS,
+    )
+    output_paths["template_detector_evidence_csv"] = write_csv(
+        output_dir / "template_detector_evidence.csv",
         template_finding_rows,
         PAIR_COLUMNS,
     )
@@ -852,8 +982,8 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         )
     output_paths["clusters_csv"] = write_csv(
         output_dir / "template_clusters.csv",
-        family_rows,
-        FAMILY_COLUMNS,
+        enriched_family_rows,
+        FAMILY_REPORT_COLUMNS,
     )
     output_paths["dictionary_csv"] = write_csv(
         output_dir / "pattern_dictionary.csv",
@@ -872,11 +1002,13 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         root_summary_rows=root_summary_rows,
         abstract_summary_rows=abstract_summary_rows,
         findings_rows=integrity_finding_rows,
-        pair_rows=template_finding_rows,
-        cluster_rows=family_rows,
+        pair_rows=enriched_pair_rows,
+        cluster_rows=enriched_family_rows,
         dictionary_rows=dictionary_rows,
         parse_warning_rows=parse_warning_rows,
         run_metadata_rows=run_metadata_rows,
+        pair_columns=PAIR_REPORT_COLUMNS,
+        cluster_columns=FAMILY_REPORT_COLUMNS,
     )
     return PipelineResult(
         xml_files=xml_files,

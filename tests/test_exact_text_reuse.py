@@ -110,8 +110,9 @@ class ExactTextReuseTests(unittest.TestCase):
         self.assertEqual(findings, [])
 
     def test_high_confidence_needs_sentences_or_coverage(self) -> None:
-        self.assertEqual(_determine_confidence("multiple_uncommon_sentences", 3, 0.2), "high")
+        self.assertEqual(_determine_confidence("multiple_distinctive_sentences", 3, 0.2), "high")
         self.assertEqual(_determine_confidence("substantial_shared_text", 0, 0.3), "high")
+        self.assertNotEqual(_determine_confidence("exact_methods_section", 0, 0.0), "very_high")
 
     def test_ignores_administrative_boilerplate_section(self) -> None:
         funding = (

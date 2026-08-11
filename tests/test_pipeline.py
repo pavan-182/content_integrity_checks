@@ -433,17 +433,13 @@ class PipelineTests(unittest.TestCase):
 
             result = run_default_pipeline(input_dir=input_dir, tortured_dictionary_path=dict_path, output_dir=output_dir)
 
-            with result.output_paths["detailed_findings_csv"].open(newline="", encoding="utf-8") as handle:
+            with result.output_paths["template_pairs_csv"].open(newline="", encoding="utf-8") as handle:
                 rows = list(csv.DictReader(handle))
 
-            template_rows = [row for row in rows if row.get("detector_type") == "template_pair"]
-            self.assertEqual(len(template_rows), 2)
-            self.assertEqual({row["record_id"] for row in template_rows}, {"TPL-A", "TPL-B"})
-            self.assertEqual({row["matched_record_id"] for row in template_rows}, {"TPL-A", "TPL-B"})
-            self.assertEqual(len({row["pair_id"] for row in template_rows}), 1)
-            self.assertTrue(all(row["category"] == "template" for row in template_rows))
-            self.assertTrue(all(row["editor_label"] == "not_reviewed" for row in template_rows))
-            self.assertTrue(all(row["editor_notes"] == "" for row in template_rows))
+            self.assertEqual(len(rows), 1)
+            self.assertEqual({rows[0]["left_record_id"], rows[0]["right_record_id"]}, {"TPL-A", "TPL-B"})
+            self.assertEqual(rows[0]["pair_class"], "possible_template_reuse")
+            self.assertEqual(rows[0]["editor_label"], "not_reviewed")
 
             workbook = load_workbook(result.output_paths["workbook"])
             worksheet = workbook["Template Pairs"]
@@ -451,8 +447,14 @@ class PipelineTests(unittest.TestCase):
             editor_column = headers.index("editor_label") + 1
             self.assertEqual(worksheet.cell(2, editor_column).value, "not_reviewed")
             self.assertIn("acceptable_overlap", worksheet.data_validations.dataValidation[0].formula1)
-            self.assertEqual(result.abstract_summary_rows[0]["template_cluster_flag"], "No")
-            self.assertEqual(result.abstract_summary_rows[1]["template_cluster_flag"], "No")
+            summaries = {row["record_id"]: row for row in result.abstract_summary_rows}
+            self.assertEqual({row["template_flag"] for row in summaries.values()}, {"Yes"})
+            self.assertEqual(
+                {row["strongest_pair_classification"] for row in summaries.values()},
+                {rows[0]["pair_class"]},
+            )
+            self.assertEqual(result.abstract_summary_rows[0]["template_cluster_flag"], "Yes")
+            self.assertEqual(result.abstract_summary_rows[1]["template_cluster_flag"], "Yes")
 
     def test_full_pipeline_creates_workbook(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir_str:

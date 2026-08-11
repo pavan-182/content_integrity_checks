@@ -36,9 +36,12 @@ class DashboardSheetTests(unittest.TestCase):
         abstract_count = workbook["Abstract Summary"].max_row - 1
         finding_count = workbook["Integrity Findings"].max_row - 1
         warning_count = workbook["Parse Warnings"].max_row - 1
+        cluster_sheet = workbook["Template Clusters"]
+        headers = [cell.value for cell in cluster_sheet[1]]
+        family_column = headers.index("family_id") + 1
         cluster_ids = {
             row[0].value
-            for row in workbook["Template Clusters"].iter_rows(min_row=2)
+            for row in cluster_sheet.iter_rows(min_row=2, min_col=family_column, max_col=family_column)
             if row[0].value
         }
 

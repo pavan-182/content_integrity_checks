@@ -206,7 +206,7 @@ def _relationship_context(left: ParsedRecord, right: ParsedRecord) -> tuple[str,
 
 
 def _determine_confidence(match_type: str, matched_sentence_count: int, shared_text_coverage: float) -> str:
-    if match_type in {"exact_full_abstract", "exact_results_section", "exact_methods_section"}:
+    if match_type in {"exact_full_abstract", "exact_results_section"}:
         return "very_high"
     if matched_sentence_count >= 3 or shared_text_coverage >= HIGH_COVERAGE:
         return "high"
@@ -231,9 +231,13 @@ def _build_evidence(
 ) -> str:
     parts = [
         match_type.replace("_", " "),
-        f"{matched_sentence_count} uncommon sentence(s) matched",
+        f"{matched_sentence_count} distinctive shared sentence(s) detected",
         f"{shared_text_coverage:.0%} shared-text coverage",
     ]
+    if matched_sentence_count:
+        parts.append(
+            f"each shared sentence appeared in no more than {MAX_SENTENCE_DOCUMENT_FREQUENCY} abstracts in this batch"
+        )
     if matched_sections:
         parts.append(f"matched sections: {', '.join(matched_sections)}")
     return "; ".join(parts) + "."
@@ -330,7 +334,7 @@ def detect_exact_text_reuse(
         elif any("method" in section for section in section_labels):
             match_type = "exact_methods_section"
         elif len(uncommon) >= min_shared_sentences:
-            match_type = "multiple_uncommon_sentences"
+            match_type = "multiple_distinctive_sentences"
         elif rare_phrase:
             match_type = "rare_exact_phrase"
             coverage, matched_blocks = phrase_coverage, phrase_blocks
@@ -356,7 +360,7 @@ def detect_exact_text_reuse(
         severity = _determine_severity(confidence, relation_strength)
         evidence = _build_evidence(match_type, len(uncommon), coverage, exact_sections)
         reason = (
-            f"{match_type.replace('_', ' ')}; {len(uncommon)} uncommon sentence(s), "
+            f"{match_type.replace('_', ' ')}; {len(uncommon)} distinctive shared sentence(s), "
             f"{coverage:.0%} shared-text coverage; {relationship}."
         )
         ordered_sentences = sorted(uncommon)

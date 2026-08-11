@@ -157,11 +157,11 @@ class TemplateArchitectureTests(unittest.TestCase):
         self.assertEqual(pair_finding.severity, "low")
         self.assertEqual(pair_finding.pair_classification, "possible_companion_analysis")
 
-    def test_shared_authors_route_pair_as_related_work(self):
+    def test_shared_authors_do_not_suppress_template_reuse(self):
         finding = detector_finding("exact_text_reuse", relationship_context="overlapping authors: 2")
         self.assertEqual(
             merge_pair_findings([finding], [])[0].pair_classification,
-            "possible_related_work",
+            "possible_template_reuse",
         )
 
     def test_related_pair_is_reported_but_excluded_from_risk_and_families(self):

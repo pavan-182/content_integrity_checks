@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 
 from .candidate_routes import generate_candidate_pairs
 from .models import ParsedRecord
+from .pair_evidence import PairEvidence
 from .template_features import TemplateFeatures, build_template_features
 from .utils import normalize_for_matching
 
@@ -74,23 +75,30 @@ class StudyContextComparison:
         return data
 
 
-def compare_study_context(records: list[ParsedRecord]) -> list[StudyContextComparison]:
+def compare_study_context(
+    records: list[ParsedRecord], evidence_rows: list[PairEvidence] | None = None,
+) -> list[StudyContextComparison]:
     features = [build_template_features(record) for record in records]
     feature_lookup = {feature.record_id: feature for feature in features}
     record_lookup = {record.record_id: record for record in records}
     value_lookup = {feature.record_id: _values(feature) for feature in features}
     output = []
-    for pair in generate_candidate_pairs(records, features):
-        left_record, right_record = record_lookup[pair.left_record_id], record_lookup[pair.right_record_id]
-        left, right = value_lookup[pair.left_record_id], value_lookup[pair.right_record_id]
+    pairs = (
+        [(item.left_record_id, item.right_record_id) for item in evidence_rows]
+        if evidence_rows is not None
+        else [(item.left_record_id, item.right_record_id) for item in generate_candidate_pairs(records, features)]
+    )
+    for left_id, right_id in pairs:
+        left_record, right_record = record_lookup[left_id], record_lookup[right_id]
+        left, right = value_lookup[left_id], value_lookup[right_id]
         shared_trials = left["trial_id"] & right["trial_id"]
         shared_databases = left["registry"] & right["registry"]
         shared_periods = left["date"] & right["date"]
         shared_populations = left["population"] & right["population"]
         shared_treatments = (left["drug"] | left["treatment_class"]) & (right["drug"] | right["treatment_class"])
         shared_endpoints = left["endpoint"] & right["endpoint"]
-        left_sizes = set(SAMPLE_SIZE_RE.findall(feature_lookup[pair.left_record_id].abstract.original))
-        right_sizes = set(SAMPLE_SIZE_RE.findall(feature_lookup[pair.right_record_id].abstract.original))
+        left_sizes = set(SAMPLE_SIZE_RE.findall(feature_lookup[left_id].abstract.original))
+        right_sizes = set(SAMPLE_SIZE_RE.findall(feature_lookup[right_id].abstract.original))
         shared_sizes = left_sizes & right_sizes
         population_match = _overlap(left["population"], right["population"])
         endpoint_match = _overlap(left["endpoint"], right["endpoint"])
@@ -112,8 +120,8 @@ def compare_study_context(records: list[ParsedRecord]) -> list[StudyContextCompa
         else:
             interpretation = "no_structured_context"
         output.append(StudyContextComparison(
-            left_record_id=pair.left_record_id,
-            right_record_id=pair.right_record_id,
+            left_record_id=left_id,
+            right_record_id=right_id,
             shared_trial_ids=tuple(sorted(shared_trials)),
             shared_databases=tuple(sorted(shared_databases)),
             shared_study_periods=tuple(sorted(shared_periods)),

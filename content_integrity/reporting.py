@@ -399,10 +399,10 @@ def _write_dashboard(
 
     clusters: dict[str, tuple[int, str]] = {}
     for item in cluster_rows:
-        cluster_id = str(item.get("template_family_id", ""))
+        cluster_id = str(item.get("template_family_id") or item.get("family_id", ""))
         if not cluster_id:
             continue
-        size = int(item.get("member_count") or 0)
+        size = int(item.get("member_count") or item.get("family_size") or 0)
         representative = str(item.get("representative_record_id", ""))
         current = clusters.get(cluster_id)
         clusters[cluster_id] = (max(size, current[0] if current else 0), min(representative, current[1]) if current else representative)
@@ -481,6 +481,8 @@ def write_workbook(
     dictionary_rows: list[dict[str, Any]],
     parse_warning_rows: list[dict[str, Any]],
     run_metadata_rows: list[tuple[str, Any]],
+    pair_columns: Sequence[str] = PAIR_COLUMNS,
+    cluster_columns: Sequence[str] = FAMILY_COLUMNS,
 ) -> Path:
     resolved = ensure_parent_dir(path)
     workbook = Workbook()
@@ -572,14 +574,15 @@ def write_workbook(
 
     # Template Pair Evidence
     ws = workbook.create_sheet("Template Pairs")
-    _write_table(ws, pair_rows, PAIR_COLUMNS, start_row=1)
-    _add_editor_label_validation(ws, PAIR_COLUMNS)
+    _write_table(ws, pair_rows, pair_columns, start_row=1)
+    if "editor_label" in pair_columns:
+        _add_editor_label_validation(ws, pair_columns)
     ws.freeze_panes = "A2"
     _auto_size_columns(ws)
 
     # Template Clusters
     ws = workbook.create_sheet("Template Clusters")
-    _write_table(ws, cluster_rows, FAMILY_COLUMNS, start_row=1)
+    _write_table(ws, cluster_rows, cluster_columns, start_row=1)
     ws.freeze_panes = "A2"
     _auto_size_columns(ws)
 

@@ -4,6 +4,7 @@ import re
 from dataclasses import asdict, dataclass
 
 from .candidate_routes import generate_candidate_pairs
+from .pair_evidence import PairEvidence
 from .template_features import TemplateFeatures, build_template_features
 from .utils import normalize_whitespace
 
@@ -65,12 +66,19 @@ class EntitySubstitution:
         return asdict(self)
 
 
-def collect_entity_substitutions(records) -> list[EntitySubstitution]:
+def collect_entity_substitutions(
+    records, evidence_rows: list[PairEvidence] | None = None,
+) -> list[EntitySubstitution]:
     features = [build_template_features(record) for record in records]
     lookup = {feature.record_id: _entities(feature) for feature in features}
     output = []
-    for pair in generate_candidate_pairs(records, features):
-        left, right = lookup[pair.left_record_id], lookup[pair.right_record_id]
+    pairs = (
+        [(item.left_record_id, item.right_record_id) for item in evidence_rows]
+        if evidence_rows is not None
+        else [(item.left_record_id, item.right_record_id) for item in generate_candidate_pairs(records, features)]
+    )
+    for left_id, right_id in pairs:
+        left, right = lookup[left_id], lookup[right_id]
         shared = {entity_type: set(left.get(entity_type, {})) & set(right.get(entity_type, {})) for entity_type in ENTITY_TYPES}
         left_only = {entity_type: set(left.get(entity_type, {})) - set(right.get(entity_type, {})) for entity_type in ENTITY_TYPES}
         right_only = {entity_type: set(right.get(entity_type, {})) - set(left.get(entity_type, {})) for entity_type in ENTITY_TYPES}
@@ -82,8 +90,8 @@ def collect_entity_substitutions(records) -> list[EntitySubstitution]:
             for old, new in zip(sorted(left_only[entity_type]), sorted(right_only[entity_type])):
                 substitutions.append(f"{entity_type}: {left[entity_type][old][0]} -> {right[entity_type][new][0]}")
         output.append(EntitySubstitution(
-            left_record_id=pair.left_record_id,
-            right_record_id=pair.right_record_id,
+            left_record_id=left_id,
+            right_record_id=right_id,
             shared_entities=_format(left, shared),
             left_only_entities=_format(left, left_only),
             right_only_entities=_format(right, right_only),

@@ -247,15 +247,17 @@ Every run creates these files in the configured output directory:
 | `parsed_records.jsonl` | Full normalized record objects, including abstract sections and warnings |
 | `parsed_records.csv` | Flat record export for analysis |
 | `integrity_findings.csv` | Compact reviewer queue with evidence, severity, confidence, and review status |
-| `detailed_findings.csv` | Full diagnostic fields for rule findings and consolidated template pairs |
+| `detailed_findings.csv` | Full diagnostic fields for non-template integrity findings |
 | `numerical_contradictions.csv` | Native detailed numerical-contradiction findings |
 | `design_contradictions.csv` | Native detailed study-design contradiction findings |
 | `trial_verification.csv` | All discovered trial references and their verification outcomes |
-| `template_pair_findings.csv` | Stable detailed pair-evidence schema, including source metadata and separate similarity metrics |
-| `template_clusters.csv` | One row per verified visible family of three or more members |
+| `template_pair_findings.csv` | Authoritative enriched pair rows with routes, detector evidence, classification, priority, context, and substitutions |
+| `template_detector_evidence.csv` | Raw merged exact-text and entity-normalized evidence retained for audit |
+| `template_clusters.csv` | Authoritative suspicious-family rows |
+| `enriched_template_*.csv` | Compatibility copies of the authoritative pair, family, and abstract views |
 | `pattern_dictionary.csv` | Effective LLM and tortured-phrase rules used by the run |
 | `parse_warnings.csv` | Parser warnings and record-ID deduplication actions |
-| `run_metadata.jsonl` | Input/output paths, counts, thresholds, dictionary version, and scope notes |
+| `run_metadata.jsonl` | Timestamp, commit/dirty state, corpus checksum, complete config, counts, versions, and scope notes |
 | `content_integrity_screening_poc.xlsx` | Consolidated editorial workbook |
 
 The workbook contains nine sheets:

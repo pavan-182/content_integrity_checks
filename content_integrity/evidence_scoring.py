@@ -12,6 +12,8 @@ PRIMARY_WEIGHTS = {
     "exact_results_section": 1.0,
     "substantial_shared_original_block": 0.85,
     "strong_masked_body_with_original_support": 0.75,
+    "entity_normalized_template": 0.75,
+    "distinctive_shared_text": 0.85,
     "masked_title_template_with_original_support": 0.65,
 }
 SECTION_WEIGHTS = {"result": 0.20, "conclusion": 0.20, "background": 0.10, "method": 0.05}
@@ -92,6 +94,9 @@ def score_pair_evidence(
         if evidence.masked_body_similarity >= 0.75 and "strong_masked_body_with_original_support" not in primary:
             supporting.append("high_masked_body_similarity")
             supporting_score = max(supporting_score, 0.15)
+        if "exact_methods_section" in evidence.detector_evidence:
+            supporting.append("exact_methods_section")
+            supporting_score = max(supporting_score, SECTION_WEIGHTS["method"])
         supporting_score = max(supporting_score, section_score)
         state = "primary" if primary else "supporting_only" if supporting else "none"
         scores.append(TieredEvidenceScore(
