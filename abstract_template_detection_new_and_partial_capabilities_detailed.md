@@ -718,7 +718,7 @@ It also extracts the richer types requested for this work item:
 - Population
 - Treatment class
 
-Each exported entity retains its original text, normalized value, entity type, character offsets, section, sentence index, extraction method, confidence, and vocabulary version (`asco-hybrid-v1`). The legacy template detector preserves its calibrated protein/gene comparison behaviour while the export retains the richer protein type.
+Each exported entity retains its original text, normalized value, entity type, character offsets, section, sentence index, extraction method, confidence, and vocabulary version (`asco-hybrid-v1`). The entity-normalized template detector preserves its calibrated protein/gene comparison behaviour while the export retains the richer protein type.
 
 ### Real-ASCO structural validation
 

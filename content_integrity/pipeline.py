@@ -101,12 +101,10 @@ class PipelineConfig:
     input_dir: Path
     output_dir: Path
     tortured_dictionary_path: Path
-    legacy_similarity_threshold: float = 0.88
     dictionary_version: str = "wiley_tortured_seed_v1"
     validate_llm: bool = False
     detect_llm_semantic: bool = False
     detect_nonsense_candidates: bool = False
-    compare_legacy_template_clustering: bool = False
     verify_trials: bool = False
 
 
@@ -885,7 +883,6 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         ("tortured_rule_count", len(tortured_rules)),
         ("dictionary_version", config.dictionary_version),
         ("tortured_dictionary_path", str(config.tortured_dictionary_path)),
-        ("legacy_similarity_threshold", config.legacy_similarity_threshold),
         ("pipeline_config", json.dumps({
             field.name: str(getattr(config, field.name)) if isinstance(getattr(config, field.name), Path) else getattr(config, field.name)
             for field in fields(config)
@@ -969,27 +966,11 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         template_finding_rows,
         PAIR_COLUMNS,
     )
-    output_paths["enriched_pairs_csv"] = write_csv(
-        output_dir / "enriched_template_pairs.csv",
-        enriched_pair_rows,
-        PAIR_REPORT_COLUMNS,
-    )
-    output_paths["enriched_families_csv"] = write_csv(
-        output_dir / "enriched_template_families.csv",
-        enriched_family_rows,
-        FAMILY_REPORT_COLUMNS,
-    )
     output_paths["enriched_abstracts_csv"] = write_csv(
         output_dir / "enriched_template_abstracts.csv",
         enriched_abstract_rows,
         ABSTRACT_REPORT_COLUMNS,
     )
-    if config.compare_legacy_template_clustering:
-        from .template_detection import cluster_templates
-        output_paths["legacy_template_comparison_jsonl"] = write_jsonl(
-            output_dir / "legacy_template_comparison.jsonl",
-            [row.to_dict() for row in cluster_templates(records, similarity_threshold=config.legacy_similarity_threshold)],
-        )
     output_paths["clusters_csv"] = write_csv(
         output_dir / "template_clusters.csv",
         enriched_family_rows,
@@ -1041,25 +1022,18 @@ def run_default_pipeline(
     input_dir: str | Path = "WILEY_LIVE_PREFLIGHT_metadata_files",
     tortured_dictionary_path: str | Path = "🤷_tortured.csv",
     output_dir: str | Path = "outputs",
-    legacy_similarity_threshold: float = 0.88,
     validate_llm: bool = False,
     detect_llm_semantic: bool = False,
     detect_nonsense_candidates: bool = False,
-    compare_legacy_template_clustering: bool = False,
     verify_trials: bool = False,
-    similarity_threshold: float | None = None,
 ) -> PipelineResult:
-    if similarity_threshold is not None:
-        legacy_similarity_threshold = similarity_threshold
     config = PipelineConfig(
         input_dir=Path(input_dir),
         output_dir=Path(output_dir),
         tortured_dictionary_path=Path(tortured_dictionary_path),
-        legacy_similarity_threshold=legacy_similarity_threshold,
         validate_llm=validate_llm,
         detect_llm_semantic=detect_llm_semantic,
         detect_nonsense_candidates=detect_nonsense_candidates,
-        compare_legacy_template_clustering=compare_legacy_template_clustering,
         verify_trials=verify_trials,
     )
     return run_pipeline(config)
@@ -1072,12 +1046,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--input-dir", default="WILEY_LIVE_PREFLIGHT_metadata_files", help="Folder containing Wiley XML files.")
     parser.add_argument("--tortured-dictionary", default="🤷_tortured.csv", help="Tortured phrase dictionary CSV.")
     parser.add_argument("--output-dir", default="outputs", help="Directory for generated reports.")
-    parser.add_argument(
-        "--legacy-similarity-threshold",
-        type=float,
-        default=0.88,
-        help="Legacy threshold used only with --compare-legacy-template-clustering.",
-    )
     parser.add_argument(
         "--detect-llm-semantic",
         action="store_true",
@@ -1094,11 +1062,6 @@ def main(argv: list[str] | None = None) -> int:
         help="Run the opt-in GPT-OSS sentence-level nonsense candidate detector.",
     )
     parser.add_argument(
-        "--compare-legacy-template-clustering",
-        action="store_true",
-        help="Write legacy clustering results to an internal comparison file only.",
-    )
-    parser.add_argument(
         "--verify-trials",
         action="store_true",
         help="Verify valid NCT identifiers against ClinicalTrials.gov; local trial-reference checks always run.",
@@ -1109,11 +1072,9 @@ def main(argv: list[str] | None = None) -> int:
         input_dir=args.input_dir,
         tortured_dictionary_path=args.tortured_dictionary,
         output_dir=args.output_dir,
-        legacy_similarity_threshold=args.legacy_similarity_threshold,
         validate_llm=args.validate_llm,
         detect_llm_semantic=args.detect_llm_semantic,
         detect_nonsense_candidates=args.detect_nonsense_candidates,
-        compare_legacy_template_clustering=args.compare_legacy_template_clustering,
         verify_trials=args.verify_trials,
     )
     print(json.dumps({key: str(value) for key, value in result.output_paths.items()}, ensure_ascii=False, indent=2))

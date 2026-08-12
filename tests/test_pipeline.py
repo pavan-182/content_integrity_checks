@@ -14,7 +14,7 @@ from content_integrity.detectors import built_in_llm_rules, build_tortured_rule_
 from content_integrity.models import Finding, ParsedRecord
 from content_integrity.pipeline import _aggregate_findings, run_default_pipeline
 from content_integrity.reporting import FINDINGS_COLUMNS, REVIEW_FINDINGS_COLUMNS
-from content_integrity.template_detection import _candidate_pairs, _content_class, _similarity, build_normalized_text, build_skeleton_text, cluster_templates
+from content_integrity.template_matching_common import _candidate_pairs, _content_class, _similarity, build_normalized_text, build_skeleton_text
 from content_integrity.validators import ContextValidator
 from content_integrity.validators.context_validator import _parse_validator_payload
 from content_integrity.xml_parser import parse_xml, parse_xml_records
@@ -94,29 +94,6 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(_similarity(left, right), _similarity(right, left))
         self.assertGreater(_similarity(left, right), 0.99)
 
-    def test_template_detection_can_flag_shared_results_section(self) -> None:
-        shared_results = "Twenty patients achieved durable response with improved survival and no unexpected adverse events during extended clinical follow up analysis."
-        records = [
-            ParsedRecord(
-                source_file=f"{index}.xml",
-                record_id=str(index),
-                abstract_text=f"{opening} {shared_results}",
-                abstract_sections=[
-                    {"section": "Background", "text": opening},
-                    {"section": "Results", "text": shared_results},
-                ],
-            )
-            for index, opening in enumerate(
-                (
-                    "This unrelated introduction discusses a novel biomarker study in lung cancer with distinct methods and enrolment criteria.",
-                    "A separate opening describes immunotherapy safety across another disease cohort using different eligibility and statistical assumptions.",
-                )
-            )
-        ]
-        clusters = cluster_templates(records)
-        self.assertEqual(len(clusters), 2)
-        self.assertTrue(all(row.template_pattern_type == "shared_section" for row in clusters))
-
     def test_ngram_candidates_recover_reordered_template(self) -> None:
         chunks = [
             "Patients received protocol treatment with prospective clinical assessment and standardized longitudinal outcome collection.",
@@ -130,7 +107,6 @@ class PipelineTests(unittest.TestCase):
         skeletons = {record.record_id: build_skeleton_text(record) for record in records}
         normalized = {record.record_id: build_normalized_text(record) for record in records}
         self.assertIn(("A", "B"), _candidate_pairs(records, skeletons, normalized))
-        self.assertEqual([row.template_pattern_type for row in cluster_templates(records)], ["reordered_or_partial_template"] * 2)
 
     def test_content_class_preserves_valid_short_abstracts(self) -> None:
         short = ParsedRecord("short.xml", record_id="short", abstract_text="A concise but valid clinical abstract reports treatment outcomes in patients.")
@@ -346,45 +322,6 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(len({finding.rule_id for finding in findings}), 2)
             self.assertTrue(all(sum(item.rule_id == finding.rule_id for item in findings) == 2 for finding in findings))
 
-    def test_template_detection_clusters_synthetic_abstracts(self) -> None:
-        record_a = parse_xml(
-            self._temp_xml(
-                """
-                <article article-type="Original Research">
-                  <front>
-                    <journal-meta><journal-title-group><journal-title>Test</journal-title></journal-title-group></journal-meta>
-                    <article-meta>
-                      <article-id pub-id-type="manuscript">TEST-4</article-id>
-                      <article-title>Template A</article-title>
-                      <abstract><p>Background: A total of 10 patients received treatment. Methods: The primary endpoint was response rate. Results: 80%. Conclusion: Positive.</p></abstract>
-                      <history><date date-type="accepted"><year>2026</year></date></history>
-                    </article-meta>
-                  </front>
-                </article>
-                """
-            )
-        )
-        record_b = parse_xml(
-            self._temp_xml(
-                """
-                <article article-type="Original Research">
-                  <front>
-                    <journal-meta><journal-title-group><journal-title>Test</journal-title></journal-title-group></journal-meta>
-                    <article-meta>
-                      <article-id pub-id-type="manuscript">TEST-5</article-id>
-                      <article-title>Template B</article-title>
-                      <abstract><p>Background: A total of 20 patients received treatment. Methods: The primary endpoint was response rate. Results: 81%. Conclusion: Positive.</p></abstract>
-                      <history><date date-type="accepted"><year>2026</year></date></history>
-                    </article-meta>
-                  </front>
-                </article>
-                """
-            )
-        )
-        clusters = cluster_templates([record_a, record_b], similarity_threshold=0.8)
-        self.assertEqual(len(clusters), 2)
-        self.assertTrue(all(cluster.template_cluster_id.startswith("TPL-") for cluster in clusters))
-
     def test_template_pairs_are_reported_for_each_record(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)
@@ -499,9 +436,7 @@ class PipelineTests(unittest.TestCase):
             self.assertTrue(result.output_paths["parsed_jsonl"].exists())
             self.assertTrue(result.output_paths["findings_csv"].exists())
             self.assertTrue(result.output_paths["detailed_findings_csv"].exists())
-            self.assertTrue(result.output_paths["enriched_pairs_csv"].exists())
             self.assertTrue(result.output_paths["template_pair_candidates_csv"].exists())
-            self.assertTrue(result.output_paths["enriched_families_csv"].exists())
             self.assertTrue(result.output_paths["enriched_abstracts_csv"].exists())
             with result.output_paths["findings_csv"].open(newline="", encoding="utf-8") as handle:
                 self.assertEqual(next(csv.reader(handle)), REVIEW_FINDINGS_COLUMNS)
@@ -549,48 +484,6 @@ class PipelineTests(unittest.TestCase):
             self.assertTrue(result.output_paths["numerical_contradictions_csv"].exists())
             self.assertTrue(result.output_paths["design_contradictions_csv"].exists())
             self.assertTrue(result.output_paths["trial_verification_csv"].exists())
-
-    def test_legacy_comparison_does_not_enter_production_outputs(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir_str:
-            temp_dir = Path(temp_dir_str)
-            input_dir = temp_dir / "xmls"
-            input_dir.mkdir()
-            _write_temp_file(
-                input_dir,
-                "sample.xml",
-                """
-                <article article-type="Original Research"><front><article-meta>
-                  <article-id pub-id-type="manuscript">LEGACY-CHECK</article-id>
-                  <article-title>Legacy comparison isolation</article-title>
-                  <abstract><p>A unique abstract with no cross-document template match.</p></abstract>
-                </article-meta></front></article>
-                """,
-            )
-            dictionary = _write_temp_file(
-                temp_dir,
-                "dict.csv",
-                'Fingerprint - Tortured Phrase,Expected Text,Nb Retrieved Papers\n"nervous network","neural network","1"',
-            )
-            baseline = run_default_pipeline(
-                input_dir=input_dir,
-                tortured_dictionary_path=dictionary,
-                output_dir=temp_dir / "baseline",
-            )
-            comparison = run_default_pipeline(
-                input_dir=input_dir,
-                tortured_dictionary_path=dictionary,
-                output_dir=temp_dir / "comparison",
-                compare_legacy_template_clustering=True,
-            )
-
-            self.assertIn("legacy_template_comparison_jsonl", comparison.output_paths)
-            self.assertEqual(baseline.pair_findings, comparison.pair_findings)
-            self.assertEqual(baseline.template_family_rows, comparison.template_family_rows)
-            self.assertEqual(baseline.abstract_summary_rows, comparison.abstract_summary_rows)
-            workbook = load_workbook(comparison.output_paths["workbook"], read_only=True)
-            self.assertNotIn("Legacy", " | ".join(workbook.sheetnames))
-            with comparison.output_paths["detailed_findings_csv"].open(newline="", encoding="utf-8") as handle:
-                self.assertFalse(any(row["detector_type"] == "template_cluster" for row in csv.DictReader(handle)))
 
     def test_validator_marks_bad_json_validation_failed(self) -> None:
         class BrokenClient:

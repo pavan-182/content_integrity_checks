@@ -35,7 +35,7 @@ tests/fixtures/eval_corpus/
 - Runs the pipeline against `tests/fixtures/eval_corpus/` only.
 - Compares output against `labels.json`.
 - Reports per-detector precision/recall/false-positive list (not just pass/fail) — print abstract IDs that were wrongly flagged or wrongly missed.
-- Evaluates the production pair findings, visible families, and abstract flags directly. `--legacy-similarity-threshold` applies only to the temporary legacy comparison.
+- Evaluates the production pair findings, visible families, and abstract flags directly.
 
 **Acceptance:**
 - `python scripts/run_eval.py` runs clean, prints a report.
@@ -54,9 +54,9 @@ tests/fixtures/eval_corpus/
 Logic:
 1. Run existing Level A dictionary matcher first (unchanged).
 2. On sentences with **no** Level A match, apply cheap deterministic pre-filters before touching an LLM:
-   - biomedical entity co-occurrence check (two entities that don't semantically pair — use a small allow-list of known valid drug-disease/gene-biomarker pairs already implied by the masking vocabulary in `template_detection.py`; reuse that entity list, don't build a new one)
+   - biomedical entity co-occurrence check (two entities that don't semantically pair — use a small allow-list of known valid drug-disease/gene-biomarker pairs already implied by the masking vocabulary in `template_matching_common.py`; reuse that entity list, don't build a new one)
    - minimum phrase length, exclude author/affiliation/reference sections entirely (see Item 4 — build that exclusion first, this detector depends on it)
-   - skip sentences that are just section headers or boilerplate (reuse the boilerplate exclusion list from `template_detection.py`)
+   - skip sentences that are just section headers or boilerplate (reuse the boilerplate exclusion list from `template_matching_common.py`)
 3. Sentences surviving the filters go to GPT-OSS via the **same** IntelliHub client used in `context_validator.py` (reuse the client, retry/backoff, and JSON-strict prompt pattern — don't fork a second HTTP client).
 4. Prompt returns: `understandable: bool`, `suspected_phrase: str`, `explanation: str`, `confidence: enum`.
 5. Wrap result as a `Finding` with:

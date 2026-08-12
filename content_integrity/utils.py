@@ -30,10 +30,6 @@ def text_tokens(text: str | None) -> list[str]:
     return TOKEN_RE.findall(str(text).lower())
 
 
-def token_set(text: str | None) -> set[str]:
-    return set(text_tokens(text))
-
-
 def join_nonempty(values: Iterable[Any], delimiter: str = " | ") -> str:
     parts: list[str] = []
     for value in values:
@@ -119,10 +115,6 @@ def section_for_match(record: "ParsedRecord", field_name: str, matched_text: str
         if needle and needle in lowercase_normalize(section.get("text", "")):
             return normalize_label(section.get("section", "")) or "Abstract"
     return "Abstract"
-
-
-def dedupe_sequence(items: Iterable[str]) -> list[str]:
-    return unique_preserve_order(items)
 
 
 def strip_outer_quotes(value: str) -> str:

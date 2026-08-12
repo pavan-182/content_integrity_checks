@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from content_integrity.pipeline import run_default_pipeline
+from content_integrity.pipeline import _is_risk_eligible_finding, run_default_pipeline
 from content_integrity.template_clustering import canonical_pair_key
 
 
@@ -50,16 +50,6 @@ def _predicted_groups(result) -> dict[str, set[str]]:
     }
 
 
-def _legacy_pairs(path: Path) -> set[tuple[str, str]]:
-    groups: dict[str, set[str]] = defaultdict(set)
-    with path.open(encoding="utf-8") as handle:
-        for line in handle:
-            row = json.loads(line)
-            if row.get("template_cluster_id") and row.get("cluster_severity") != "excluded":
-                groups[row["template_cluster_id"]].add(row["record_id"])
-    return _pairs(dict(groups))
-
-
 def _print_metrics(name: str, expected: set, predicted: set) -> bool:
     precision, recall, false_positives, missed = _metrics(expected, predicted)
     print(
@@ -72,7 +62,6 @@ def _print_metrics(name: str, expected: set, predicted: set) -> bool:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Evaluate pair, family, and abstract template outputs.")
     parser.add_argument("--detect-nonsense-candidates", action="store_true")
-    parser.add_argument("--legacy-similarity-threshold", type=float, default=0.88)
     args = parser.parse_args(argv)
 
     labels = json.loads((CORPUS / "labels.json").read_text(encoding="utf-8"))["records"]
@@ -80,25 +69,19 @@ def main(argv: list[str] | None = None) -> int:
     expected_pairs = _pairs(expected_groups)
     expected_members = set().union(*expected_groups.values()) if expected_groups else set()
 
-    with tempfile.TemporaryDirectory() as baseline_dir, tempfile.TemporaryDirectory() as comparison_dir:
-        common = {
-            "input_dir": CORPUS,
-            "tortured_dictionary_path": ROOT / "🤷_tortured.csv",
-            "detect_nonsense_candidates": args.detect_nonsense_candidates,
-            "legacy_similarity_threshold": args.legacy_similarity_threshold,
-        }
-        baseline = run_default_pipeline(output_dir=baseline_dir, **common)
-        comparison = run_default_pipeline(
-            output_dir=comparison_dir,
-            compare_legacy_template_clustering=True,
-            **common,
+    with tempfile.TemporaryDirectory() as output_dir:
+        result = run_default_pipeline(
+            input_dir=CORPUS,
+            tortured_dictionary_path=ROOT / "🤷_tortured.csv",
+            detect_nonsense_candidates=args.detect_nonsense_candidates,
+            output_dir=output_dir,
         )
 
         predicted_pairs = {
             canonical_pair_key(pair.record_id, pair.matched_record_id)
-            for pair in baseline.pair_findings
+            for pair in result.pair_findings
         }
-        predicted_groups = _predicted_groups(baseline)
+        predicted_groups = _predicted_groups(result)
         predicted_family_pairs = _pairs(predicted_groups)
         predicted_members = set().union(*predicted_groups.values()) if predicted_groups else set()
 
@@ -132,7 +115,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"split expected families: {split_expected or '-'}")
         failed |= bool(wrongly_merged or split_expected)
 
-        summaries = {row["record_id"]: row for row in baseline.abstract_summary_rows}
+        summaries = {row["record_id"]: row for row in result.abstract_summary_rows}
         expected_flags = {
             record_id
             for record_id, label in labels.items()
@@ -147,7 +130,7 @@ def main(argv: list[str] | None = None) -> int:
         family_members = predicted_members
         two_member_only = {
             record_id
-            for pair in baseline.pair_findings
+            for pair in result.pair_findings
             for record_id in (pair.record_id, pair.matched_record_id)
             if record_id not in family_members
         }
@@ -162,36 +145,21 @@ def main(argv: list[str] | None = None) -> int:
             if summaries[record_id]["template_cluster_flag"] != "Yes"
         )
         finding_counts = defaultdict(int)
-        for finding in baseline.findings:
-            finding_counts[finding.record_id] += 1
+        for finding in result.findings:
+            if finding.detector_type != "llm_response_trace" and _is_risk_eligible_finding(finding):
+                finding_counts[finding.record_id] += 1
         risk_count_errors = sorted(
             record_id
             for record_id, row in summaries.items()
             if row["total_finding_count"]
-            != finding_counts[record_id] + (1 if row["template_flag"] == "Yes" else 0)
+            != finding_counts[record_id]
+            + (1 if row["llm_review_priority"] != "None" else 0)
+            + (1 if row["template_flag"] == "Yes" else 0)
         )
         print(f"two-member cluster-flag errors: {flag_errors or '-'}")
         print(f"family cluster-flag errors: {family_flag_errors or '-'}")
         print(f"template double-count errors: {risk_count_errors or '-'}")
         failed |= bool(flag_errors or family_flag_errors or risk_count_errors)
-
-        production_unchanged = (
-            [pair.to_dict() for pair in baseline.pair_findings]
-            == [pair.to_dict() for pair in comparison.pair_findings]
-            and baseline.template_family_rows == comparison.template_family_rows
-            and baseline.abstract_summary_rows == comparison.abstract_summary_rows
-        )
-        legacy_pairs = _legacy_pairs(comparison.output_paths["legacy_template_comparison_jsonl"])
-        print(
-            "legacy comparison: "
-            f"legacy_only={sorted(legacy_pairs - predicted_pairs) or '-'} "
-            f"new_only={sorted(predicted_pairs - legacy_pairs) or '-'} "
-            f"shared={len(legacy_pairs & predicted_pairs)} "
-            f"false_positives={sorted(legacy_pairs - expected_pairs) or '-'} "
-            f"missed_labelled={sorted(expected_pairs - legacy_pairs) or '-'} "
-            f"production_unchanged={production_unchanged}"
-        )
-        failed |= not production_unchanged
 
     return 1 if failed else 0
 

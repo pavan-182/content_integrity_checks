@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass, replace
 from typing import Any
 
 from ..models import ParsedRecord
-from ..template_detection import _sentence_split
+from ..template_matching_common import _sentence_split
 from ..utils import normalize_label, normalize_whitespace
 
 

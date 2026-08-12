@@ -8,7 +8,6 @@ from lxml import etree
 
 from .models import ParseWarning, ParsedRecord, TraceTextBlock
 from .utils import (
-    dedupe_sequence,
     first_nonempty,
     join_nonempty,
     normalize_whitespace,

@@ -5,7 +5,7 @@ import re
 from typing import Any, Iterable
 
 from ..models import Finding, ParsedRecord
-from ..template_detection import BOILERPLATE_RE, DRUG_SUFFIX_PATTERN, GENE_PATTERN, _sentence_split
+from ..template_matching_common import BOILERPLATE_RE, DRUG_SUFFIX_PATTERN, GENE_PATTERN, _sentence_split
 from ..utils import normalize_for_matching, normalize_whitespace, text_tokens
 from ..validators.context_validator import MODEL_ID, _parse_validator_payload
 

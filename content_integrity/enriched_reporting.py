@@ -40,6 +40,16 @@ def _joined(values: tuple[str, ...]) -> str:
     return " | ".join(values)
 
 
+def _reverse_substitutions(value: object) -> str:
+    reversed_items = []
+    for item in str(value or "").split("; "):
+        label, separator, substitution = item.partition(": ")
+        left, arrow, right = substitution.partition(" -> ")
+        if separator and arrow:
+            reversed_items.append(f"{label}: {right} -> {left}")
+    return "; ".join(reversed_items)
+
+
 def directional_finding_rows(pair_rows: list[dict[str, object]]) -> list[dict[str, object]]:
     rows = []
     swapped = {
@@ -54,6 +64,7 @@ def directional_finding_rows(pair_rows: list[dict[str, object]]) -> list[dict[st
         reverse = dict(pair)
         for left, right in swapped.items():
             reverse[left], reverse[right] = pair[right], pair[left]
+        reverse["likely_substitutions"] = _reverse_substitutions(pair.get("likely_substitutions", ""))
         rows.append(reverse)
     return rows
 

@@ -13,7 +13,7 @@ from itertools import combinations
 from typing import Any, Protocol
 
 from ..models import ParsedRecord
-from ..template_detection import _sentence_split
+from ..template_matching_common import _sentence_split
 from ..utils import normalize_for_matching, normalize_label, normalize_whitespace
 from ..validators.context_validator import _parse_validator_payload
 

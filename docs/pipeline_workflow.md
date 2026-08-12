@@ -62,7 +62,6 @@ The command-line interface accepts:
 | `--input-dir` | `WILEY_LIVE_PREFLIGHT_metadata_files` | Root directory searched recursively for `*.xml` files |
 | `--tortured-dictionary` | `🤷_tortured.csv` | CSV containing tortured-phrase rules and expected terms |
 | `--output-dir` | `outputs` | Destination for all generated artifacts |
-| `--legacy-similarity-threshold` | `0.88` | Legacy-only threshold used with `--compare-legacy-template-clustering` |
 | `--validate-llm` | disabled | Enables per-finding GPT-OSS context validation |
 | `--detect-nonsense-candidates` | disabled | Enables sentence-level GPT-OSS review for dictionary misses |
 | `--verify-trials` | disabled | Verifies valid NCT identifiers against ClinicalTrials.gov; local format and placeholder checks always run |
@@ -79,9 +78,7 @@ An explicit run is:
 python scripts/run_pipeline.py \
   --input-dir WILEY_LIVE_PREFLIGHT_metadata_files \
   --tortured-dictionary '🤷_tortured.csv' \
-  --output-dir outputs \
-  --compare-legacy-template-clustering \
-  --legacy-similarity-threshold 0.88
+  --output-dir outputs
 ```
 
 The optional validator reads these settings from the environment or `.env`:
@@ -220,8 +217,6 @@ Validation never deletes audit findings or validates template clusters. Confirme
 
 Accepted high/very-high pairs, plus independently supported medium pairs, become graph edges. Connected groups are verified against a medoid. Two-member groups remain pair findings; only verified groups of three or more appear as template families.
 
-The temporary legacy implementation runs only with `--compare-legacy-template-clustering`. Its threshold is `--legacy-similarity-threshold`, and its JSONL output never enters production findings, summaries, risk, counts, or workbook sheets.
-
 ## 10. Stage 7 — Risk aggregation
 
 Risk is computed once per record from active rule findings, optional low-severity nonsense candidates, and one template concern regardless of how many pair signals or family memberships support it. LLM findings first collapse to one validation-aware reviewer-priority signal.
@@ -255,7 +250,7 @@ Every run creates these files in the configured output directory:
 | `template_pair_candidates.csv` | One canonical row per routed candidate, including insufficient-evidence candidates |
 | `template_detector_evidence.csv` | Raw merged exact-text and entity-normalized evidence retained for audit |
 | `template_clusters.csv` | Authoritative verified family rows for groups of at least three abstracts |
-| `enriched_template_*.csv` | Compatibility copies of the authoritative pair, family, and abstract views |
+| `enriched_template_abstracts.csv` | One summary row per abstract for the template-review workflow |
 | `pattern_dictionary.csv` | Effective LLM and tortured-phrase rules used by the run |
 | `parse_warnings.csv` | Parser warnings and record-ID deduplication actions |
 | `run_metadata.jsonl` | Timestamp, commit/dirty state, corpus checksum, complete config, counts, versions, and scope notes |
@@ -274,8 +269,6 @@ The workbook contains nine sheets:
 9. **Run Metadata** — configuration and audit context.
 
 `template_cluster_flag` means membership in a verified family of at least three abstracts; `template_flag` means at least one accepted pair finding.
-
-The Python-only `run_default_pipeline(similarity_threshold=...)` argument is retained temporarily as a deprecated alias for `legacy_similarity_threshold`; it never changes production pair detection.
 
 The summary includes every retained record, including records with no findings.
 
@@ -333,10 +326,12 @@ python -m unittest discover -s tests -v
 | `content_integrity/detectors/llm_trace_fusion.py` | Deterministic–semantic deduplication and LLM priority |
 | `content_integrity/detectors/tortured_phrase.py` | Dictionary loading, query interpretation, indexing, and matching |
 | `content_integrity/detectors/nonsense_candidate.py` | Opt-in sentence prefiltering and GPT-OSS candidate annotation |
-| `content_integrity/template_detection.py` | Masking, candidate generation, similarity, and clustering |
+| `content_integrity/template_matching_common.py` | Shared masking, candidate generation, and similarity primitives |
+| `content_integrity/detectors/exact_text_reuse.py` | Exact and distinctive shared-text evidence |
+| `content_integrity/detectors/entity_normalized_template.py` | Entity-normalized template evidence |
 | `content_integrity/validators/context_validator.py` | Optional IntelliHub/GPT-OSS finding validation |
 | `content_integrity/validators/llm_trace_validator.py` | Selective response-residue validation with source context |
 | `content_integrity/aggregation/risk_engine.py` | Record-level risk rules |
 | `content_integrity/reporting.py` | JSONL, CSV, and Excel generation |
-| `content_integrity/models.py` | Records, findings, validation results, and cluster-member data models |
+| `content_integrity/models.py` | Records, findings, and validation-result data models |
 | `content_integrity/utils.py` | Shared normalization, formatting, and deduplication helpers |

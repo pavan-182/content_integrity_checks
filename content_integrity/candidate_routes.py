@@ -5,8 +5,8 @@ from dataclasses import asdict, dataclass
 from itertools import combinations
 
 from .models import ParsedRecord
-from .template_detection import _candidate_pairs
 from .template_features import TemplateFeatures, build_template_features
+from .template_matching_common import _candidate_pairs
 from .title_templates import title_candidate_pairs
 
 

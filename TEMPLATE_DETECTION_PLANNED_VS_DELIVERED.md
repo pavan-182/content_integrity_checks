@@ -104,13 +104,13 @@ Each run writes:
 - `parsed_records.jsonl` and `parsed_records.csv`;
 - `integrity_findings.csv` and `detailed_findings.csv`;
 - `template_pair_findings.csv`, `template_pair_candidates.csv`, and `template_clusters.csv`;
-- `enriched_template_pairs.csv`, `enriched_template_families.csv`, and `enriched_template_abstracts.csv`;
+- `enriched_template_abstracts.csv`;
 - `numerical_contradictions.csv` and `design_contradictions.csv`;
 - `trial_verification.csv`;
 - `pattern_dictionary.csv`, `parse_warnings.csv`, and `run_metadata.jsonl`; and
 - `content_integrity_screening_poc.xlsx`.
 
-`template_pair_findings.csv` contains only reviewable findings and writes two directional rows per canonical pair with one stable `pair_id`. `template_pair_candidates.csv` and `enriched_template_pairs.csv` retain one canonical row per routed candidate, including insufficient-evidence candidates.
+`template_pair_findings.csv` contains only reviewable findings and writes two directional rows per canonical pair with one stable `pair_id`. `template_pair_candidates.csv` retains one canonical row per routed candidate, including insufficient-evidence candidates.
 
 ## 5. NER decision and final behavior
 

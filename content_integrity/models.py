@@ -115,29 +115,3 @@ class Finding:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
-
-
-@dataclass(slots=True)
-class TemplateClusterMember:
-    template_cluster_id: str
-    cluster_size: int
-    record_id: str
-    source_file: str
-    similar_record_ids: list[str] = field(default_factory=list)
-    similarity_score: float = 0.0
-    cluster_severity: str = "low"
-    shared_skeleton_excerpt: str = ""
-    metadata_context: str = ""
-    template_pattern_type: str = "masked_near_duplicate"
-    original_text_similarity: float = 0.0
-    masked_skeleton_similarity: float = 0.0
-    ngram_similarity: float = 0.0
-    weighted_section_similarity: float = 0.0
-    section_similarities: str = ""
-    variable_substitutions: str = ""
-    exclusion_reason: str = ""
-
-    def to_dict(self) -> dict[str, Any]:
-        data = asdict(self)
-        data["similar_record_ids"] = " | ".join(self.similar_record_ids)
-        return data
