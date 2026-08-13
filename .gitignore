@@ -1,5 +1,7 @@
 .env
 .venv/
+node_modules/
+dist/
 outputs/
 *output*/
 *.xml

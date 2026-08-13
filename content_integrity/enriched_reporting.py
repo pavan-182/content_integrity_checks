@@ -23,7 +23,7 @@ PAIR_REPORT_COLUMNS = [
     "shared_populations", "shared_endpoints", "explicit_companion_wording", "family_id", "left_family_status",
     "right_family_status", "limitations", "priority_reason",
     "shared_entities", "left_only_entities", "right_only_entities", "likely_substitutions",
-    "left_supporting_sentences", "right_supporting_sentences",
+    "left_supporting_sentences", "right_supporting_sentences", "matching_text_evidence",
     "editor_label", "editor_notes",
 ]
 FAMILY_REPORT_COLUMNS = [
@@ -80,6 +80,9 @@ def build_enriched_reports(
     priorities = [assign_editorial_priority(item) for item in classifications]
     families = build_suspicious_families(classifications)
     record_lookup = {record.record_id: record for record in records}
+    detector_lookup: dict[tuple[str, str], list[Any]] = defaultdict(list)
+    for finding in detector_findings or []:
+        detector_lookup[tuple(sorted((finding.record_id, finding.matched_record_id)))].append(finding)
     evidence_lookup = {(item.left_record_id, item.right_record_id): item for item in evidence}
     context_lookup = {(item.left_record_id, item.right_record_id): item for item in contexts}
     substitution_lookup = {(item.left_record_id, item.right_record_id): item for item in substitutions}
@@ -91,6 +94,21 @@ def build_enriched_reports(
         key = (item.left_record_id, item.right_record_id)
         pair_evidence, context, priority, substitution = evidence_lookup[key], context_lookup[key], priority_lookup[key], substitution_lookup[key]
         left_family, right_family = family_lookup.get(item.left_record_id), family_lookup.get(item.right_record_id)
+        exact_match = next(
+            (
+                f"{finding.record_id}: {' | '.join(finding.record_matched_sentences)} || "
+                f"{finding.matched_record_id}: {' | '.join(finding.matched_record_sentences)}"
+                for finding in detector_lookup.get(tuple(sorted(key)), [])
+                if getattr(finding, "record_matched_sentences", None)
+            ),
+            "",
+        )
+        matching_text = exact_match or " || ".join(
+            text for text in (
+                f"{item.left_record_id}: {substitution.left_supporting_sentences}" if substitution.left_supporting_sentences else "",
+                f"{item.right_record_id}: {substitution.right_supporting_sentences}" if substitution.right_supporting_sentences else "",
+            ) if text
+        )
         pair_rows.append({
             "report_version": REPORT_VERSION,
             "pair_id": f"PAIR-{min(item.left_record_id, item.right_record_id)}--{max(item.left_record_id, item.right_record_id)}",
@@ -132,6 +150,7 @@ def build_enriched_reports(
             "likely_substitutions": substitution.likely_substitutions,
             "left_supporting_sentences": substitution.left_supporting_sentences,
             "right_supporting_sentences": substitution.right_supporting_sentences,
+            "matching_text_evidence": matching_text,
             "editor_label": "not_reviewed",
             "editor_notes": "",
         })

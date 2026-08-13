@@ -13,7 +13,7 @@ from openpyxl import load_workbook
 from content_integrity.detectors import built_in_llm_rules, build_tortured_rule_index, detect_llm_trace, detect_tortured_phrases, load_tortured_rules
 from content_integrity.models import Finding, ParsedRecord
 from content_integrity.pipeline import _aggregate_findings, run_default_pipeline
-from content_integrity.reporting import FINDINGS_COLUMNS, REVIEW_FINDINGS_COLUMNS
+from content_integrity.reporting import build_content_integrity_frontend_json, FINDINGS_COLUMNS, REVIEW_FINDINGS_COLUMNS
 from content_integrity.template_matching_common import _candidate_pairs, _content_class, _similarity, build_normalized_text, build_skeleton_text
 from content_integrity.validators import ContextValidator
 from content_integrity.validators.context_validator import _parse_validator_payload
@@ -147,6 +147,7 @@ class PipelineTests(unittest.TestCase):
                       </abstract>
                       <kwd-group><kwd>alpha</kwd><kwd>beta</kwd></kwd-group>
                       <contrib-group>
+                        <contrib contrib-type="presenter"><name><given-names>Primary</given-names><surname>Researcher</surname></name></contrib>
                         <contrib contrib-type="author"><name><given-names>Ada</given-names><surname>Lovelace</surname></name></contrib>
                       </contrib-group>
                       <aff id="aff1"><institution>Test Institute</institution></aff>
@@ -187,9 +188,12 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(article_record.journal, "Test Journal")
             self.assertTrue(article_record.structured_abstract)
             self.assertGreaterEqual(article_record.abstract_section_count, 4)
+            self.assertEqual(article_record.primary_author, "Primary Researcher")
+            self.assertEqual(article_record.authors, ["Primary Researcher", "Ada Lovelace"])
             self.assertEqual(article_set_record.record_id, "MS-1")
             self.assertEqual(article_set_record.journal, "Another Journal")
             self.assertEqual(article_set_record.publication_year, "2025")
+            self.assertEqual(article_set_record.primary_author, "Grace Hopper")
 
     def test_llm_trace_detector_finds_synthetic_trace(self) -> None:
         record = parse_xml(
@@ -442,6 +446,284 @@ class PipelineTests(unittest.TestCase):
                 self.assertEqual(next(csv.reader(handle)), REVIEW_FINDINGS_COLUMNS)
             with result.output_paths["detailed_findings_csv"].open(newline="", encoding="utf-8") as handle:
                 self.assertEqual(next(csv.reader(handle)), FINDINGS_COLUMNS)
+            self.assertTrue(result.output_paths["content_integrity_json"].exists())
+            with result.output_paths["content_integrity_json"].open(encoding="utf-8") as handle:
+                data = json.load(handle)
+            self.assertEqual(set(data), {"run", "summary", "abstracts"})
+            self.assertEqual(data["summary"]["total_submissions"], 1)
+            self.assertEqual(data["summary"]["low_risk"], 1)
+            self.assertEqual(data["summary"]["high_risk"], 0)
+
+    def test_frontend_json_scoped_checks_are_reported_and_risk_is_high(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            input_dir = temp_dir / "xmls"
+            output_dir = temp_dir / "outputs"
+            input_dir.mkdir()
+            _write_temp_file(
+                input_dir,
+                "tortured.xml",
+                """
+                <article article-type="Original Research">
+                  <front>
+                    <journal-meta><journal-title-group><journal-title>Test Journal</journal-title></journal-title-group></journal-meta>
+                    <article-meta>
+                      <article-id pub-id-type="manuscript">TP-1</article-id>
+                      <article-title>Tortured phrase example</article-title>
+                      <abstract><p>The model uses a nervous network.</p></abstract>
+                      <history><date date-type="accepted"><year>2026</year></date></history>
+                    </article-meta>
+                  </front>
+                </article>
+                """,
+            )
+            _write_temp_file(
+                input_dir,
+                "llm.xml",
+                """
+                <article article-type="Original Research">
+                  <front>
+                    <journal-meta><journal-title-group><journal-title>Test Journal</journal-title></journal-title-group></journal-meta>
+                    <article-meta>
+                      <article-id pub-id-type="manuscript">LLM-1</article-id>
+                      <article-title>LLM response example</article-title>
+                      <abstract><p>As an AI language model, I cannot provide medical advice.</p></abstract>
+                      <history><date date-type="accepted"><year>2026</year></date></history>
+                    </article-meta>
+                  </front>
+                </article>
+                """,
+            )
+            _write_temp_file(
+                input_dir,
+                "clean.xml",
+                """
+                <article article-type="Original Research">
+                  <front>
+                    <journal-meta><journal-title-group><journal-title>Test Journal</journal-title></journal-title-group></journal-meta>
+                    <article-meta>
+                      <article-id pub-id-type="manuscript">CLEAN-1</article-id>
+                      <article-title>Clean abstract</article-title>
+                      <abstract><p>No issues detected in this clean abstract.</p></abstract>
+                      <history><date date-type="accepted"><year>2026</year></date></history>
+                    </article-meta>
+                  </front>
+                </article>
+                """,
+            )
+            dict_path = temp_dir / "dict.csv"
+            dict_path.write_text(
+                "Fingerprint - Tortured Phrase,Expected Text,Nb Retrieved Papers\n\"nervous network\",\"neural network\",\"1\"\n",
+                encoding="utf-8",
+            )
+            result = run_default_pipeline(input_dir=input_dir, tortured_dictionary_path=dict_path, output_dir=output_dir)
+            with result.output_paths["content_integrity_json"].open(encoding="utf-8") as handle:
+                data = json.load(handle)
+
+            self.assertEqual(data["summary"]["total_submissions"], 3)
+            self.assertEqual(data["summary"]["high_risk"], 2)
+            self.assertEqual(data["summary"]["low_risk"], 1)
+            self.assertEqual(data["summary"]["moderate_risk"], 0)
+
+            tortured_abstract = next(item for item in data["abstracts"] if item["abstract_id"] == "TP-1")
+            self.assertEqual(len(tortured_abstract["checks"]), 6)
+            self.assertTrue(tortured_abstract["checks"]["tortured_phrases"]["flagged"])
+            self.assertEqual(
+                tortured_abstract["checks"]["tortured_phrases"]["evidence"],
+                "nervous network → neural network",
+            )
+            self.assertEqual(tortured_abstract["overall_risk"], "High")
+            self.assertEqual(tortured_abstract["high_confidence_flags"], 1)
+            self.assertEqual(tortured_abstract["corroborating_flags"], 0)
+            self.assertEqual(tortured_abstract["checks"]["llm_response_trace"]["flagged"], False)
+            self.assertFalse(tortured_abstract["checks"]["numerical_contradiction"]["flagged"])
+            self.assertFalse(tortured_abstract["checks"]["design_contradiction"]["flagged"])
+            self.assertFalse(tortured_abstract["checks"]["unverifiable_trial"]["flagged"])
+            self.assertEqual(tortured_abstract["checks"]["templating"]["flagged"], False)
+
+            llm_abstract = next(item for item in data["abstracts"] if item["abstract_id"] == "LLM-1")
+            self.assertTrue(llm_abstract["checks"]["llm_response_trace"]["flagged"])
+            self.assertEqual(
+                llm_abstract["checks"]["llm_response_trace"]["evidence"],
+                "As an AI language model, I cannot provide medical advice.",
+            )
+            self.assertEqual(llm_abstract["checks"]["llm_response_trace"]["findings"][0]["category"], "ai_self_identification")
+            self.assertEqual(llm_abstract["checks"]["llm_response_trace"]["findings"][0]["rule_id"], "LLM-001")
+            self.assertIn(
+                llm_abstract["checks"]["llm_response_trace"]["findings"][0]["validation_status"],
+                {"not_validated", "not_required", ""},
+            )
+
+            clean_abstract = next(item for item in data["abstracts"] if item["abstract_id"] == "CLEAN-1")
+            self.assertEqual(clean_abstract["overall_risk"], "Low")
+            self.assertFalse(clean_abstract["checks"]["tortured_phrases"]["flagged"])
+            self.assertFalse(clean_abstract["checks"]["llm_response_trace"]["flagged"])
+            self.assertFalse(clean_abstract["checks"]["numerical_contradiction"]["flagged"])
+            self.assertFalse(clean_abstract["checks"]["design_contradiction"]["flagged"])
+            self.assertFalse(clean_abstract["checks"]["unverifiable_trial"]["flagged"])
+            self.assertFalse(clean_abstract["checks"]["templating"]["flagged"])
+
+    def test_template_candidate_without_reviewer_finding_does_not_flag_templating(self) -> None:
+        records = [ParsedRecord(source_file="sample.xml", record_id="A", title="A title"), ParsedRecord(source_file="sample.xml", record_id="B", title="B title")]
+        findings: list[Finding] = []
+        enriched_abstract_rows = [
+            {"record_id": "A", "family_id": "", "family_size": 0},
+            {"record_id": "B", "family_id": "", "family_size": 0},
+        ]
+        enriched_pair_rows = [
+            {
+                "pair_id": "PAIR-A--B",
+                "left_record_id": "A",
+                "right_record_id": "B",
+                "left_title": "A title",
+                "right_title": "B title",
+                "review_priority": "None",
+                "editorial_score": 0.0,
+                "pair_class": "possible_template_reuse",
+                "primary_evidence": "",
+                "supporting_evidence": "",
+                "direct_evidence": "",
+                "strongest_section": "",
+                "masked_body_similarity": 0.0,
+                "original_body_similarity": 0.0,
+                "strongest_masked_section_similarity": 0.0,
+                "likely_substitutions": "",
+                "context_interpretation": "",
+            }
+        ]
+        output = build_content_integrity_frontend_json(
+            records=records,
+            findings=findings,
+            enriched_pair_rows=enriched_pair_rows,
+            enriched_abstract_rows=enriched_abstract_rows,
+            generated_at="2026-01-01T00:00:00Z",
+            git_revision="deadbeef",
+        )
+        self.assertEqual(output["summary"]["total_submissions"], 2)
+        self.assertEqual(output["summary"]["high_risk"], 0)
+        self.assertEqual(output["abstracts"][0]["checks"]["templating"]["flagged"], False)
+        self.assertEqual(output["abstracts"][1]["checks"]["templating"]["flagged"], False)
+
+    def test_authoritative_template_findings_contain_enriched_evidence(self) -> None:
+        records = [ParsedRecord(source_file="sample.xml", record_id="A", title="A title"), ParsedRecord(source_file="sample.xml", record_id="B", title="B title")]
+        findings: list[Finding] = []
+        enriched_abstract_rows = [
+            {"record_id": "A", "family_id": "TF-001", "family_size": 3},
+            {"record_id": "B", "family_id": "TF-001", "family_size": 3},
+        ]
+        enriched_pair_rows = [
+            {
+                "pair_id": "PAIR-A--B",
+                "left_record_id": "A",
+                "right_record_id": "B",
+                "left_title": "A title",
+                "right_title": "B title",
+                "review_priority": "High",
+                "editorial_score": 0.92,
+                "pair_class": "possible_template_reuse",
+                "primary_evidence": "entity_normalized_template",
+                "supporting_evidence": "shared_title | shared_results",
+                "direct_evidence": "Shared distinctive text...",
+                "strongest_section": "results",
+                "masked_body_similarity": 0.94,
+                "original_body_similarity": 0.72,
+                "strongest_masked_section_similarity": 0.96,
+                "likely_substitutions": "gene: TP53 -> BRCA1",
+                "matching_text_evidence": "A: Shared distinctive text in A. || B: Shared distinctive text in B.",
+                "context_interpretation": "Different study entities with highly similar writing scaffold",
+            }
+        ]
+        output = build_content_integrity_frontend_json(
+            records=records,
+            findings=findings,
+            enriched_pair_rows=enriched_pair_rows,
+            enriched_abstract_rows=enriched_abstract_rows,
+            generated_at="2026-01-01T00:00:00Z",
+            git_revision="deadbeef",
+        )
+        a_row = next(item for item in output["abstracts"] if item["abstract_id"] == "A")
+        self.assertTrue(a_row["checks"]["templating"]["flagged"])
+        self.assertEqual(a_row["checks"]["templating"]["template_family_id"], "TF-001")
+        self.assertEqual(a_row["checks"]["templating"]["family_size"], 3)
+        self.assertEqual(a_row["checks"]["templating"]["findings"][0]["matched_abstract_id"], "B")
+        self.assertEqual(a_row["checks"]["templating"]["findings"][0]["primary_evidence"], "entity_normalized_template")
+        self.assertEqual(a_row["checks"]["templating"]["findings"][0]["supporting_evidence"], ["shared_title", "shared_results"])
+        self.assertEqual(a_row["checks"]["templating"]["findings"][0]["direct_evidence"], "Shared distinctive text...")
+        self.assertEqual(a_row["checks"]["templating"]["findings"][0]["strongest_section"], "results")
+        self.assertEqual(a_row["checks"]["templating"]["findings"][0]["masked_body_similarity"], 0.94)
+        self.assertEqual(a_row["checks"]["templating"]["findings"][0]["original_body_similarity"], 0.72)
+        self.assertEqual(a_row["checks"]["templating"]["findings"][0]["strongest_section_similarity"], 0.96)
+        self.assertEqual(a_row["checks"]["templating"]["findings"][0]["likely_substitutions"], ["gene: TP53 -> BRCA1"])
+        self.assertEqual(a_row["checks"]["templating"]["findings"][0]["context_interpretation"], "Different study entities with highly similar writing scaffold")
+        self.assertEqual(a_row["checks"]["templating"]["evidence"], "A: Shared distinctive text in A. || B: Shared distinctive text in B.")
+        self.assertEqual(a_row["checks"]["templating"]["reason"], "96% structural overlap in Results with B.")
+        self.assertEqual(a_row["checks"]["templating"]["findings"][0]["evidence"], a_row["checks"]["templating"]["evidence"])
+        self.assertEqual(a_row["checks"]["templating"]["findings"][0]["reason"], a_row["checks"]["templating"]["reason"])
+
+    def test_related_work_is_not_reported_as_templating(self) -> None:
+        records = [ParsedRecord(source_file="sample.xml", record_id="A", title="A title"), ParsedRecord(source_file="sample.xml", record_id="B", title="B title")]
+        pair = {
+            "pair_id": "PAIR-A--B",
+            "left_record_id": "A",
+            "right_record_id": "B",
+            "left_title": "A title",
+            "right_title": "B title",
+            "review_priority": "Low",
+            "editorial_score": 0.85,
+            "pair_class": "possible_related_work",
+        }
+        output = build_content_integrity_frontend_json(
+            records=records,
+            findings=[],
+            enriched_pair_rows=[pair],
+            enriched_abstract_rows=[
+                {"record_id": "A", "family_id": "", "family_size": 0},
+                {"record_id": "B", "family_id": "", "family_size": 0},
+            ],
+            generated_at="2026-01-01T00:00:00Z",
+            git_revision="deadbeef",
+        )
+        self.assertEqual(output["summary"]["high_risk"], 0)
+        self.assertFalse(output["abstracts"][0]["checks"]["templating"]["flagged"])
+
+    def test_editor_triage_workbook_contains_only_editor_sheets_and_evidence(self) -> None:
+        from openpyxl import load_workbook
+        from content_integrity.reporting import write_editor_triage_workbook
+
+        report = {
+            "summary": {
+                "total_submissions": 1, "high_risk": 1, "moderate_risk": 0,
+                "low_risk": 0, "requires_editor_judgement": 1,
+                "cleared_without_manual_review": 0,
+            },
+            "abstracts": [{
+                "abstract_id": "A", "title": "Title", "corresponding_author": None,
+                "overall_risk": "High", "why_flagged": "Tortured Phrases",
+                "high_confidence_flags": 1, "corroborating_flags": 0,
+                "checks": {
+                    "tortured_phrases": {"flagged": True, "evidence": "Actual source sentence."},
+                    "llm_response_trace": {"flagged": False, "evidence": ""},
+                    "numerical_contradiction": {"flagged": False, "evidence": ""},
+                    "design_contradiction": {"flagged": False, "evidence": ""},
+                    "unverifiable_trial": {"flagged": False, "evidence": ""},
+                    "templating": {"flagged": True, "evidence": "A: matched text || B: matched text", "reason": "96% structural overlap in Results with B."},
+                },
+            }],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = write_editor_triage_workbook(Path(directory) / "Editor_Triage_Workbook.xlsx", report)
+            workbook = load_workbook(path, read_only=True, data_only=True)
+            self.assertEqual(workbook.sheetnames, [
+                "Dashboard", "High Risk Queue", "Moderate Risk Queue", "Low Risk Queue",
+                "All Abstracts", "Check Detail", "How This Works",
+            ])
+            self.assertEqual(workbook["Check Detail"]["E2"].value, "Actual source sentence.")
+            self.assertEqual(workbook["Check Detail"]["O2"].value, "A: matched text || B: matched text")
+            self.assertEqual(workbook["Check Detail"]["P2"].value, "96% structural overlap in Results with B.")
+            self.assertEqual(workbook["Dashboard"]["A1"].value, "Editor Triage — Submission Overview")
+            self.assertEqual(str(workbook["Dashboard"]["A4"].fill.fgColor.rgb), "00D9E1F2")
+            self.assertEqual(workbook["All Abstracts"]["D1"].value, "Overall Risk")
+            self.assertEqual(workbook["All Abstracts"]["D2"].value, "High")
 
     def test_pipeline_integrates_contradiction_and_trial_checks(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -457,7 +739,7 @@ class PipelineTests(unittest.TestCase):
                   <article-title>Contradictory trial</article-title>
                   <abstract><p>
                     This study was open-label and double-blind.
-                    Responses occurred in 8 of 20 patients reported as 65%.
+                    The objective response rate was 135%.
                     The trial was registered as NCT123.
                   </p></abstract>
                 </article-meta></front></article>
@@ -480,6 +762,16 @@ class PipelineTests(unittest.TestCase):
                     "design_contradiction",
                     "unverifiable_clinical_trial",
                 },
+            )
+            with result.output_paths["content_integrity_json"].open(encoding="utf-8") as handle:
+                data = json.load(handle)
+            row = next(item for item in data["abstracts"] if item["abstract_id"] == "CHECKS-1")
+            self.assertTrue(row["checks"]["numerical_contradiction"]["flagged"])
+            self.assertTrue(row["checks"]["design_contradiction"]["flagged"])
+            self.assertTrue(row["checks"]["unverifiable_trial"]["flagged"])
+            self.assertEqual(
+                row["why_flagged"],
+                "Numerical Contradiction, Design Contradiction, Unverifiable Clinical Trial",
             )
             self.assertTrue(result.output_paths["numerical_contradictions_csv"].exists())
             self.assertTrue(result.output_paths["design_contradictions_csv"].exists())

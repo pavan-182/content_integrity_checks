@@ -425,6 +425,11 @@ def _format_author_node(node: etree._Element) -> str:
     return first_nonempty(*candidates)
 
 
+def _primary_author(author_nodes: list[etree._Element]) -> str:
+    presenter = next((node for node in author_nodes if node.get("contrib-type") == "presenter"), None)
+    return _format_author_node(presenter if presenter is not None else author_nodes[0]) if author_nodes else ""
+
+
 def _extract_keywords(root: etree._Element) -> list[str]:
     keywords: list[str] = []
     # Wiley article JATS
@@ -473,6 +478,7 @@ def _extract_article_root(tree: etree._ElementTree | etree._Element, source_file
     keywords = _extract_keywords(metadata_root)
     author_nodes = _all_nodes(metadata_root, [".//*[local-name()='contrib-group'][1]/*[local-name()='contrib'][@contrib-type='author' or @contrib-type='presenter']", ".//*[local-name()='author'][@contrib-type='author']"])
     authors = unique_preserve_order(_format_author_node(node) for node in author_nodes)
+    primary_author = _primary_author(author_nodes)
     affiliations = unique_preserve_order(
         _format_affiliation(node)
         for node in _all_nodes(metadata_root, [".//*[local-name()='aff']", ".//*[local-name()='profile_affiliation']", ".//*[local-name()='current_profile_affiliation']"])
@@ -533,6 +539,7 @@ def _extract_article_root(tree: etree._ElementTree | etree._Element, source_file
         keywords=keywords,
         trial_ids=trial_ids,
         authors=authors,
+        primary_author=primary_author,
         affiliations=affiliations,
         journal=journal,
         article_type=article_type,
@@ -581,8 +588,9 @@ def _extract_article_set_root(tree: etree._ElementTree, source_file: str) -> Par
         excluded_sections=excluded_sections,
     )
     keywords = _extract_keywords(article)
-    author_nodes = _all_nodes(article, [".//*[local-name()='author_list'][1]/*[local-name()='author']", ".//*[local-name()='contrib-group'][1]/*[local-name()='contrib'][@contrib-type='author']"])
+    author_nodes = _all_nodes(article, [".//*[local-name()='author_list'][1]/*[local-name()='author']", ".//*[local-name()='contrib-group'][1]/*[local-name()='contrib'][@contrib-type='author' or @contrib-type='presenter']"])
     authors = unique_preserve_order(_format_author_node(node) for node in author_nodes)
+    primary_author = _primary_author(author_nodes)
     affiliations = unique_preserve_order(
         _format_affiliation(node)
         for node in _all_nodes(article, [".//*[local-name()='author_list'][1]/*[local-name()='author']/*[local-name()='affiliation']", ".//*[local-name()='author_list'][1]/*[local-name()='author']/*[local-name()='profile_affiliation']", ".//*[local-name()='author_list'][1]/*[local-name()='author']/*[local-name()='current_profile_affiliation']", ".//*[local-name()='affiliation']", ".//*[local-name()='profile_affiliation']", ".//*[local-name()='current_profile_affiliation']"])
@@ -645,6 +653,7 @@ def _extract_article_set_root(tree: etree._ElementTree, source_file: str) -> Par
         keywords=keywords,
         trial_ids=trial_ids,
         authors=authors,
+        primary_author=primary_author,
         affiliations=affiliations,
         journal=journal,
         article_type=article_type,

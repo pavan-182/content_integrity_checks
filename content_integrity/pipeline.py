@@ -66,7 +66,9 @@ from .reporting import (
     PAIR_COLUMNS,
     REVIEW_FINDINGS_COLUMNS,
     WARNING_COLUMNS,
+    build_content_integrity_frontend_json,
     write_csv,
+    write_json,
     write_jsonl,
     write_workbook,
 )
@@ -916,6 +918,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
             "keywords",
             "trial_ids",
             "authors",
+            "primary_author",
             "affiliations",
             "journal",
             "article_type",
@@ -970,6 +973,17 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         output_dir / "enriched_template_abstracts.csv",
         enriched_abstract_rows,
         ABSTRACT_REPORT_COLUMNS,
+    )
+    output_paths["content_integrity_json"] = write_json(
+        output_dir / "content_integrity_results.json",
+        build_content_integrity_frontend_json(
+            records=records,
+            findings=findings,
+            enriched_pair_rows=enriched_pair_rows,
+            enriched_abstract_rows=enriched_abstract_rows,
+            generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            git_revision=commit_sha,
+        ),
     )
     output_paths["clusters_csv"] = write_csv(
         output_dir / "template_clusters.csv",
