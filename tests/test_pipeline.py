@@ -656,7 +656,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(a_row["checks"]["templating"]["findings"][0]["likely_substitutions"], ["gene: TP53 -> BRCA1"])
         self.assertEqual(a_row["checks"]["templating"]["findings"][0]["context_interpretation"], "Different study entities with highly similar writing scaffold")
         self.assertEqual(a_row["checks"]["templating"]["evidence"], "A: Shared distinctive text in A. || B: Shared distinctive text in B.")
-        self.assertEqual(a_row["checks"]["templating"]["reason"], "96% structural overlap in Results with B.")
+        self.assertEqual(a_row["checks"]["templating"]["reason"], "96% sentence-structure overlap with B, different author group.")
         self.assertEqual(a_row["checks"]["templating"]["findings"][0]["evidence"], a_row["checks"]["templating"]["evidence"])
         self.assertEqual(a_row["checks"]["templating"]["findings"][0]["reason"], a_row["checks"]["templating"]["reason"])
 

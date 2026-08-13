@@ -16,7 +16,7 @@ from .study_context import compare_study_context
 REPORT_VERSION = "asco-enriched-report-v1"
 PAIR_REPORT_COLUMNS = [
     "report_version", "pair_id", "left_record_id", "right_record_id", "left_title", "right_title", "retrieval_routes",
-    "pair_class", "editorial_score", "review_priority", "rule_path", "detector_evidence", "primary_evidence", "supporting_evidence",
+    "pair_class", "confidence", "editorial_score", "review_priority", "rule_path", "detector_evidence", "primary_evidence", "supporting_evidence",
     "contextual_evidence", "direct_evidence", "masked_title_similarity", "original_title_similarity",
     "masked_body_similarity", "original_body_similarity", "strongest_section", "strongest_masked_section_similarity",
     "largest_shared_original_block_words", "context_interpretation", "shared_trial_ids", "shared_databases",
@@ -118,6 +118,7 @@ def build_enriched_reports(
             "right_title": record_lookup[item.right_record_id].title,
             "retrieval_routes": _joined(pair_evidence.retrieval_routes),
             "pair_class": item.pair_class,
+            "confidence": next((finding.confidence for finding in detector_lookup.get(tuple(sorted(key)), [])), ""),
             "editorial_score": priority.editorial_score,
             "review_priority": priority.review_priority,
             "rule_path": item.rule_path,

@@ -39,7 +39,7 @@ CONTENT_CHECKS = (
     ("numerical_contradiction", "Numerical Contradiction", "numerical_contradiction"),
     ("design_contradiction", "Design Contradiction", "design_contradiction"),
     ("unverifiable_trial", "Unverifiable Clinical Trial", "unverifiable_clinical_trial"),
-    ("templating", "Templating", "templating"),
+    ("templating", "Templating (Cross-Author)", "templating"),
 )
 
 FINDINGS_COLUMNS = [
@@ -521,14 +521,27 @@ def _build_templating_reason(findings: list[dict[str, Any]]) -> str:
     finding = findings[0]
     matched = finding.get("matched_abstract_id") or ""
     similarity = float(finding.get("strongest_section_similarity") or 0.0)
-    section = str(finding.get("strongest_section") or "text").title()
+    section = str(finding.get("strongest_section") or "text").lower()
+    author_group = "same author group" if finding.get("same_author_group") else "different author group"
     if matched and similarity:
-        reason = f"{similarity:.0%} structural overlap in {section} with {matched}."
+        reason = f"{similarity:.0%} sentence-structure overlap with {matched}, {author_group}."
     elif matched:
-        reason = f"Structural overlap detected with {matched}."
+        reason = f"Sentence-structure overlap with {matched}, {author_group}."
     else:
         reason = "Strong template reuse detected."
     return reason
+
+
+def _is_high_confidence(value: Any) -> bool:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value) >= 0.80
+    return normalize_whitespace(str(value)).lower() in {"high", "very_high"}
+
+
+def _same_author_group(left: Any, right: Any) -> bool:
+    left_authors = {normalize_whitespace(value).lower() for value in getattr(left, "authors", []) if normalize_whitespace(value)}
+    right_authors = {normalize_whitespace(value).lower() for value in getattr(right, "authors", []) if normalize_whitespace(value)}
+    return bool(left_authors and right_authors and left_authors == right_authors)
 
 
 def build_content_integrity_frontend_json(
@@ -614,8 +627,8 @@ def build_content_integrity_frontend_json(
             flagged_checks.append("unverifiable_trial")
             why_labels.append("Unverifiable Clinical Trial")
         if flagged_templating:
-            flagged_checks.append("templating")
-            why_labels.append("Templating")
+            flagged_checks.append("Templating (Cross-Author)")
+            why_labels.append("Templating (Cross-Author)")
 
         overall_risk = "High" if any((flagged_tortured, flagged_llm, flagged_numerical, flagged_design, flagged_trial, flagged_templating)) else "Low"
         high_confidence_flags = sum((flagged_tortured, flagged_llm, flagged_numerical, flagged_design, flagged_trial, flagged_templating))
@@ -721,6 +734,7 @@ def build_content_integrity_frontend_json(
                     "findings": [finding.to_dict() for finding in trial_findings],
                 },
                 "templating": {
+                    "label": "Templating (Cross-Author)",
                     "flagged": flagged_templating,
                     "match_count": len(ordered_template_pairs),
                     "evidence": _build_templating_evidence([
@@ -729,6 +743,7 @@ def build_content_integrity_frontend_json(
                             "strongest_section": pair.get("strongest_section", ""),
                             "strongest_section_similarity": pair.get("strongest_masked_section_similarity", 0.0),
                             "matching_text_evidence": pair.get("matching_text_evidence", ""),
+                            "same_author_group": _same_author_group(record_lookup[record_id], record_lookup[str(pair["right_record_id"] if str(pair["left_record_id"]) == record_id else pair["left_record_id"])]),
                         }
                         for pair in ordered_template_pairs
                     ]),
@@ -737,6 +752,7 @@ def build_content_integrity_frontend_json(
                             "matched_abstract_id": pair["right_record_id"] if str(pair["left_record_id"]) == record_id else pair["left_record_id"],
                             "strongest_section": pair.get("strongest_section", ""),
                             "strongest_section_similarity": pair.get("strongest_masked_section_similarity", 0.0),
+                            "same_author_group": _same_author_group(record_lookup[record_id], record_lookup[str(pair["right_record_id"] if str(pair["left_record_id"]) == record_id else pair["left_record_id"])]),
                         }
                         for pair in ordered_template_pairs
                     ]),
@@ -749,6 +765,7 @@ def build_content_integrity_frontend_json(
                             "matched_abstract_id": pair["right_record_id"] if str(pair["left_record_id"]) == record_id else pair["left_record_id"],
                             "matched_title": pair["right_title"] if str(pair["left_record_id"]) == record_id else pair["left_title"],
                             "pair_class": pair["pair_class"],
+                            "confidence": pair.get("confidence", ""),
                             "review_priority": pair["review_priority"],
                             "editorial_score": pair["editorial_score"],
                             "primary_evidence": pair["primary_evidence"],
@@ -759,6 +776,7 @@ def build_content_integrity_frontend_json(
                                 "matched_abstract_id": pair["right_record_id"] if str(pair["left_record_id"]) == record_id else pair["left_record_id"],
                                 "strongest_section": pair.get("strongest_section", ""),
                                 "strongest_section_similarity": pair.get("strongest_masked_section_similarity", 0.0),
+                                "same_author_group": _same_author_group(record_lookup[record_id], record_lookup[str(pair["right_record_id"] if str(pair["left_record_id"]) == record_id else pair["left_record_id"])]),
                             }]),
                             "strongest_section": pair.get("strongest_section", ""),
                             "masked_body_similarity": pair.get("masked_body_similarity", 0.0),
@@ -772,6 +790,14 @@ def build_content_integrity_frontend_json(
                 },
             },
         }
+        abstract_findings["high_confidence_flags"] = sum((
+            any(_is_high_confidence(finding.confidence) for finding in tortured_findings),
+            any(_is_high_confidence(finding.confidence) for finding in llm_findings),
+            any(_is_high_confidence(finding.confidence) for finding in numerical_findings),
+            any(_is_high_confidence(finding.confidence) for finding in design_findings),
+            any(_is_high_confidence(finding.confidence) for finding in trial_findings),
+            any(_is_high_confidence(pair.get("confidence", "")) for pair in ordered_template_pairs),
+        ))
         abstracts.append(abstract_findings)
 
     total_submissions = len(abstracts)
@@ -1037,7 +1063,7 @@ def write_editor_triage_workbook(path: str | Path, report: dict[str, Any]) -> Pa
         "Numerical Contradiction": "Conflicting numeric claims detected within the abstract text.",
         "Design Contradiction": "Conflicting study-design claims detected within the abstract text.",
         "Unverifiable Clinical Trial": "Trial-registration details could not be verified locally or against a registry.",
-        "Templating": "Strong structural overlap with another submission was detected.",
+        "Templating (Cross-Author)": "Strong structural overlap with another submission was detected.",
     }
     for row, (label, description) in enumerate(descriptions.items(), 6):
         how.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)

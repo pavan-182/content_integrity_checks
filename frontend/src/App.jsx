@@ -40,6 +40,7 @@ function SubmissionTable({ items, onOpen, evidenceCheck, showCheckFlags = false 
           <tr>
             <th>Priority</th><th>Submission</th><th>Corresponding author</th>
             <th>{evidenceCheck ? "Evidence" : "Why flagged"}</th>
+            {evidenceCheck === "templating" && <th>Reason</th>}
             <th>High-confidence flags</th><th>Corroborating flags</th>
             {showCheckFlags && checks.map((check) => <th key={check.id}>{check.label}</th>)}
             <th><span className="sr-only">Actions</span></th>
@@ -52,6 +53,7 @@ function SubmissionTable({ items, onOpen, evidenceCheck, showCheckFlags = false 
               <td className="title-cell"><strong>{item.title}</strong><span className="secondary">{item.abstract_id}</span></td>
               <td>{item.corresponding_author}</td>
               <td>{evidenceCheck ? item.checks[evidenceCheck].evidence : item.why_flagged}</td>
+              {evidenceCheck === "templating" && <td>{item.checks.templating.reason || "—"}</td>}
               <td>{item.high_confidence_flags}</td>
               <td>{item.corroborating_flags}</td>
               {showCheckFlags && checks.map((check) => <td key={check.id}>{item.checks[check.id].flagged ? "Y" : "N"}</td>)}

@@ -26,7 +26,7 @@ export const checks = [
   },
   {
     id: "templating",
-    label: "Templating",
+    label: "Templating (Cross-Author)",
     description: "Strong structural overlap with another submission was detected.",
   },
 ];
