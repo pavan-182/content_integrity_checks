@@ -659,6 +659,11 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(a_row["checks"]["templating"]["reason"], "96% sentence-structure overlap with B, different author group.")
         self.assertEqual(a_row["checks"]["templating"]["findings"][0]["evidence"], a_row["checks"]["templating"]["evidence"])
         self.assertEqual(a_row["checks"]["templating"]["findings"][0]["reason"], a_row["checks"]["templating"]["reason"])
+        pair = a_row["checks"]["templating"]["evidence_pairs"][0]
+        self.assertEqual(pair["submitted_abstract_id"], "A")
+        self.assertEqual(pair["matched_abstract_id"], "B")
+        self.assertEqual(pair["submitted_evidence"], "Shared distinctive text in A.")
+        self.assertEqual(pair["matched_evidence"], "Shared distinctive text in B.")
 
     def test_related_work_is_not_reported_as_templating(self) -> None:
         records = [ParsedRecord(source_file="sample.xml", record_id="A", title="A title"), ParsedRecord(source_file="sample.xml", record_id="B", title="B title")]
@@ -715,7 +720,7 @@ class PipelineTests(unittest.TestCase):
             workbook = load_workbook(path, read_only=True, data_only=True)
             self.assertEqual(workbook.sheetnames, [
                 "Dashboard", "High Risk Queue", "Moderate Risk Queue", "Low Risk Queue",
-                "All Abstracts", "Check Detail", "How This Works",
+                "All Abstracts", "Template Evidence", "Check Detail", "How This Works",
             ])
             self.assertEqual(workbook["Check Detail"]["E2"].value, "Actual source sentence.")
             self.assertEqual(workbook["Check Detail"]["O2"].value, "A: matched text || B: matched text")

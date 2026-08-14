@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import unittest
 
-from content_integrity.enriched_reporting import build_enriched_reports, directional_finding_rows
+from content_integrity.enriched_reporting import _aligned_text, build_enriched_reports, directional_finding_rows
 from content_integrity.models import ParsedRecord
 
 
 class EnrichedReportingTests(unittest.TestCase):
+    def test_aligned_evidence_uses_the_same_cross_abstract_phrase(self) -> None:
+        left = ParsedRecord(source_file="x.xml", record_id="A", abstract_text="CASC9 was associated with large tumor size and lymph node metastasis.")
+        right = ParsedRecord(source_file="x.xml", record_id="B", abstract_text="LINC01224 was associated with large tumor size and lymph node metastasis.")
+        evidence = _aligned_text(left, right, "associated with large tumor size and lymph node metastasis")
+        self.assertIn("CASC9 was associated", evidence[0])
+        self.assertIn("LINC01224 was associated", evidence[1])
+
     def test_pair_family_and_abstract_reports_join_completed_outputs(self) -> None:
         text = "A total of 50 patients received abemaciclib during treatment."
         records = [
@@ -43,10 +50,14 @@ class EnrichedReportingTests(unittest.TestCase):
             "right_only_entities": "gene: KRAS",
             "left_supporting_sentences": "EGFR sentence.",
             "right_supporting_sentences": "KRAS sentence.",
+            "left_matched_text": "EGFR matched text.",
+            "right_matched_text": "KRAS matched text.",
             "likely_substitutions": "gene: EGFR -> KRAS",
         }])
         self.assertEqual(rows[0]["likely_substitutions"], "gene: EGFR -> KRAS")
         self.assertEqual(rows[1]["likely_substitutions"], "gene: KRAS -> EGFR")
+        self.assertEqual(rows[1]["left_matched_text"], "KRAS matched text.")
+        self.assertEqual(rows[1]["right_matched_text"], "EGFR matched text.")
 
 
 if __name__ == "__main__":

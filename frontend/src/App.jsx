@@ -20,6 +20,15 @@ function RiskBadge({ risk }) {
   return <span className={`risk risk-${risk.toLowerCase()}`}>{risk === "Low" ? "Low · no action" : risk}</span>;
 }
 
+function CheckStatus({ definition, result }) {
+  if (!result.flagged) return <span className="status-clear">✓ No finding detected</span>;
+  const count = definition.id === "templating"
+    ? result.evidence_pairs?.length || result.match_count || 0
+    : result.match_count || result.findings?.length || 0;
+  const unit = definition.id === "templating" ? `pair${count === 1 ? "" : "s"}` : `finding${count === 1 ? "" : "s"}`;
+  return <span className="status-flag">● Finding detected{count ? ` · ${count} ${unit}` : ""}</span>;
+}
+
 function Metric({ label, value, help }) {
   return (
     <article className="metric-card">
@@ -52,11 +61,13 @@ function SubmissionTable({ items, onOpen, evidenceCheck, showCheckFlags = false 
               <td><RiskBadge risk={item.overall_risk} /></td>
               <td className="title-cell"><strong>{item.title}</strong><span className="secondary">{item.abstract_id}</span></td>
               <td>{item.corresponding_author}</td>
-              <td>{evidenceCheck ? item.checks[evidenceCheck].evidence : item.why_flagged}</td>
+              <td>{evidenceCheck === "templating"
+                ? `${item.checks.templating.evidence_pairs?.length || item.checks.templating.match_count || 0} matched pair(s) — open for evidence`
+                : evidenceCheck ? item.checks[evidenceCheck].evidence : item.why_flagged}</td>
               {evidenceCheck === "templating" && <td>{item.checks.templating.reason || "—"}</td>}
               <td>{item.high_confidence_flags}</td>
               <td>{item.corroborating_flags}</td>
-              {showCheckFlags && checks.map((check) => <td key={check.id}>{item.checks[check.id].flagged ? "Y" : "N"}</td>)}
+              {showCheckFlags && checks.map((check) => <td key={check.id}><CheckStatus definition={check} result={item.checks[check.id]} /></td>)}
               <td><button className="open-btn" onClick={() => onOpen(item.abstract_id)}>Open</button></td>
             </tr>
           ))}
@@ -235,9 +246,30 @@ function Detail({ abstract, onBack }) {
 }
 
 function Finding({ definition, result }) {
+  if (definition.id === "templating" && result.flagged) {
+    return (
+      <article className="finding">
+        <div className="finding-top"><strong>{definition.label}</strong><CheckStatus definition={definition} result={result} /></div>
+        <p><strong>Reason:</strong> {result.reason || "—"}</p>
+        <div className="template-pairs">
+          {(result.evidence_pairs || []).map((pair) => (
+            <details className="template-pair" key={pair.pair_id} open>
+              <summary>{pair.submitted_abstract_id} ↔ {pair.matched_abstract_id} · {pair.section || "Abstract"}</summary>
+              <div className="template-pair-meta"><span>{pair.reason}</span><span>{pair.same_author_group ? "Same author group" : "Different author group"}</span></div>
+              <div className="template-evidence-grid">
+                <div><strong>{pair.submitted_abstract_id}</strong><p>{pair.submitted_evidence || "No matched text available."}</p></div>
+                <div><strong>{pair.matched_abstract_id}</strong><p>{pair.matched_evidence || "No matched text available."}</p></div>
+              </div>
+            </details>
+          ))}
+          {!result.evidence_pairs?.length && <p><strong>Evidence:</strong> {result.evidence || "None"}</p>}
+        </div>
+      </article>
+    );
+  }
   return (
     <article className="finding">
-      <div className="finding-top"><strong>{definition.label}</strong><span className={result.flagged ? "status-flag" : "status-clear"}>Flag: {result.flagged ? "Y" : "N"}</span></div>
+      <div className="finding-top"><strong>{definition.label}</strong><CheckStatus definition={definition} result={result} /></div>
       <p><strong>Evidence:</strong> {result.evidence || "None"}</p>
       {result.reason && <p><strong>Reason:</strong> {result.reason}</p>}
     </article>

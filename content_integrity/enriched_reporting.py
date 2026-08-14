@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import re
 from collections import defaultdict
+from difflib import SequenceMatcher
 from typing import Any
 
 from .editorial_scoring import assign_editorial_priority
@@ -11,6 +13,7 @@ from .models import ParsedRecord
 from .pair_classification import classify_pairs
 from .pair_evidence import collect_pair_evidence
 from .study_context import compare_study_context
+from .utils import normalize_for_matching, text_tokens
 
 
 REPORT_VERSION = "asco-enriched-report-v1"
@@ -23,7 +26,7 @@ PAIR_REPORT_COLUMNS = [
     "shared_populations", "shared_endpoints", "explicit_companion_wording", "family_id", "left_family_status",
     "right_family_status", "limitations", "priority_reason",
     "shared_entities", "left_only_entities", "right_only_entities", "likely_substitutions",
-    "left_supporting_sentences", "right_supporting_sentences", "matching_text_evidence",
+    "left_supporting_sentences", "right_supporting_sentences", "left_matched_text", "right_matched_text", "matching_text_evidence",
     "editor_label", "editor_notes",
 ]
 FAMILY_REPORT_COLUMNS = [
@@ -50,12 +53,40 @@ def _reverse_substitutions(value: object) -> str:
     return "; ".join(reversed_items)
 
 
+def _abstract_windows(record: ParsedRecord) -> list[str]:
+    sections = [item.get("text", "") for item in record.abstract_sections] or [record.abstract_text]
+    sentences = [
+        sentence.strip()
+        for section in sections
+        for sentence in re.split(r"(?<=[.!?])\s+", section)
+        if sentence.strip()
+    ]
+    return sentences + [" ".join(sentences[index:index + 2]) for index in range(len(sentences) - 1)]
+
+
+def _similarity(left: str, right: str) -> float:
+    return SequenceMatcher(None, text_tokens(left), text_tokens(right), autojunk=False).ratio()
+
+
+def _aligned_text(left: ParsedRecord, right: ParsedRecord, anchor: str = "", section: str = "") -> tuple[str, str]:
+    left_windows, right_windows = _abstract_windows(left), _abstract_windows(right)
+    if anchor:
+        normalized_anchor = normalize_for_matching(anchor)
+        return (
+            max(left_windows, key=lambda text: _similarity(normalize_for_matching(text), normalized_anchor), default=""),
+            max(right_windows, key=lambda text: _similarity(normalize_for_matching(text), normalized_anchor), default=""),
+        )
+    label = normalize_for_matching(section)
+    return tuple(next((item.get("text", "") for item in record.abstract_sections if normalize_for_matching(item.get("section", "")) == label), record.abstract_text) for record in (left, right))
+
+
 def directional_finding_rows(pair_rows: list[dict[str, object]]) -> list[dict[str, object]]:
     rows = []
     swapped = {
         "left_record_id": "right_record_id", "left_title": "right_title",
         "left_family_status": "right_family_status", "left_only_entities": "right_only_entities",
         "left_supporting_sentences": "right_supporting_sentences",
+        "left_matched_text": "right_matched_text",
     }
     for pair in pair_rows:
         if pair["review_priority"] == "None":
@@ -103,11 +134,18 @@ def build_enriched_reports(
             ),
             "",
         )
-        matching_text = exact_match or " || ".join(
-            text for text in (
-                f"{item.left_record_id}: {substitution.left_supporting_sentences}" if substitution.left_supporting_sentences else "",
-                f"{item.right_record_id}: {substitution.right_supporting_sentences}" if substitution.right_supporting_sentences else "",
-            ) if text
+        matched_block = next((
+            block
+            for finding in detector_lookup.get(tuple(sorted(key)), [])
+            for block in getattr(finding, "matched_text_blocks", [])
+        ), "")
+        left_matched_text, right_matched_text = _aligned_text(
+            record_lookup[item.left_record_id], record_lookup[item.right_record_id], matched_block,
+            pair_evidence.strongest_section,
+        )
+        matching_text = (
+            f"{item.left_record_id}: {left_matched_text} || {item.right_record_id}: {right_matched_text}"
+            if left_matched_text and right_matched_text else exact_match
         )
         pair_rows.append({
             "report_version": REPORT_VERSION,
@@ -151,6 +189,8 @@ def build_enriched_reports(
             "likely_substitutions": substitution.likely_substitutions,
             "left_supporting_sentences": substitution.left_supporting_sentences,
             "right_supporting_sentences": substitution.right_supporting_sentences,
+            "left_matched_text": left_matched_text,
+            "right_matched_text": right_matched_text,
             "matching_text_evidence": matching_text,
             "editor_label": "not_reviewed",
             "editor_notes": "",

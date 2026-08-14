@@ -532,6 +532,41 @@ def _build_templating_reason(findings: list[dict[str, Any]]) -> str:
     return reason
 
 
+def _template_evidence_pair(record_id: str, pair: dict[str, Any], record_lookup: dict[str, Any]) -> dict[str, Any]:
+    matched_id = str(pair["right_record_id"] if str(pair["left_record_id"]) == record_id else pair["left_record_id"])
+    left_id, right_id = str(pair["left_record_id"]), str(pair["right_record_id"])
+    left_text = str(pair.get("left_matched_text") or "")
+    right_text = str(pair.get("right_matched_text") or "")
+    if not left_text or not right_text:
+        for part in str(pair.get("matching_text_evidence") or "").split(" || "):
+            if part.startswith(f"{left_id}: "):
+                left_text = part[len(left_id) + 2:]
+            elif part.startswith(f"{right_id}: "):
+                right_text = part[len(right_id) + 2:]
+    if record_id == right_id:
+        left_text, right_text = right_text, left_text
+    same_authors = _same_author_group(record_lookup[record_id], record_lookup[matched_id])
+    reason = _build_templating_reason([{
+        "matched_abstract_id": matched_id,
+        "strongest_section": pair.get("strongest_section", ""),
+        "strongest_section_similarity": pair.get("strongest_masked_section_similarity", 0.0),
+        "same_author_group": same_authors,
+    }])
+    return {
+        "pair_id": pair["pair_id"],
+        "submitted_abstract_id": record_id,
+        "submitted_title": record_lookup[record_id].title,
+        "matched_abstract_id": matched_id,
+        "matched_title": record_lookup[matched_id].title,
+        "submitted_evidence": left_text,
+        "matched_evidence": right_text,
+        "section": pair.get("strongest_section", ""),
+        "similarity": pair.get("strongest_masked_section_similarity", 0.0),
+        "same_author_group": same_authors,
+        "reason": reason,
+    }
+
+
 def _is_high_confidence(value: Any) -> bool:
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return float(value) >= 0.80
@@ -756,6 +791,10 @@ def build_content_integrity_frontend_json(
                         }
                         for pair in ordered_template_pairs
                     ]),
+                    "evidence_pairs": [
+                        _template_evidence_pair(record_id, pair, record_lookup)
+                        for pair in ordered_template_pairs
+                    ],
                     "template_family_id": template_family_id,
                     "family_size": template_family_size,
                     "highest_review_priority": ordered_template_pairs[0]["review_priority"] if ordered_template_pairs else "None",
@@ -1032,6 +1071,20 @@ def write_editor_triage_workbook(path: str | Path, report: dict[str, Any]) -> Pa
             *("Y" if check_results.get(key, {"flagged": False})["flagged"] else "N" for key, _ in checks),
         ])
 
+    template_evidence = workbook.create_sheet("Template Evidence")
+    template_evidence.append([
+        "Pair ID", "Submitted Abstract ID", "Submitted Title", "Matched Abstract ID", "Matched Title",
+        "Reason", "Section", "Similarity", "Author Group", "Submitted Matched Text", "Matched Abstract Text",
+    ])
+    for abstract in abstracts:
+        for pair in abstract["checks"].get("templating", {}).get("evidence_pairs", []):
+            template_evidence.append([
+                pair["pair_id"], pair["submitted_abstract_id"], pair["submitted_title"],
+                pair["matched_abstract_id"], pair["matched_title"], pair["reason"], pair["section"],
+                pair["similarity"], "Same author group" if pair["same_author_group"] else "Different author group",
+                pair["submitted_evidence"], pair["matched_evidence"],
+            ])
+
     detail = workbook.create_sheet("Check Detail")
     detail.append(
         ["Abstract ID", "Title (short)", "Corresponding Author"]
@@ -1045,7 +1098,11 @@ def write_editor_triage_workbook(path: str | Path, report: dict[str, Any]) -> Pa
             abstract["abstract_id"], abstract["title"], abstract["corresponding_author"],
             *(value for key, _ in checks for value in (
                 "Y" if check_results.get(key, {"flagged": False})["flagged"] else "N",
-                check_results.get(key, {"flagged": False, "evidence": ""}).get("evidence") or None,
+                (
+                    f"See Template Evidence ({len(check_results.get(key, {}).get('evidence_pairs', []))} pair(s))."
+                    if key == "templating" and check_results.get(key, {}).get("evidence_pairs")
+                    else check_results.get(key, {"flagged": False, "evidence": ""}).get("evidence") or None
+                ),
                 *((check_results.get(key, {}).get("reason") or None,) if key == "templating" else ()),
             )),
         ])
@@ -1108,6 +1165,7 @@ def write_editor_triage_workbook(path: str | Path, report: dict[str, Any]) -> Pa
         "Moderate Risk Queue": [7, 13, 30, 16, 40, 14, 13],
         "Low Risk Queue": [7, 13, 30, 16, 40, 14, 13],
         "All Abstracts": [13, 30, 16, 12, 40, 12, 13, *([13] * len(checks))],
+        "Template Evidence": [18, 18, 30, 18, 30, 46, 14, 12, 20, 60, 60],
     }
     for name, widths in table_widths.items():
         sheet = workbook[name]
@@ -1120,7 +1178,7 @@ def write_editor_triage_workbook(path: str | Path, report: dict[str, Any]) -> Pa
         for row in sheet.iter_rows(min_row=2):
             for cell in row:
                 cell.border = Border(bottom=thin)
-        sheet.freeze_panes = "D2" if name == "All Abstracts" else "B2"
+        sheet.freeze_panes = "D2" if name == "All Abstracts" else "A2"
         sheet.auto_filter.ref = sheet.dimensions
 
     detail.freeze_panes = "D2"

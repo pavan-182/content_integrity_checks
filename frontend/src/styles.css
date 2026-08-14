@@ -97,9 +97,18 @@ td { padding: 11px 12px; border-top: 1px solid var(--border); vertical-align: mi
 .finding { padding: 13px 0; border-top: 1px solid var(--border); }
 .finding:first-of-type { border-top: 0; }
 .finding p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
-.status-flag, .status-clear { font-size: 11px; font-weight: 650; }
-.status-flag { color: var(--high-text); }
-.status-clear { color: var(--low-text); }
+.template-pairs { display: grid; gap: 8px; margin-top: 10px; }
+.template-pair { border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+.template-pair summary { padding: 9px 11px; color: #344054; cursor: pointer; font-size: 12px; font-weight: 650; }
+.template-pair-meta { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 11px 8px; color: var(--muted); font-size: 11px; }
+.template-pair-meta span { padding: 3px 6px; border-radius: 999px; background: var(--card); }
+.template-evidence-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0 11px 11px; }
+.template-evidence-grid > div { min-width: 0; padding: 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); }
+.template-evidence-grid strong { font-size: 11px; }
+.template-evidence-grid p { margin-top: 6px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.status-flag, .status-clear { display: inline-flex; padding: 3px 7px; border: 1px solid; border-radius: 999px; font-size: 11px; font-weight: 650; white-space: nowrap; }
+.status-flag { border-color: var(--high-border); color: var(--high-text); background: var(--high-bg); }
+.status-clear { border-color: var(--low-border); color: var(--low-text); background: var(--low-bg); }
 .logic { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
 .logic article { padding: 15px; }
 .logic h3 { margin: 0 0 8px; font-size: 14px; }
@@ -123,6 +132,7 @@ td { padding: 11px 12px; border-top: 1px solid var(--border); vertical-align: mi
   .run-meta { display: none; }
   .page { padding: 16px; }
   .logic { grid-template-columns: 1fr; }
+  .template-evidence-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 480px) {

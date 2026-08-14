@@ -42,7 +42,6 @@ MODERATE_GLOBAL_MASKED_THRESHOLD = 0.27
 MODERATE_SHARED_SKELETON_WORDS = 60
 MINIMUM_GLOBAL_ORIGINAL_FOR_LOCAL = 0.20
 RARE_TITLE_TOKEN_DOCUMENT_FREQUENCY = 3
-TITLE_STOP_TOKENS = {"and", "the", "for", "from", "in", "of", "on", "to", "via", "with"}
 # ponytail: calibrated on the 93-pair ASCO baseline; re-fit when that baseline changes.
 
 EXPLICIT_RELATION_RE = re.compile(
@@ -224,15 +223,6 @@ def _assay_signature(text: str) -> set[str]:
         "rt_qpcr": ("rt qpcr", "qrt pcr", "quantitative pcr"),
     }
     return {name for name, values in patterns.items() if any(value in normalized for value in values)}
-
-
-def _has_multi_arm_protocol(text: str) -> bool:
-    tokens = set(text_tokens(normalize_for_matching(text)))
-    return {"blank", "negative", "control"} <= tokens and any(
-        token.startswith("mimic") for token in tokens
-    ) and any(token.startswith("inhibitor") for token in tokens) and (
-        any(token.startswith("si") for token in tokens) or "small interfering" in normalize_for_matching(text)
-    )
 
 
 def _ngram_similarity(left: str, right: str, size: int = 5) -> float:
@@ -457,17 +447,8 @@ def detect_entity_normalized_templates(
     for left_id, right_id in sorted(candidates):
         left, right = representations[left_id], representations[right_id]
         title_tokens = title_token_map[left_id] & title_token_map[right_id]
-        shared_title_terms = (
-            set(text_tokens(normalize_for_matching(lookup[left_id].title)))
-            & set(text_tokens(normalize_for_matching(lookup[right_id].title)))
-        ) - TITLE_STOP_TOKENS
         shared_assays = _assay_signature(left.original) & _assay_signature(right.original)
         assay_trigger = len(title_tokens) >= 2 and len(shared_assays) >= 5
-        multi_arm_trigger = (
-            len(shared_title_terms) >= 4
-            and _has_multi_arm_protocol(left.original)
-            and _has_multi_arm_protocol(right.original)
-        )
         short_title_trigger = (
             min(left.meaningful_word_count, right.meaningful_word_count) < minimum_skeleton_words
             and len(title_tokens) >= 2
@@ -516,7 +497,7 @@ def detect_entity_normalized_templates(
         if (
             substitution_count < minimum_substitutions
             or shared_word_count < minimum_skeleton_words
-        ) and not (assay_trigger or multi_arm_trigger or short_title_trigger):
+        ) and not (assay_trigger or short_title_trigger):
             continue
         local_masked, local_original = _local_window_similarity(
             local_windows[left_id][1], local_windows[right_id][1]
@@ -543,7 +524,7 @@ def detect_entity_normalized_templates(
                 and masked_similarity >= MODERATE_GLOBAL_MASKED_THRESHOLD
                 and shared_word_count >= MODERATE_SHARED_SKELETON_WORDS)
         ) and original_similarity >= MINIMUM_GLOBAL_ORIGINAL_FOR_LOCAL
-        if not (global_trigger or local_trigger or assay_trigger or multi_arm_trigger or short_title_trigger):
+        if not (global_trigger or local_trigger or assay_trigger or short_title_trigger):
             continue
 
         confidence = determine_confidence(
@@ -557,7 +538,7 @@ def detect_entity_normalized_templates(
         )
         if local_trigger and confidence == "medium" and local_masked >= 0.85:
             confidence = "high"
-        if assay_trigger or multi_arm_trigger:
+        if assay_trigger:
             confidence = "high"
         relationship, relationship_strength = _relationship_context(
             lookup[left_id], lookup[right_id]
@@ -572,8 +553,6 @@ def detect_entity_normalized_templates(
             if local_trigger
             else "shared_assay_protocol"
             if assay_trigger
-            else "shared_multi_arm_protocol"
-            if multi_arm_trigger
             else "title_related_duplicate"
             if short_title_trigger
             else "entity_value_substitution"
@@ -584,7 +563,6 @@ def detect_entity_normalized_templates(
             f"{substitution_count} changed study-specific value(s); the strongest local "
             f"match has {local_masked:.0%} masked and {local_original:.0%} original similarity"
             + (f"; shared assay signature: {', '.join(sorted(shared_assays))}" if assay_trigger else "")
-            + ("; both abstracts use the same multi-arm mimic/inhibitor protocol" if multi_arm_trigger else "")
             + (f"; shared rare title tokens: {', '.join(sorted(title_tokens))}" if short_title_trigger else "")
             + (f"; matched sections: {', '.join(matched_sections)}." if matched_sections else ".")
         )

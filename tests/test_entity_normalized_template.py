@@ -137,6 +137,34 @@ class EntityNormalizedTemplateTests(unittest.TestCase):
         ]
         self.assertEqual(detect_entity_normalized_templates(records), [])
 
+    def test_common_mimic_inhibitor_protocol_alone_does_not_trigger(self) -> None:
+        records = [
+            ParsedRecord(
+                "A.xml",
+                record_id="A",
+                title="MicroRNA-708 targeting inhibits proliferation and promotes apoptosis in melanoma",
+                abstract_text=(
+                    "Melanoma biology was investigated through membrane signaling and tissue expression profiling. "
+                    "B16 cells were assigned to normal blank negative control miR-708 mimics miR-708 inhibitors and "
+                    "si-BAMBI groups. Western blotting quantified pathway activity while luciferase reporters "
+                    "characterized downstream transcription. Histology evaluated tumor morphology and animal "
+                    "survival across independent experiments."
+                ),
+            ),
+            ParsedRecord(
+                "B.xml",
+                record_id="B",
+                title="MicroRNA-182 targeting inhibits proliferation and promotes apoptosis in osteosarcoma",
+                abstract_text=(
+                    "Osteosarcoma progression was studied using functional phenotyping and a xenograft model. "
+                    "Cultures included blank negative control miR-182 mimics miR-182 inhibitors and siRNA-HOXA9 "
+                    "groups. CCK-8 flow cytometry and wound healing measured viability apoptosis and motility. "
+                    "Imaging tracked tumor volume while statistical modeling assessed treatment differences over time."
+                ),
+            ),
+        ]
+        self.assertEqual(detect_entity_normalized_templates(records), [])
+
     def test_unstructured_abstract_uses_local_template_evidence(self) -> None:
         shared = (
             "We measured {gene} expression using quantitative polymerase chain reaction, "
