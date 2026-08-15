@@ -68,8 +68,9 @@ class EntitySubstitution:
 
 def collect_entity_substitutions(
     records, evidence_rows: list[PairEvidence] | None = None,
+    features: list[TemplateFeatures] | None = None,
 ) -> list[EntitySubstitution]:
-    features = [build_template_features(record) for record in records]
+    features = features if features is not None else [build_template_features(record) for record in records]
     lookup = {feature.record_id: _entities(feature) for feature in features}
     output = []
     pairs = (

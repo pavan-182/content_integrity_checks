@@ -40,7 +40,7 @@ def generate_candidate_pairs(
     records: list[ParsedRecord], features: list[TemplateFeatures] | None = None,
 ) -> list[CandidatePair]:
     """Merge existing body retrieval with exact and title-template routes."""
-    features = features or [build_template_features(record) for record in records]
+    features = features if features is not None else [build_template_features(record) for record in records]
     skeletons = {feature.record_id: feature.abstract.masked for feature in features}
     normalized = {feature.record_id: feature.abstract.normalized for feature in features}
     routes: dict[tuple[str, str], set[str]] = defaultdict(set)
@@ -49,7 +49,15 @@ def generate_candidate_pairs(
         for pair in pairs:
             routes[pair].add(route)
 
-    add(_candidate_pairs(records, skeletons, normalized), "body_candidate")
+    add(_candidate_pairs(
+        records,
+        skeletons,
+        normalized,
+        {
+            feature.record_id: {section.section: section.masked for section in feature.sections}
+            for feature in features
+        },
+    ), "body_candidate")
     add(_pairs_by_value(skeletons), "exact_masked_body")
     add(_pairs_by_value(normalized), "exact_original_body")
     add(title_candidate_pairs(features), "title_template")

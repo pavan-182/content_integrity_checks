@@ -9,8 +9,9 @@ from hashlib import blake2b
 from itertools import combinations
 from typing import Any
 
-from ..entity_extraction import mask_text
+from ..entity_extraction import TypedEntity, mask_entities, mask_text
 from ..models import ParsedRecord
+from ..template_features import TemplateFeatures, build_template_features
 from ..template_matching_common import (
     PLACEHOLDER_TOKEN_RE,
     PLACEHOLDER_TOKENS,
@@ -18,12 +19,11 @@ from ..template_matching_common import (
     TRIAL_PATTERN,
     _candidate_pairs,
     _content_class,
-    _sentence_split,
     _shared_excerpt,
     _similarity,
 )
 from ..utils import normalize_for_matching, normalize_label, normalize_whitespace, text_tokens
-from .exact_text_reuse import _non_generic_text
+from .exact_text_reuse import _is_generic_sentence
 
 
 # ponytail: uncalibrated ASCO V1 thresholds; replace after labelled-corpus calibration.
@@ -100,10 +100,17 @@ class _Representation:
     placeholder_ratio: float
     meaningful_word_count: int
     entities: dict[str, tuple[str, ...]]
+    sentences: tuple[tuple[str, str], ...]
 
 
-def _mask_and_capture(text: str) -> tuple[str, dict[str, tuple[str, ...]]]:
-    masked, entities = mask_text(text)
+def _mask_and_capture(
+    text: str, entities: tuple[TypedEntity, ...] | list[TypedEntity] | None = None,
+) -> tuple[str, dict[str, tuple[str, ...]]]:
+    masked, entities = (
+        (mask_entities(text, entities), entities)
+        if entities is not None
+        else mask_text(text)
+    )
     # Keep the calibrated detector's historical protein/gene equivalence while
     # the exported representation retains the richer protein type.
     masked = masked.replace("<PROTEIN>", "<GENE>")
@@ -115,16 +122,34 @@ def _mask_and_capture(text: str) -> tuple[str, dict[str, tuple[str, ...]]]:
     return masked, {label: tuple(values) for label, values in captured.items()}
 
 
-def _representation(record: ParsedRecord) -> _Representation:
-    original = record.abstract_text or record.title or record.raw_text
-    comparison_text = _non_generic_text(original)
-    skeleton, entities = _mask_and_capture(comparison_text)
+def _representation(
+    record: ParsedRecord, feature: TemplateFeatures | None = None,
+) -> _Representation:
+    feature = feature or build_template_features(record)
+    original = feature.abstract.original
+    sentences = tuple(
+        (sentence.normalized, _mask_and_capture(sentence.original, sentence.entities)[0])
+        for sentence in feature.abstract.sentences
+        if not _is_generic_sentence(sentence.original)
+    )
+    comparison_text = " ".join(
+        sentence.original for sentence in feature.abstract.sentences
+        if not _is_generic_sentence(sentence.original)
+    )
+    skeleton = normalize_whitespace(" ".join(masked for _, masked in sentences))
+    included_entities = [
+        entity
+        for sentence in feature.abstract.sentences
+        if not _is_generic_sentence(sentence.original)
+        for entity in sentence.entities
+    ]
+    entities = _captured_entities(included_entities)
     section_skeletons: dict[str, str] = {}
-    for item in record.abstract_sections:
-        section_text = _non_generic_text(item.get("text", ""))
-        if section_text:
-            section_skeletons[normalize_label(item.get("section", "")) or "Abstract"] = (
-                _mask_and_capture(section_text)[0]
+    for section in feature.sections:
+        kept = [sentence for sentence in section.sentences if not _is_generic_sentence(sentence.original)]
+        if kept:
+            section_skeletons[normalize_label(section.section) or "Abstract"] = normalize_whitespace(
+                " ".join(_mask_and_capture(sentence.original, sentence.entities)[0] for sentence in kept)
             )
     if not section_skeletons and original:
         section_skeletons["Abstract"] = skeleton
@@ -141,7 +166,16 @@ def _representation(record: ParsedRecord) -> _Representation:
         placeholder_ratio=placeholder_count / denominator if denominator else 1.0,
         meaningful_word_count=meaningful_word_count,
         entities=entities,
+        sentences=sentences,
     )
+
+
+def _captured_entities(entities: list[TypedEntity]) -> dict[str, tuple[str, ...]]:
+    captured: dict[str, list[str]] = defaultdict(list)
+    for entity in entities:
+        label = "gene" if entity.entity_type == "protein" else entity.entity_type
+        captured[label].append(entity.text.rstrip("-") if label == "gene" else entity.text)
+    return {label: tuple(values) for label, values in captured.items()}
 
 
 def _section_candidate_pairs(
@@ -163,11 +197,16 @@ def _section_candidate_pairs(
     }
 
 
-def _title_candidate_pairs(records: list[ParsedRecord]) -> set[tuple[str, str]]:
+def _title_candidate_pairs(
+    records: list[ParsedRecord], features: list[TemplateFeatures] | None = None,
+) -> set[tuple[str, str]]:
     exact: dict[str, list[str]] = defaultdict(list)
     shingles: dict[tuple[str, ...], list[str]] = defaultdict(list)
+    features = features if features is not None else [build_template_features(record) for record in records]
+    feature_lookup = {feature.record_id: feature for feature in features}
     for record in records:
-        masked = _mask_and_capture(record.title)[0]
+        feature = feature_lookup[record.record_id]
+        masked = _mask_and_capture(feature.title.original, feature.title.entities)[0]
         if not masked:
             continue
         tokens = text_tokens(masked)
@@ -178,7 +217,7 @@ def _title_candidate_pairs(records: list[ParsedRecord]) -> set[tuple[str, str]]:
     pairs = {
         pair
         for members in exact.values()
-        if 2 <= len(members) <= 50
+        if len(members) >= 2
         for pair in combinations(sorted(set(members)), 2)
     }
     shared: dict[tuple[str, str], int] = defaultdict(int)
@@ -205,11 +244,16 @@ def _rare_title_tokens(records: list[ParsedRecord]) -> dict[str, set[str]]:
 
 def _rare_title_candidate_pairs(records: list[ParsedRecord]) -> set[tuple[str, str]]:
     tokens = _rare_title_tokens(records)
-    return {
+    index: dict[str, list[str]] = defaultdict(list)
+    for record_id, record_tokens in tokens.items():
+        for token in record_tokens:
+            index[token].append(record_id)
+    shared = Counter(
         pair
-        for pair in combinations(sorted(tokens), 2)
-        if len(tokens[pair[0]] & tokens[pair[1]]) >= 2
-    }
+        for members in index.values()
+        for pair in combinations(sorted(members), 2)
+    )
+    return {pair for pair, count in shared.items() if count >= 2}
 
 
 def _assay_signature(text: str) -> set[str]:
@@ -301,13 +345,12 @@ def _shared_skeleton_words(left: str, right: str) -> int:
 
 
 def _local_windows(representation: _Representation, size: int) -> list[tuple[str, str]]:
-    sentences = _sentence_split(_non_generic_text(representation.original))
     return [
         (
-            normalize_for_matching(" ".join(sentences[index:index + size])),
-            _mask_and_capture(" ".join(sentences[index:index + size]))[0],
+            normalize_whitespace(" ".join(item[0] for item in representation.sentences[index:index + size])),
+            normalize_whitespace(" ".join(item[1] for item in representation.sentences[index:index + size])),
         )
-        for index in range(len(sentences) - size + 1)
+        for index in range(len(representation.sentences) - size + 1)
     ]
 
 
@@ -421,6 +464,7 @@ def _severity(confidence: str, relation_strength: str, high_value_similarity: fl
 def detect_entity_normalized_templates(
     records: list[ParsedRecord],
     *,
+    features: list[TemplateFeatures] | None = None,
     masked_similarity_threshold: float = MASKED_SIMILARITY_THRESHOLD,
     original_support_threshold: float = ORIGINAL_SUPPORT_THRESHOLD,
     minimum_skeleton_words: int = MINIMUM_SKELETON_WORDS,
@@ -429,7 +473,12 @@ def detect_entity_normalized_templates(
     section_similarity_threshold: float = SECTION_SIMILARITY_THRESHOLD,
     rare_title_tokens: dict[str, set[str]] | None = None,
 ) -> list[EntityNormalizedTemplateFinding]:
-    representations = {record.record_id: _representation(record) for record in records}
+    features = features if features is not None else [build_template_features(record) for record in records]
+    feature_lookup = {feature.record_id: feature for feature in features}
+    representations = {
+        record.record_id: _representation(record, feature_lookup[record.record_id])
+        for record in records
+    }
     local_windows = {
         record_id: {size: _local_windows(representation, size) for size in (1, 2)}
         for record_id, representation in representations.items()
@@ -437,9 +486,14 @@ def detect_entity_normalized_templates(
     lookup = {record.record_id: record for record in records}
     skeletons = {record_id: item.skeleton for record_id, item in representations.items()}
     normalized = {record_id: item.normalized for record_id, item in representations.items()}
-    candidates = _candidate_pairs(records, skeletons, normalized)
+    candidates = _candidate_pairs(
+        records,
+        skeletons,
+        normalized,
+        {record_id: item.section_skeletons for record_id, item in representations.items()},
+    )
     candidates.update(_section_candidate_pairs(representations))
-    candidates.update(_title_candidate_pairs(records))
+    candidates.update(_title_candidate_pairs(records, features))
     candidates.update(_rare_title_candidate_pairs(records))
     title_token_map = rare_title_tokens or _rare_title_tokens(records)
 

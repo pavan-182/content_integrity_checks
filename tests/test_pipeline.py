@@ -406,6 +406,10 @@ class PipelineTests(unittest.TestCase):
             )
             self.assertEqual(result.abstract_summary_rows[0]["template_cluster_flag"], "No")
             self.assertEqual(result.abstract_summary_rows[1]["template_cluster_flag"], "No")
+            metadata = dict(result.run_metadata_rows)
+            self.assertEqual(metadata["template_candidate_pair_count"], 1)
+            self.assertEqual(metadata["template_final_pair_count"], 1)
+            self.assertEqual(metadata["entity_model_inference_count"], 0)
 
     def test_full_pipeline_creates_workbook(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir_str:

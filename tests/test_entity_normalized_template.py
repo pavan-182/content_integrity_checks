@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+from itertools import combinations
 from pathlib import Path
 from unittest.mock import patch
 
@@ -423,6 +424,26 @@ class EntityNormalizedTemplateTests(unittest.TestCase):
             )
         ]
         self.assertEqual(_rare_title_candidate_pairs(records), {("A", "B")})
+
+    def test_rare_title_index_never_builds_an_all_records_bucket(self) -> None:
+        records = [
+            ParsedRecord(
+                "x.xml",
+                record_id=f"R{index}",
+                title=f"uniquealpha{index} uniquebeta{index} oncology study",
+            )
+            for index in range(200)
+        ]
+        with patch(
+            "content_integrity.detectors.entity_normalized_template.combinations",
+            wraps=combinations,
+        ) as indexed_combinations:
+            self.assertEqual(_rare_title_candidate_pairs(records), set())
+        self.assertTrue(indexed_combinations.call_args_list)
+        self.assertLessEqual(
+            max(len(call.args[0]) for call in indexed_combinations.call_args_list),
+            3,
+        )
 
     @patch("scripts.detect_entity_normalized_templates.write_csv")
     @patch("scripts.detect_entity_normalized_templates.detect_entity_normalized_templates")

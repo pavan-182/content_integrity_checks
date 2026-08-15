@@ -8,6 +8,7 @@ from itertools import combinations
 from typing import Any
 
 from ..models import ParsedRecord
+from ..template_features import TemplateFeatures, build_template_features
 from ..template_matching_common import TRIAL_PATTERN, _candidate_pairs, _sentence_split, _similarity
 from ..utils import normalize_for_matching, normalize_label, normalize_whitespace, text_tokens
 
@@ -98,11 +99,18 @@ def _record_text(record: ParsedRecord) -> str:
     return record.abstract_text or record.title or record.raw_text
 
 
-def _sections(record: ParsedRecord) -> dict[str, str]:
+def _sections(
+    record: ParsedRecord, feature: TemplateFeatures | None = None,
+) -> dict[str, str]:
     sections: dict[str, list[str]] = defaultdict(list)
-    for item in record.abstract_sections:
-        label = normalize_label(item.get("section", "")) or "Abstract"
-        text = normalize_whitespace(item.get("text", ""))
+    source = (
+        ((section.section, section.original) for section in feature.sections)
+        if feature is not None
+        else ((item.get("section", ""), item.get("text", "")) for item in record.abstract_sections)
+    )
+    for section, original in source:
+        label = normalize_label(section) or "Abstract"
+        text = normalize_whitespace(original)
         if text:
             sections[label].append(text)
     if not sections and _record_text(record):
@@ -127,8 +135,21 @@ def _non_generic_text(text: str) -> str:
     return " ".join(sentence for sentence in _sentence_split(text) if not _is_generic_sentence(sentence))
 
 
-def _sentences(record: ParsedRecord) -> dict[str, str]:
+def _sentences(
+    record: ParsedRecord, feature: TemplateFeatures | None = None,
+) -> dict[str, str]:
     output: dict[str, str] = {}
+    if feature is not None:
+        sentences = (
+            sentence
+            for section in feature.sections or (feature.abstract,)
+            for sentence in section.sentences
+        )
+        for sentence in sentences:
+            normalized = sentence.normalized
+            if normalized:
+                output.setdefault(normalized, sentence.original)
+        return output
     for text in _sections(record).values():
         for sentence in _sentence_split(text):
             normalized = normalize_for_matching(sentence)
@@ -142,12 +163,12 @@ def _ngrams(text: str, size: int) -> set[tuple[str, ...]]:
     return {tuple(tokens[index:index + size]) for index in range(len(tokens) - size + 1)}
 
 
-def _best_sentence_similarity(left: str, right: str) -> float:
+def _best_sentence_similarity(left: list[str], right: list[str]) -> float:
     return max(
         (
             _similarity(normalize_for_matching(left_sentence), normalize_for_matching(right_sentence))
-            for left_sentence in _sentence_split(left)
-            for right_sentence in _sentence_split(right)
+            for left_sentence in left
+            for right_sentence in right
         ),
         default=0.0,
     )
@@ -246,6 +267,7 @@ def _build_evidence(
 def detect_exact_text_reuse(
     records: list[ParsedRecord],
     *,
+    features: list[TemplateFeatures] | None = None,
     min_sentence_words: int = MIN_SENTENCE_WORDS,
     min_shared_sentences: int = 2,
     min_shared_coverage: float = MEDIUM_COVERAGE,
@@ -253,8 +275,19 @@ def detect_exact_text_reuse(
     max_sentence_frequency: int = MAX_SENTENCE_DOCUMENT_FREQUENCY,
 ) -> list[ExactTextReuseFinding]:
     high_coverage = max(HIGH_COVERAGE, min_shared_coverage)
+    features = features if features is not None else [
+        build_template_features(record, use_model=False) for record in records
+    ]
+    feature_lookup = {feature.record_id: feature for feature in features}
     lookup = {record.record_id: record for record in records}
-    reuse_texts = {record.record_id: _non_generic_text(_record_text(record)) for record in records}
+    reuse_texts = {
+        record.record_id: " ".join(
+            sentence.original
+            for sentence in feature_lookup[record.record_id].abstract.sentences
+            if not _is_generic_sentence(sentence.original)
+        )
+        for record in records
+    }
     normalized = {record_id: normalize_for_matching(text) for record_id, text in reuse_texts.items()}
     phrase_ngrams = {
         record_id: _ngrams(text, MIN_RARE_PHRASE_WORDS)
@@ -263,7 +296,10 @@ def detect_exact_text_reuse(
     phrase_frequency = Counter(
         ngram for record_ngrams in phrase_ngrams.values() for ngram in record_ngrams
     )
-    sentence_maps = {record.record_id: _sentences(record) for record in records}
+    sentence_maps = {
+        record.record_id: _sentences(record, feature_lookup[record.record_id])
+        for record in records
+    }
     sentence_documents: dict[str, set[str]] = defaultdict(set)
     for record_id, sentences in sentence_maps.items():
         for sentence in sentences:
@@ -290,8 +326,8 @@ def detect_exact_text_reuse(
             and 2 <= sentence_frequency[sentence] <= max_sentence_frequency
             and not _is_generic_sentence(sentence)
         }
-        left_sections = _sections(left)
-        right_sections = _sections(right)
+        left_sections = _sections(left, feature_lookup[left_id])
+        right_sections = _sections(right, feature_lookup[right_id])
         exact_sections = sorted(
             section
             for section in left_sections.keys() & right_sections.keys()
@@ -320,7 +356,9 @@ def detect_exact_text_reuse(
             longest_phrase > MIN_RARE_PHRASE_WORDS
             or (
                 longest_phrase == MIN_RARE_PHRASE_WORDS
-                and _best_sentence_similarity(reuse_texts[left_id], reuse_texts[right_id])
+                and _best_sentence_similarity(
+                    list(sentence_maps[left_id].values()), list(sentence_maps[right_id].values())
+                )
                 >= MIN_RARE_PHRASE_SENTENCE_SIMILARITY
             )
         )

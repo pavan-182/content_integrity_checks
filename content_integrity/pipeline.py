@@ -52,6 +52,7 @@ from .enriched_reporting import (
     build_enriched_reports,
     directional_finding_rows,
 )
+from .entity_extraction import model_inference_count, reset_model_inference_count
 from .template_clustering import (
     CONFIDENCE_RANK,
     PairFinding,
@@ -59,6 +60,7 @@ from .template_clustering import (
     merge_pair_findings,
     other_record_id,
 )
+from .template_features import build_template_features
 from .reporting import (
     DICTIONARY_COLUMNS,
     FAMILY_COLUMNS,
@@ -806,6 +808,7 @@ def _dictionary_rows(llm_rules: list[dict[str, Any]], tortured_rules: list[dict[
 
 
 def run_pipeline(config: PipelineConfig) -> PipelineResult:
+    reset_model_inference_count()
     xml_files = discover_xml_files(config.input_dir)
     records = [record for path in xml_files for record in parse_xml_records(path)]
     records, record_id_warnings = dedupe_records(records)
@@ -940,19 +943,30 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
                 finding.validation_reason = result.reason
                 finding.validated_by = f"{result.model_id}:{result.prompt_version}"
 
+    template_features = _run_detector(
+        "shared_preprocessing",
+        lambda: [build_template_features(record) for record in records],
+        operational_issues,
+        None,
+    )
+    if template_features is None:
+        template_features = [build_template_features(record, use_model=False) for record in records]
     exact_template_findings = _run_detector(
-        "exact_text_reuse", lambda: detect_exact_text_reuse(records), operational_issues, [],
+        "exact_text_reuse",
+        lambda: detect_exact_text_reuse(records, features=template_features),
+        operational_issues,
+        [],
     )
     entity_template_findings = _run_detector(
         "entity_normalized_template",
-        lambda: detect_entity_normalized_templates(records),
+        lambda: detect_entity_normalized_templates(records, features=template_features),
         operational_issues,
         [],
     )
     pair_findings = merge_pair_findings(exact_template_findings, entity_template_findings)
     template_rows = cluster_template_findings(pair_findings, records)
     enriched_pair_rows, enriched_family_rows, enriched_abstract_rows = build_enriched_reports(
-        records, [*exact_template_findings, *entity_template_findings]
+        records, [*exact_template_findings, *entity_template_findings], template_features
     )
     reviewer_pair_rows = directional_finding_rows(enriched_pair_rows)
     field_inventory_rows, root_summary_rows = _inventory_rows(records)
@@ -1054,6 +1068,9 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         ("clinical_trial_registry_lookup", "enabled" if config.verify_trials else "local_checks_only"),
         ("enriched_report_version", REPORT_VERSION),
         ("enriched_pair_count", len(enriched_pair_rows)),
+        ("template_candidate_pair_count", len(enriched_pair_rows)),
+        ("template_final_pair_count", len(reviewer_pair_rows) // 2),
+        ("entity_model_inference_count", model_inference_count()),
         ("template_finding_pair_count", len(reviewer_pair_rows) // 2),
         ("template_finding_directional_row_count", len(reviewer_pair_rows)),
         ("template_insufficient_evidence_count", sum(row["review_priority"] == "None" for row in enriched_pair_rows)),

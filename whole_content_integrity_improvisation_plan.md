@@ -1078,4 +1078,3 @@ For testing use /home/pavankrishna/Projets/ASCO/synthetic_asco_retractionwatch_v
 
 and use 10 records inside any xml file in this path home/pavankrishna/Projets/ASCO/real_asco_files
 
-

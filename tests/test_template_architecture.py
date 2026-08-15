@@ -82,6 +82,16 @@ class TemplateArchitectureTests(unittest.TestCase):
         )
         self.assertEqual(rows[0].matched_source_file, "B.xml")
 
+    def test_reverse_detector_rows_still_compute_one_canonical_pair(self):
+        forward = detector_finding("exact_text_reuse")
+        reverse = detector_finding("entity_normalized_template")
+        reverse.record_id, reverse.matched_record_id = "B", "A"
+        reverse.source_file, reverse.matched_source_file = "B.xml", "A.xml"
+        reverse.title, reverse.matched_title = "Title B", "Title A"
+        rows = merge_pair_findings([forward], [reverse])
+        self.assertEqual(len(rows), 1)
+        self.assertEqual((rows[0].record_id, rows[0].matched_record_id), ("A", "B"))
+
     def test_confidence_order_and_other_record_are_correct_from_both_sides(self):
         records = [
             ParsedRecord(source_file=f"{record_id}.xml", record_id=record_id)

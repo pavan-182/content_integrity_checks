@@ -63,8 +63,9 @@ class PairEvidence:
 
 def collect_pair_evidence(
     records: list[ParsedRecord], detector_findings: list[Any] | None = None,
+    features: list[TemplateFeatures] | None = None,
 ) -> list[PairEvidence]:
-    features = [build_template_features(record) for record in records]
+    features = features if features is not None else [build_template_features(record) for record in records]
     lookup = {feature.record_id: feature for feature in features}
     candidates = {
         (pair.left_record_id, pair.right_record_id): set(pair.routes)

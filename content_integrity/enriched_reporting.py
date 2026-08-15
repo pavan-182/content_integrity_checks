@@ -13,6 +13,7 @@ from .models import ParsedRecord
 from .pair_classification import classify_pairs
 from .pair_evidence import collect_pair_evidence
 from .study_context import compare_study_context
+from .template_features import TemplateFeatures, build_template_features
 from .utils import normalize_for_matching, text_tokens
 
 
@@ -102,11 +103,13 @@ def directional_finding_rows(pair_rows: list[dict[str, object]]) -> list[dict[st
 
 def build_enriched_reports(
     records: list[ParsedRecord], detector_findings: list[Any] | None = None,
+    features: list[TemplateFeatures] | None = None,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]], list[dict[str, object]]]:
-    evidence = collect_pair_evidence(records, detector_findings)
+    features = features if features is not None else [build_template_features(record) for record in records]
+    evidence = collect_pair_evidence(records, detector_findings, features)
     scores = score_pair_evidence(records, evidence)
-    contexts = compare_study_context(records, evidence)
-    substitutions = collect_entity_substitutions(records, evidence)
+    contexts = compare_study_context(records, evidence, features)
+    substitutions = collect_entity_substitutions(records, evidence, features)
     classifications = classify_pairs(records, scores, contexts)
     priorities = [assign_editorial_priority(item) for item in classifications]
     families = build_suspicious_families(classifications)

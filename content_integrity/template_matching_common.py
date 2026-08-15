@@ -45,6 +45,7 @@ SECTION_WEIGHTS = {"background": 0.1, "methods": 0.2, "results": 0.4, "conclusio
 NGRAM_SIZE = 5
 MIN_SHARED_NGRAMS = 3
 MAX_NGRAM_BUCKET = 50
+MAX_APPROXIMATE_BUCKET = 50
 
 
 def _entity_shape_key(skeleton: str, bucket_size: int = 5) -> str:
@@ -131,6 +132,7 @@ def _candidate_pairs(
     records: list[ParsedRecord],
     skeletons: dict[str, str],
     normalized_texts: dict[str, str],
+    section_skeletons: dict[str, dict[str, str]] | None = None,
 ) -> set[tuple[str, str]]:
     blocks: dict[str, list[str]] = defaultdict(list)
     ngram_index: dict[tuple[str, ...], set[str]] = defaultdict(set)
@@ -145,18 +147,25 @@ def _candidate_pairs(
             blocks[shape_key].append(record_id)
         blocks[f"exact-original:{blake2b(normalized_texts[record_id].encode(), digest_size=16).hexdigest()}"].append(record_id)
         blocks[f"exact-masked:{blake2b(skeleton.encode(), digest_size=16).hexdigest()}"].append(record_id)
-        for section in record.abstract_sections:
-            section_text = _mask_variables(section["text"])
+        sections = (
+            section_skeletons.get(record_id, {}).items()
+            if section_skeletons is not None
+            else ((section["section"], _mask_variables(section["text"])) for section in record.abstract_sections)
+        )
+        for section, section_text in sections:
             if len(text_tokens(section_text)) >= 15:
                 fingerprint = blake2b(section_text.encode(), digest_size=16).hexdigest()
-                blocks[f"section:{normalize_for_matching(section['section'])}:{fingerprint}"].append(record_id)
+                blocks[f"section:{normalize_for_matching(section)}:{fingerprint}"].append(record_id)
         for shingle in _shingles(skeleton):
             ngram_index[shingle].add(record_id)
 
     pairs = {
         pair
         for block_key, members in blocks.items()
-        if len(members) >= 2 and not (block_key.startswith("shape:") and len(members) > 500)
+        if len(members) >= 2 and not (
+            block_key.startswith(("shape:", "prefix:"))
+            and len(members) > MAX_APPROXIMATE_BUCKET
+        )
         for pair in combinations(sorted(members), 2)
     }
     shared_ngram_counts: Counter[tuple[str, str]] = Counter()

@@ -35,7 +35,7 @@ def title_candidate_pairs(features: list[TemplateFeatures]) -> set[tuple[str, st
     pairs = {
         pair
         for members in exact.values()
-        if 2 <= len(members) <= MAX_BUCKET_SIZE
+        if len(members) >= 2
         for pair in combinations(sorted(set(members)), 2)
     }
     shared = Counter()

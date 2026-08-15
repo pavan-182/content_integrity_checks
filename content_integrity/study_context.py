@@ -77,8 +77,9 @@ class StudyContextComparison:
 
 def compare_study_context(
     records: list[ParsedRecord], evidence_rows: list[PairEvidence] | None = None,
+    features: list[TemplateFeatures] | None = None,
 ) -> list[StudyContextComparison]:
-    features = [build_template_features(record) for record in records]
+    features = features if features is not None else [build_template_features(record) for record in records]
     feature_lookup = {feature.record_id: feature for feature in features}
     record_lookup = {record.record_id: record for record in records}
     value_lookup = {feature.record_id: _values(feature) for feature in features}

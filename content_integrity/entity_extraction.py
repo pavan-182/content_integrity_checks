@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from functools import lru_cache
 
 from .template_matching_common import (
@@ -50,6 +50,8 @@ CONTEXTUAL_BIOMARKER_RE = re.compile(
 REGISTRY_RE = re.compile(r"\b(?:ClinicalTrials\.gov|PubMed|GenBank|GEO|TCGA|SEER)\b", re.I)
 POPULATION_RE = re.compile(r"\b(?:postmenopausal women|pre?menopausal women|older adults|pediatric patients|patients aged \d+(?:-\d+)? years?)\b", re.I)
 TREATMENT_CLASS_RE = re.compile(r"\b(?:chemotherapy|immunotherapy|endocrine therapy|targeted therapy|radiotherapy|anti-HER2 therapy|checkpoint inhibitor(?: therapy)?)\b", re.I)
+# ponytail: process-local counter; move into run context if concurrent pipelines are introduced.
+_model_inference_count = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,6 +94,8 @@ def _ner_entities(text: str, section: str) -> list[TypedEntity]:
     model = _ner_model()
     if model is None:
         return []
+    global _model_inference_count
+    _model_inference_count += 1
     predictions = model(text).ents
     entities = []
     for item in predictions:
@@ -136,6 +140,8 @@ def _pubmedbert_entities(text: str, section: str) -> list[TypedEntity]:
     if model is None:
         return []
     minimum_score = float(os.getenv(PUBMEDBERT_MIN_SCORE_ENV, "0.8"))
+    global _model_inference_count
+    _model_inference_count += 1
     entities = []
     for item in model(text, stride=64):
         label = PUBMEDBERT_TYPE_MAP.get(item["entity_group"])
@@ -158,8 +164,7 @@ def _pubmedbert_entities(text: str, section: str) -> list[TypedEntity]:
     return entities
 
 
-def extract_typed_entities(text: str, section: str = "Abstract") -> list[TypedEntity]:
-    """Extract deterministic entities and optionally fill biomedical gaps with NER."""
+def extract_rule_entities(text: str, section: str = "Abstract") -> list[TypedEntity]:
     patterns = [
         ("url", URL_PATTERN, "rule"),
         ("email", EMAIL_PATTERN, "rule"),
@@ -192,13 +197,13 @@ def extract_typed_entities(text: str, section: str = "Abstract") -> list[TypedEn
             value = value.rstrip("-") if entity_type == "gene" else value
             start = match.start(1) if pattern is CONTEXTUAL_BIOMARKER_RE else match.start()
             candidates.append((start, start + len(value), entity_type, method, value))
-    deterministic: list[TypedEntity] = []
+    entities: list[TypedEntity] = []
     occupied: list[tuple[int, int]] = []
     for start, end, entity_type, method, value in sorted(candidates, key=lambda item: (item[0], -(item[1] - item[0]))):
         if any(start < existing_end and end > existing_start for existing_start, existing_end in occupied):
             continue
         occupied.append((start, end))
-        deterministic.append(TypedEntity(
+        entities.append(TypedEntity(
             text=value,
             normalized=normalize_for_matching(value),
             entity_type=entity_type,
@@ -208,23 +213,28 @@ def extract_typed_entities(text: str, section: str = "Abstract") -> list[TypedEn
             sentence_index=_sentence_index(text, start),
             extraction_method=method,
         ))
-    if os.getenv(PUBMEDBERT_MODEL_ENV, "").strip():
-        pubmedbert = _pubmedbert_entities(text, section)
-        occupied = [(entity.start, entity.end) for entity in deterministic]
-        deterministic.extend(
-            entity for entity in pubmedbert
-            if not any(entity.start < end and entity.end > start for start, end in occupied)
-        )
-        return sorted(deterministic, key=lambda entity: entity.start)
-    ner = _ner_entities(text, section)
-    if not ner:
+    return entities
+
+
+def _merge_model_entities(
+    deterministic: list[TypedEntity], model_entities: list[TypedEntity], *, pubmedbert: bool,
+) -> list[TypedEntity]:
+    if not model_entities:
         return deterministic
+    if pubmedbert:
+        occupied = [(entity.start, entity.end) for entity in deterministic]
+        return sorted([
+            *deterministic,
+            *(entity for entity in model_entities if not any(
+                entity.start < end and entity.end > start for start, end in occupied
+            )),
+        ], key=lambda entity: entity.start)
     always_keep = {"url", "email", "trial_id", "date", "pvalue", "percent", "number"}
-    ner_spans = [(entity.start, entity.end) for entity in ner]
+    ner_spans = [(entity.start, entity.end) for entity in model_entities]
     candidates = [entity for entity in deterministic if entity.entity_type in always_keep or not any(
         entity.start < end and entity.end > start for start, end in ner_spans
     )]
-    candidates.extend(ner)
+    candidates.extend(model_entities)
     selected: list[TypedEntity] = []
     occupied = []
     for entity in sorted(candidates, key=lambda item: (item.start, -(item.end - item.start), item.extraction_method != "rule")):
@@ -235,8 +245,71 @@ def extract_typed_entities(text: str, section: str = "Abstract") -> list[TypedEn
     return selected
 
 
-def mask_text(text: str, section: str = "Abstract") -> tuple[str, list[TypedEntity]]:
-    entities = extract_typed_entities(text, section)
+def extract_typed_entities(text: str, section: str = "Abstract") -> list[TypedEntity]:
+    """Extract deterministic entities and optionally fill biomedical gaps with NER."""
+    deterministic = extract_rule_entities(text, section)
+    pubmedbert = bool(os.getenv(PUBMEDBERT_MODEL_ENV, "").strip())
+    model_entities = _pubmedbert_entities(text, section) if pubmedbert else _ner_entities(text, section)
+    return _merge_model_entities(deterministic, model_entities, pubmedbert=pubmedbert)
+
+
+def project_entities(
+    entities: list[TypedEntity], text: str, start: int, end: int, section: str,
+) -> list[TypedEntity]:
+    return [
+        replace(
+            entity,
+            text=text[entity.start - start:entity.end - start],
+            start=entity.start - start,
+            end=entity.end - start,
+            section=section,
+            sentence_index=_sentence_index(text, entity.start - start),
+        )
+        for entity in entities
+        if start <= entity.start and entity.end <= end
+    ]
+
+
+def extract_record_entities(
+    title: str, abstract: str, *, use_model: bool = True,
+) -> tuple[list[TypedEntity], list[TypedEntity]]:
+    """Extract title/abstract entities with at most one biomedical-model call."""
+    title_rules = extract_rule_entities(title, "Title")
+    abstract_rules = extract_rule_entities(abstract, "Abstract")
+    if not title and not abstract:
+        return title_rules, abstract_rules
+    separator = "\n\n" if title and abstract else ""
+    combined = f"{title}{separator}{abstract}"
+    abstract_start = len(title) + len(separator)
+    if not use_model:
+        return title_rules, abstract_rules
+    pubmedbert = bool(os.getenv(PUBMEDBERT_MODEL_ENV, "").strip())
+    model_entities = (
+        _pubmedbert_entities(combined, "Record")
+        if pubmedbert
+        else _ner_entities(combined, "Record")
+    )
+    title_model = project_entities(model_entities, title, 0, len(title), "Title")
+    abstract_model = project_entities(
+        model_entities, abstract, abstract_start, abstract_start + len(abstract), "Abstract"
+    )
+    return (
+        _merge_model_entities(title_rules, title_model, pubmedbert=pubmedbert),
+        _merge_model_entities(abstract_rules, abstract_model, pubmedbert=pubmedbert),
+    )
+
+
+def model_inference_count() -> int:
+    return _model_inference_count
+
+
+def reset_model_inference_count() -> None:
+    global _model_inference_count
+    _model_inference_count = 0
+
+
+def mask_entities(text: str, entities: list[TypedEntity] | tuple[TypedEntity, ...]) -> str:
+    """Mask text from already-extracted local spans."""
     parts: list[str] = []
     cursor = 0
     for entity in entities:
@@ -244,7 +317,12 @@ def mask_text(text: str, section: str = "Abstract") -> tuple[str, list[TypedEnti
         parts.append(f"<{entity.entity_type.upper()}>")
         cursor = entity.end
     parts.append(text[cursor:])
-    return normalize_whitespace("".join(parts)), entities
+    return normalize_whitespace("".join(parts))
+
+
+def mask_text(text: str, section: str = "Abstract") -> tuple[str, list[TypedEntity]]:
+    entities = extract_typed_entities(text, section)
+    return mask_entities(text, entities), entities
 
 
 def validate_masking(text: str, masked_text: str, entities: list[TypedEntity]) -> list[str]:
@@ -256,7 +334,7 @@ def validate_masking(text: str, masked_text: str, entities: list[TypedEntity]) -
         if entity.start < previous_end:
             errors.append(f"overlap:{entity.text}")
         previous_end = entity.end
-    expected, _ = mask_text(text, entities[0].section if entities else "Abstract")
+    expected = mask_entities(text, entities)
     if expected != masked_text:
         errors.append("mask_reconstruction_mismatch")
     return errors
