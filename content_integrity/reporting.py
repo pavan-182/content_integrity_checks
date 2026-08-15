@@ -173,8 +173,12 @@ DICTIONARY_COLUMNS = [
     "expected_term",
     "severity",
     "confidence",
+    "confidence_basis",
+    "rule_strength",
+    "proximity",
     "retrieved_papers",
     "source",
+    "dictionary_version",
 ]
 
 WARNING_COLUMNS = [

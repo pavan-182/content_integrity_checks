@@ -5,6 +5,7 @@ import json
 import math
 import re
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
@@ -25,6 +26,7 @@ MAX_INPUT_TOKEN_BUDGET = 8000
 DEFAULT_MAX_OUTPUT_TOKENS = 8192
 MAX_OUTPUT_TOKENS = 8192
 DEFAULT_MAX_RECORDS_PER_BATCH = 8
+DEFAULT_MAX_CONCURRENT_BATCHES = 4
 MODEL_RESPONSE_ATTEMPTS = 2
 MATCH_TYPES = {"semantic_variant", "novel_pattern_candidate"}
 
@@ -34,6 +36,17 @@ class SemanticRunStats:
     batch_count: int = 0
     batch_failure_count: int = 0
     failed_record_ids: list[str] = field(default_factory=list)
+    request_count: int = 0
+    retry_count: int = 0
+    max_concurrent_batches: int = 0
+    model_id: str = ""
+    prompt_version: str = PROMPT_VERSION
+
+    def merge(self, other: "SemanticRunStats") -> None:
+        self.batch_failure_count += other.batch_failure_count
+        self.failed_record_ids.extend(other.failed_record_ids)
+        self.request_count += other.request_count
+        self.retry_count += other.retry_count
 
 
 RULES = tuple(load_llm_trace_rules())
@@ -288,47 +301,20 @@ def validate_model_response(
     return candidates
 
 
-def analyze_batch(
-    client: Any,
-    records: list[ParsedRecord],
-    *,
-    batch_id: str,
-    max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
-) -> list[TraceCandidate]:
-    model_id = getattr(client, "model_name", "gpt-oss-20b")
-    last_error: Exception | None = None
-    for _ in range(MODEL_RESPONSE_ATTEMPTS):
-        try:
-            raw = client.complete(
-                system=SYSTEM_PROMPT,
-                user=_user_prompt(records),
-                max_tokens=max_output_tokens,
-                temperature=0,
-            )
-            return validate_model_response(raw, records, batch_id, model_id)
-        except (KeyError, TypeError, ValueError, RuntimeError) as exc:
-            last_error = exc
-    if len(records) > 1:
-        midpoint = len(records) // 2
-        return [
-            *analyze_batch(client, records[:midpoint], batch_id=f"{batch_id}a", max_output_tokens=max_output_tokens),
-            *analyze_batch(client, records[midpoint:], batch_id=f"{batch_id}b", max_output_tokens=max_output_tokens),
-        ]
-    raise RuntimeError(
-        f"Could not obtain a valid model response for record {records[0].record_id!r}: {last_error}"
-    ) from last_error
-
-
 def _analyze_batch_safely(
     client: Any,
     records: list[ParsedRecord],
     *,
     batch_id: str,
     max_output_tokens: int,
+    stats: SemanticRunStats,
 ) -> tuple[list[TraceCandidate], list[str]]:
+    """Retry, then split, then give up on the single record - never silently drop one."""
     model_id = getattr(client, "model_name", "gpt-oss-20b")
-    last_error: Exception | None = None
-    for _ in range(MODEL_RESPONSE_ATTEMPTS):
+    for attempt in range(MODEL_RESPONSE_ATTEMPTS):
+        stats.request_count += 1
+        if attempt:
+            stats.retry_count += 1
         try:
             raw = client.complete(
                 system=SYSTEM_PROMPT,
@@ -337,8 +323,8 @@ def _analyze_batch_safely(
                 temperature=0,
             )
             return validate_model_response(raw, records, batch_id, model_id), []
-        except (KeyError, TypeError, ValueError, RuntimeError) as exc:
-            last_error = exc
+        except (KeyError, TypeError, ValueError, RuntimeError):
+            continue
     if len(records) == 1:
         return [], [records[0].record_id]
     midpoint = len(records) // 2
@@ -347,14 +333,37 @@ def _analyze_batch_safely(
         records[:midpoint],
         batch_id=f"{batch_id}a",
         max_output_tokens=max_output_tokens,
+        stats=stats,
     )
     right, right_failures = _analyze_batch_safely(
         client,
         records[midpoint:],
         batch_id=f"{batch_id}b",
         max_output_tokens=max_output_tokens,
+        stats=stats,
     )
     return [*left, *right], [*left_failures, *right_failures]
+
+
+def analyze_batch(
+    client: Any,
+    records: list[ParsedRecord],
+    *,
+    batch_id: str,
+    max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
+) -> list[TraceCandidate]:
+    candidates, failures = _analyze_batch_safely(
+        client,
+        records,
+        batch_id=batch_id,
+        max_output_tokens=max_output_tokens,
+        stats=SemanticRunStats(),
+    )
+    if failures:
+        raise RuntimeError(
+            f"Could not obtain a valid model response for record(s) {', '.join(failures)}"
+        )
+    return candidates
 
 
 def detect_semantic_traces(
@@ -364,6 +373,7 @@ def detect_semantic_traces(
     input_token_budget: int = DEFAULT_INPUT_TOKEN_BUDGET,
     max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
     max_records_per_batch: int = DEFAULT_MAX_RECORDS_PER_BATCH,
+    max_concurrent_batches: int = DEFAULT_MAX_CONCURRENT_BATCHES,
 ) -> tuple[list[TraceCandidate], SemanticRunStats]:
     eligible = [
         record
@@ -371,7 +381,10 @@ def detect_semantic_traces(
         if record.parse_status != "failed"
         and any(block.source_text.strip() for block in trace_blocks_for_record(record))
     ]
-    stats = SemanticRunStats()
+    stats = SemanticRunStats(
+        max_concurrent_batches=max(1, max_concurrent_batches),
+        model_id=getattr(client, "model_name", "gpt-oss-20b"),
+    )
     oversized = [
         record
         for record in eligible
@@ -388,17 +401,27 @@ def detect_semantic_traces(
         max_records_per_batch=max_records_per_batch,
     )
     stats.batch_count = len(batches)
-    candidates: list[TraceCandidate] = []
-    for index, batch in enumerate(batches, start=1):
+
+    def run_batch(indexed: tuple[int, list[ParsedRecord]]) -> tuple[list[TraceCandidate], SemanticRunStats]:
+        # One stats object per batch keeps the counters thread-confined; they are merged in order below.
+        index, batch = indexed
+        batch_stats = SemanticRunStats()
         batch_candidates, failures = _analyze_batch_safely(
             client,
             batch,
             batch_id=f"B{index:04d}",
             max_output_tokens=max_output_tokens,
+            stats=batch_stats,
         )
-        candidates.extend(batch_candidates)
-        stats.batch_failure_count += len(failures)
-        stats.failed_record_ids.extend(failures)
+        batch_stats.batch_failure_count = len(failures)
+        batch_stats.failed_record_ids = failures
+        return batch_candidates, batch_stats
+
+    candidates: list[TraceCandidate] = []
+    with ThreadPoolExecutor(max_workers=stats.max_concurrent_batches) as executor:
+        for batch_candidates, batch_stats in executor.map(run_batch, enumerate(batches, start=1)):
+            candidates.extend(batch_candidates)
+            stats.merge(batch_stats)
     record_order = {record.record_id: index for index, record in enumerate(records)}
     candidates.sort(
         key=lambda candidate: (

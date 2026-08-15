@@ -9,7 +9,9 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, replace
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
 
@@ -21,6 +23,7 @@ from ..utils import normalize_label, normalize_whitespace
 CLINICAL_TRIALS_GOV = "ClinicalTrials.gov"
 DEFAULT_TIMEOUT_SECONDS = 10.0
 DEFAULT_MAX_RETRIES = 2
+DEFAULT_MAX_CONCURRENT_LOOKUPS = 4
 CLINICAL_TRIALS_GOV_API = "https://clinicaltrials.gov/api/v2/studies"
 
 NCT_REFERENCE_RE = re.compile(
@@ -107,6 +110,9 @@ class RegistryLookupResult:
     error_type: str = ""
     error_message: str = ""
     cache_hit: bool = False
+    # UTC ISO-8601 time at which the lookup ran; empty when no lookup was performed.
+    # The default also keeps pre-existing cache entries, written without it, loadable.
+    lookup_timestamp: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,6 +148,9 @@ class TrialVerificationResult:
     external_enrollment: int | None
     source_record_url: str
     cache_hit: bool
+    lookup_timestamp: str
+    lookup_http_status: int | None
+    operational_error_type: str
     operational_error: str
     review_status: str
 
@@ -166,6 +175,10 @@ def _canonical_registry_id(value: str, registry_name: str) -> str:
     return canonical
 
 
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 def _failed_result(
     trial_id: str,
     registry_name: str,
@@ -173,6 +186,7 @@ def _failed_result(
     error_type: str,
     error_message: str,
     http_status: int | None = None,
+    lookup_timestamp: str = "",
 ) -> RegistryLookupResult:
     return RegistryLookupResult(
         registry_name=registry_name,
@@ -182,6 +196,7 @@ def _failed_result(
         http_status=http_status,
         error_type=error_type,
         error_message=error_message,
+        lookup_timestamp=lookup_timestamp,
     )
 
 
@@ -206,6 +221,7 @@ def _validate_registry_result(
             error_type="invalid_registry_client_result",
             error_message="Registry name or queried identifier did not match the selected adapter.",
             http_status=result.http_status,
+            lookup_timestamp=result.lookup_timestamp,
         )
     if result.lookup_status == "verified":
         if not result.found or not result.external_record_id:
@@ -215,6 +231,7 @@ def _validate_registry_result(
                 error_type="invalid_registry_client_result",
                 error_message="Verified registry result was missing required existence fields.",
                 http_status=result.http_status,
+                lookup_timestamp=result.lookup_timestamp,
             )
         external = _canonical_registry_id(result.external_record_id, expected_registry_name)
         if external != requested:
@@ -227,6 +244,7 @@ def _validate_registry_result(
                     f"{requested_trial_id}."
                 ),
                 http_status=result.http_status,
+                lookup_timestamp=result.lookup_timestamp,
             )
         return replace(result, external_record_id=external)
     if result.lookup_status == "not_found":
@@ -237,6 +255,7 @@ def _validate_registry_result(
                 error_type="invalid_registry_client_result",
                 error_message="Not-found registry result contained contradictory existence fields.",
                 http_status=result.http_status,
+                lookup_timestamp=result.lookup_timestamp,
             )
         return result
     if result.lookup_status == "lookup_failed":
@@ -247,6 +266,7 @@ def _validate_registry_result(
                 error_type="invalid_registry_client_result",
                 error_message="Failed registry result exposed a matched external record.",
                 http_status=result.http_status,
+                lookup_timestamp=result.lookup_timestamp,
             )
         return replace(
             result,
@@ -266,6 +286,7 @@ def _validate_registry_result(
         error_type="invalid_registry_client_result",
         error_message=f"Unsupported registry lookup status: {result.lookup_status}.",
         http_status=result.http_status,
+        lookup_timestamp=result.lookup_timestamp,
     )
 
 
@@ -387,6 +408,7 @@ class ClinicalTrialsGovClient:
             error_type=error_type,
             error_message=error_message,
             http_status=http_status,
+            lookup_timestamp=_utc_now(),
         )
 
     @staticmethod
@@ -397,6 +419,7 @@ class ClinicalTrialsGovClient:
             lookup_status="not_found",
             found=False,
             http_status=http_status,
+            lookup_timestamp=_utc_now(),
         )
 
     @staticmethod
@@ -439,6 +462,7 @@ class ClinicalTrialsGovClient:
             enrollment=enrollment if isinstance(enrollment, int) else None,
             source_record_url=f"https://clinicaltrials.gov/study/{external_id}",
             http_status=status,
+            lookup_timestamp=_utc_now(),
         )
 
     def lookup(self, normalized_trial_id: str) -> RegistryLookupResult:
@@ -716,39 +740,58 @@ def _local_lookup(claim: TrialReferenceClaim) -> RegistryLookupResult:
     )
 
 
+def _remote_lookup(
+    claim: TrialReferenceClaim,
+    client: RegistryClient,
+) -> RegistryLookupResult:
+    try:
+        return _validate_registry_result(
+            client.lookup(claim.normalized_trial_id),
+            claim.normalized_trial_id,
+            claim.registry_name,
+        )
+    except Exception as exc:  # Registry adapters are an operational trust boundary.
+        return _failed_result(
+            claim.normalized_trial_id,
+            claim.registry_name,
+            error_type="client_error",
+            error_message=type(exc).__name__,
+        )
+
+
 def _lookup_unique_ids(
     claims: list[TrialReferenceClaim],
     clients: Mapping[str, RegistryClient],
+    max_concurrent_lookups: int = DEFAULT_MAX_CONCURRENT_LOOKUPS,
 ) -> dict[tuple[str, str], RegistryLookupResult]:
-    results: dict[tuple[str, str], RegistryLookupResult] = {}
+    unique: dict[tuple[str, str], TrialReferenceClaim] = {}
     for claim in claims:
-        key = (
-            claim.registry_name,
-            claim.normalized_trial_id or claim.claim_type,
+        unique.setdefault(
+            (claim.registry_name, claim.normalized_trial_id or claim.claim_type),
+            claim,
         )
-        if key in results:
-            continue
+    results: dict[tuple[str, str], RegistryLookupResult] = {}
+    remote: dict[tuple[str, str], TrialReferenceClaim] = {}
+    for key, claim in unique.items():
         if (
             claim.claim_type != "explicit_trial_id"
             or not claim.format_valid
             or claim.registry_name not in clients
         ):
             results[key] = _local_lookup(claim)
-            continue
-        try:
-            raw_result = clients[claim.registry_name].lookup(claim.normalized_trial_id)
-            results[key] = _validate_registry_result(
-                raw_result,
-                claim.normalized_trial_id,
-                claim.registry_name,
+        else:
+            remote[key] = claim
+    if remote:
+        # A small concurrency bound plus the client's own backoff is the rate-limit control;
+        # map keeps results aligned with the request order regardless of thread scheduling.
+        with ThreadPoolExecutor(
+            max_workers=max(1, min(max_concurrent_lookups, len(remote)))
+        ) as pool:
+            lookups = pool.map(
+                lambda claim: _remote_lookup(claim, clients[claim.registry_name]),
+                remote.values(),
             )
-        except Exception as exc:  # Registry adapters are an operational trust boundary.
-            results[key] = _failed_result(
-                claim.normalized_trial_id,
-                claim.registry_name,
-                error_type="client_error",
-                error_message=type(exc).__name__,
-            )
+            results.update(zip(remote, lookups))
     return results
 
 
@@ -832,6 +875,7 @@ def detect_unverifiable_trials(
     records: list[ParsedRecord],
     *,
     registry_clients: Mapping[str, RegistryClient] | None = None,
+    max_concurrent_lookups: int = DEFAULT_MAX_CONCURRENT_LOOKUPS,
 ) -> list[TrialVerificationResult]:
     claims = _deduplicate_claims([
         claim
@@ -843,7 +887,7 @@ def detect_unverifiable_trials(
         if registry_clients is not None
         else {CLINICAL_TRIALS_GOV: ClinicalTrialsGovClient()}
     )
-    lookups = _lookup_unique_ids(claims, clients)
+    lookups = _lookup_unique_ids(claims, clients, max_concurrent_lookups)
     output: list[TrialVerificationResult] = []
     for claim in claims:
         lookup = lookups[
@@ -889,6 +933,9 @@ def detect_unverifiable_trials(
             external_enrollment=lookup.enrollment,
             source_record_url=lookup.source_record_url,
             cache_hit=lookup.cache_hit,
+            lookup_timestamp=lookup.lookup_timestamp,
+            lookup_http_status=lookup.http_status,
+            operational_error_type=lookup.error_type,
             operational_error=operational_error,
             review_status="candidate" if triggered else "not_triggered",
         ))

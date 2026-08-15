@@ -418,6 +418,135 @@ class FusionValidationPriorityTests(unittest.TestCase):
         self.assertIn("containing_paragraph", client.payloads[0])
 
 
+class SemanticExecutionTests(unittest.TestCase):
+    @staticmethod
+    def _record(record_id: str, text: str = "Clean record text for the batch.") -> ParsedRecord:
+        return ParsedRecord(
+            source_file=f"{record_id}.xml",
+            record_id=record_id,
+            abstract_text=text,
+            abstract_sections=[{"section": "Abstract", "text": text}],
+        )
+
+    def test_oversized_record_fails_without_calling_the_model(self) -> None:
+        class NeverCalledClient:
+            model_name = "test/never"
+
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def complete(self, *, system: str, user: str, max_tokens: int, temperature: float) -> str:
+                self.calls += 1
+                return "{}"
+
+        client = NeverCalledClient()
+        oversized = self._record("BIG", "word " * 20000)
+        candidates, stats = detect_semantic_traces(client, [oversized])
+
+        self.assertEqual(candidates, [])
+        self.assertEqual(client.calls, 0)
+        self.assertEqual(stats.failed_record_ids, ["BIG"])
+        self.assertEqual(stats.batch_failure_count, 1)
+        self.assertEqual(stats.request_count, 0)
+
+    def test_retries_and_splits_stay_bounded_and_are_counted(self) -> None:
+        class AlwaysFailingClient:
+            model_name = "test/failing"
+
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def complete(self, *, system: str, user: str, max_tokens: int, temperature: float) -> str:
+                self.calls += 1
+                return "not json"
+
+        client = AlwaysFailingClient()
+        records = [self._record("R1"), self._record("R2")]
+        candidates, stats = detect_semantic_traces(client, records, max_records_per_batch=2)
+
+        self.assertEqual(candidates, [])
+        # One batch of two: 2 attempts, then one split into two single records at 2 attempts each.
+        self.assertEqual(client.calls, 6)
+        self.assertEqual(stats.request_count, 6)
+        self.assertEqual(stats.retry_count, 3)
+        self.assertEqual(sorted(stats.failed_record_ids), ["R1", "R2"])
+        self.assertEqual(stats.batch_failure_count, 2)
+        self.assertEqual(stats.model_id, "test/failing")
+        self.assertEqual(stats.prompt_version, "llm_trace_semantic_v3")
+
+    def test_batches_run_concurrently_within_the_configured_bound(self) -> None:
+        import threading
+        import time
+
+        class ProbeClient:
+            model_name = "test/probe"
+
+            def __init__(self) -> None:
+                self.lock = threading.Lock()
+                self.in_flight = 0
+                self.peak = 0
+
+            def complete(self, *, system: str, user: str, max_tokens: int, temperature: float) -> str:
+                with self.lock:
+                    self.in_flight += 1
+                    self.peak = max(self.peak, self.in_flight)
+                time.sleep(0.05)
+                with self.lock:
+                    self.in_flight -= 1
+                submitted = json.loads(user)["records"]
+                return json.dumps(
+                    {"results": [{"record_id": item["record_id"], "traces": []} for item in submitted]}
+                )
+
+        records = [self._record(f"R{index}") for index in range(6)]
+        bounded = ProbeClient()
+        _, bounded_stats = detect_semantic_traces(
+            bounded, records, max_records_per_batch=1, max_concurrent_batches=2,
+        )
+        self.assertEqual(bounded_stats.batch_count, 6)
+        self.assertEqual(bounded_stats.max_concurrent_batches, 2)
+        self.assertLessEqual(bounded.peak, 2)
+
+        parallel = ProbeClient()
+        detect_semantic_traces(parallel, records, max_records_per_batch=1, max_concurrent_batches=4)
+        self.assertGreater(parallel.peak, 1)
+
+    def test_candidate_order_is_stable_under_concurrency(self) -> None:
+        class OrderedClient:
+            model_name = "test/ordered"
+
+            def complete(self, *, system: str, user: str, max_tokens: int, temperature: float) -> str:
+                submitted = json.loads(user)["records"]
+                return json.dumps(
+                    {
+                        "results": [
+                            {
+                                "record_id": item["record_id"],
+                                "traces": [{
+                                    "match_type": "novel_pattern_candidate",
+                                    "mapped_rule_id": "",
+                                    "category": "prompt_leakage",
+                                    "matched_text": "Clean record text",
+                                    "section_or_field": "Abstract",
+                                    "confidence": 0.8,
+                                    "reason": "Probe trace for ordering.",
+                                }],
+                            }
+                            for item in submitted
+                        ]
+                    }
+                )
+
+        records = [self._record(f"R{index}") for index in range(8)]
+        candidates, _ = detect_semantic_traces(
+            OrderedClient(), records, max_records_per_batch=1, max_concurrent_batches=4,
+        )
+        self.assertEqual(
+            [candidate.record_id for candidate in candidates],
+            [record.record_id for record in records],
+        )
+
+
 class PipelineIntegrationTests(unittest.TestCase):
     def test_semantic_discovery_is_integrated_and_reported(self) -> None:
         class SemanticClient:
@@ -486,6 +615,57 @@ class PipelineIntegrationTests(unittest.TestCase):
             excel_row = dict(zip(headers, next(rows)))
             self.assertEqual(excel_row["check_type"], "novel_pattern_candidate")
             self.assertEqual(excel_row["matched_text"], "I omitted the limitations as requested")
+
+    def test_semantic_batch_failure_becomes_an_operational_issue(self) -> None:
+        class BrokenSemanticClient:
+            model_name = "test/broken"
+
+            def complete(self, *, system: str, user: str, max_tokens: int, temperature: float) -> str:
+                return "not a json response"
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            input_dir = root / "input"
+            input_dir.mkdir()
+            (input_dir / "one.xml").write_text(
+                """<article><front><journal-meta><journal-title-group><journal-title>J</journal-title></journal-title-group></journal-meta><article-meta>
+<article-id pub-id-type="manuscript">SEM-2</article-id><title-group><article-title>Study</article-title></title-group>
+<abstract><sec><title>Conclusions</title><p>An ordinary conclusion sentence.</p></sec></abstract>
+<history><date date-type="accepted"><year>2026</year></date></history></article-meta></front></article>""",
+                encoding="utf-8",
+            )
+            dictionary = root / "tortured.csv"
+            dictionary.write_text(
+                "Fingerprint - Tortured Phrase,Expected Text,Nb Retrieved Papers\n",
+                encoding="utf-8",
+            )
+            with patch(
+                "content_integrity.pipeline.build_gpt_oss_client", return_value=BrokenSemanticClient()
+            ):
+                result = run_default_pipeline(
+                    input_dir=input_dir,
+                    tortured_dictionary_path=dictionary,
+                    output_dir=root / "output",
+                    detect_llm_semantic=True,
+                )
+
+            issue = next(
+                item for item in result.operational_issues
+                if item.component == "llm_response_trace_semantic"
+            )
+            self.assertEqual(issue.record_id, "SEM-2")
+            self.assertEqual(issue.error_type, "model_failure")
+            metadata = dict(result.run_metadata_rows)
+            self.assertEqual(metadata["llm_semantic_failed_record_count"], 1)
+            self.assertEqual(metadata["llm_semantic_batch_failure_count"], 1)
+            self.assertEqual(metadata["llm_semantic_request_count"], 2)
+            self.assertEqual(metadata["llm_semantic_retry_count"], 1)
+            self.assertTrue(
+                any(
+                    row["warning_code"] == "llm_semantic_batch_failed"
+                    for row in result.parse_warning_rows
+                )
+            )
 
 
 if __name__ == "__main__":

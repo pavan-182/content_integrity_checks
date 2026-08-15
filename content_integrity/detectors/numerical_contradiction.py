@@ -1,4 +1,12 @@
-"""Sentence-local V1 checks; numbers are not linked across sentences or sections."""
+"""Sentence-local V1 checks; numbers are not linked across sentences or sections.
+
+Known limitation: exclusive subgroup counts are only compared against a total stated in the
+same sentence. Falling back to a record-level enrollment total was evaluated and rejected: a
+subgroup sentence without a local total carries no evidence that its groups partition the
+enrolled population (in the ASCO corpus the exclusivity markers describe mutations and image
+patches, not patients), and abstracts commonly report several patient counts, so no single one
+can be taken as the denominator without guessing.
+"""
 
 from __future__ import annotations
 
@@ -66,7 +74,8 @@ OUTCOME_AMONG_RE = re.compile(
     rf"\b(?P<numerator>\d+)\s+"
     rf"(?P<label>(?:{POPULATION})\s+(?:with|who had)\s+[A-Za-z][A-Za-z -]{{0,30}}?|"
     r"serious adverse events?|adverse events?|hospitali[sz]ations?|episodes?|"
-    r"responses?|responders?|events?|unique cases?|cases?|deaths?|toxicities?)\s+"
+    r"responses?|responders?|events?|unique cases?|cases?|deaths?|toxicities?|"
+    r"recurrences?|relapses?)\s+"
     rf"(?:among|in|of)\s+(?P<denominator>\d+)\s+"
     rf"(?P<unit>(?:evaluable\s+|treated\s+|enrolled\s+)?{POPULATION})\b",
     re.IGNORECASE,
@@ -89,7 +98,7 @@ COUNT_CONTEXT_RE = re.compile(
     re.IGNORECASE,
 )
 ONE_PER_PERSON_RE = re.compile(
-    rf"\b(?:responders?|responses?|deaths?|unique cases?|"
+    rf"\b(?:responders?|responses?|deaths?|unique cases?|recurrences?|relapses?|"
     rf"(?:{POPULATION})\s+with\b|(?:{POPULATION})\s+who\b|responded)\b",
     re.IGNORECASE,
 )
@@ -458,7 +467,7 @@ def detect_numerical_contradictions(
                     rf"{re.escape(f'{claim.reported_percentage:g}')}0*\s*%", claim.sentence
                 )
                 position = percent_match.start() if percent_match else len(claim.sentence)
-                context = claim.sentence[max(0, position - 60):position + 30]
+                context = claim.sentence[:position + 30]
                 if RATE_CONTEXT_RE.search(claim.sentence) and not RELATIVE_PERCENT_RE.search(context):
                     boundary = 0.0 if claim.reported_percentage < 0 else 100.0
                     direction = "below 0%" if claim.reported_percentage < 0 else "above 100%"

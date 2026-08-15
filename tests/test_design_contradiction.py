@@ -403,6 +403,65 @@ class DesignContradictionTests(unittest.TestCase):
             ["phase_2_vs_phase_3"],
         )
 
+    def test_derived_analyses_may_describe_both_designs(self) -> None:
+        examples = (
+            "This subgroup analysis combined single-arm data from the pilot cohort "
+            "with placebo arm results from the pivotal trial.",
+            "A secondary analysis pooled the Phase II cohort with the Phase III cohort "
+            "for exploratory biomarker assessment.",
+            "A post hoc analysis compared open-label safety data with double-blind "
+            "efficacy data from the same program.",
+            "This secondary analysis included uncontrolled pilot data alongside "
+            "placebo-controlled confirmatory results.",
+            "This uncontrolled phase 2 study served as a historical control for the "
+            "subsequent placebo-controlled confirmatory trial.",
+        )
+        for sentence in examples:
+            with self.subTest(sentence=sentence):
+                self.assertEqual(detect_design_contradictions([_record(sentence)]), [])
+
+    def test_derived_analysis_wording_does_not_hide_same_component_conflicts(self) -> None:
+        findings = detect_design_contradictions([
+            _record(
+                "The primary study was described as single-arm and included a placebo arm.",
+                "A secondary analysis examined older patients.",
+            )
+        ])
+        self.assertEqual(
+            [finding.contradiction_type for finding in findings],
+            ["single_arm_vs_controlled_arms"],
+        )
+
+    def test_blinded_assessor_is_not_paired_with_open_label(self) -> None:
+        record = _record("This was an open-label trial with blinded independent radiology review.")
+        self.assertEqual(
+            {claim.value for claim in extract_study_design_claims(record) if claim.attribute == "masking"},
+            {"open_label", "outcome_assessor_blind"},
+        )
+        self.assertEqual(detect_design_contradictions([record]), [])
+
+    def test_validation_status_is_the_authority_for_active(self) -> None:
+        expected = {
+            "confirmed": ("needs_review", True),
+            "rejected": ("excluded_by_validation", False),
+            "uncertain": ("needs_editor_review", False),
+            "validation_failed": ("validation_failed", False),
+        }
+        for status, (review_status, active) in expected.items():
+            with self.subTest(status=status):
+                class Validator:
+                    def validate(self, finding):
+                        return DesignValidationResult(status, "A stated validator reason.")
+
+                finding = detect_design_contradictions([
+                    _record("This study was open-label and double-blind.")
+                ], validator=Validator())[0]
+                self.assertEqual(finding.validation_status, status)
+                self.assertEqual(finding.review_status, review_status)
+                self.assertEqual(finding.active, active)
+                self.assertTrue(finding.check_triggered)
+                self.assertTrue(finding.to_dict()["active"] == active)
+
     def test_legitimate_mixed_designs_are_not_flagged(self) -> None:
         examples = (
             "Data were collected prospectively and reviewed retrospectively.",

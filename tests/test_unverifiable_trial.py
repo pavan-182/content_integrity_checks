@@ -6,6 +6,8 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 import urllib.error
 from dataclasses import asdict, replace
@@ -70,6 +72,17 @@ def _not_found(trial_id: str = "NCT01234567") -> RegistryLookupResult:
     )
 
 
+def _lookup_failed(trial_id: str = "NCT01234567") -> RegistryLookupResult:
+    return RegistryLookupResult(
+        registry_name=CLINICAL_TRIALS_GOV,
+        queried_trial_id=trial_id,
+        lookup_status="lookup_failed",
+        found=False,
+        error_type="network_error",
+        error_message="TimeoutError",
+    )
+
+
 class FakeClient:
     def __init__(self, results: dict[str, RegistryLookupResult]) -> None:
         self.results = results
@@ -77,6 +90,25 @@ class FakeClient:
 
     def lookup(self, trial_id: str) -> RegistryLookupResult:
         self.calls.append(trial_id)
+        return self.results[trial_id]
+
+
+class ConcurrencyProbeClient:
+    """Records the peak number of simultaneously running registry lookups."""
+
+    def __init__(self, results: dict[str, RegistryLookupResult]) -> None:
+        self.results = results
+        self.lock = threading.Lock()
+        self.in_flight = 0
+        self.peak = 0
+
+    def lookup(self, trial_id: str) -> RegistryLookupResult:
+        with self.lock:
+            self.in_flight += 1
+            self.peak = max(self.peak, self.in_flight)
+        time.sleep(0.02)
+        with self.lock:
+            self.in_flight -= 1
         return self.results[trial_id]
 
 
@@ -583,6 +615,153 @@ class UnverifiableTrialTests(unittest.TestCase):
                 )[0]
                 self.assertFalse(result.check_triggered)
                 self.assertEqual(result.external_recruitment_status, status)
+
+    def test_all_verification_states_remain_distinct(self) -> None:
+        client = FakeClient({
+            "NCT01234567": _verified(),
+            "NCT87654321": _not_found("NCT87654321"),
+            "NCT22222222": _lookup_failed("NCT22222222"),
+        })
+        results = detect_unverifiable_trials(
+            [_record(
+                "Registered as NCT01234567. A second trial was NCT87654321. "
+                "A third trial was NCT22222222. A fourth trial was NCT1234. "
+                "A fifth trial was NCTXXXXXXXX. A sixth trial was ISRCTN12345678. "
+                "Registered at ClinicalTrials.gov."
+            )],
+            registry_clients={CLINICAL_TRIALS_GOV: client},
+        )
+        self.assertEqual(len(results), 7)
+        self.assertEqual(
+            {result.verification_status for result in results},
+            {
+                "verified",
+                "not_found",
+                "invalid_format",
+                "registration_claim_without_id",
+                "placeholder_id",
+                "unsupported_registry",
+                "lookup_failed",
+            },
+        )
+        self.assertEqual(len({result.finding_type for result in results}), 7)
+        by_state = {result.verification_status: result for result in results}
+        # A failed lookup is an operational outcome, never a missing registration.
+        self.assertNotEqual(
+            by_state["lookup_failed"].finding_type,
+            by_state["not_found"].finding_type,
+        )
+        self.assertFalse(by_state["lookup_failed"].check_triggered)
+        self.assertTrue(by_state["not_found"].check_triggered)
+        # An unsupported registry needs manual verification; it is not a suspicion.
+        unsupported = by_state["unsupported_registry"]
+        self.assertEqual(unsupported.severity, "low")
+        self.assertEqual(unsupported.finding_type, "unsupported_registry_manual_verification")
+        self.assertEqual(unsupported.operational_error, "")
+        for state in ("placeholder_id", "invalid_format", "registration_claim_without_id",
+                      "unsupported_registry"):
+            self.assertEqual(by_state[state].lookup_timestamp, "")
+
+    def test_operational_error_type_and_http_status_are_reported(self) -> None:
+        results = detect_unverifiable_trials(
+            [_record("Trials NCT01234567 and NCT87654321 were reported.")],
+            registry_clients={CLINICAL_TRIALS_GOV: FakeClient({
+                "NCT01234567": _verified(),
+                "NCT87654321": _lookup_failed("NCT87654321"),
+            })},
+        )
+        by_id = {result.normalized_trial_id: result for result in results}
+        self.assertEqual(by_id["NCT01234567"].operational_error_type, "")
+        self.assertEqual(by_id["NCT01234567"].lookup_http_status, 200)
+        self.assertEqual(by_id["NCT87654321"].operational_error_type, "network_error")
+        self.assertIsNone(by_id["NCT87654321"].lookup_http_status)
+
+    def test_lookup_timestamp_is_recorded_for_executed_lookups(self) -> None:
+        client = ClinicalTrialsGovClient(
+            transport=lambda _url, _timeout: (200, _api_payload()),
+        )
+        result = detect_unverifiable_trials(
+            [_record("Registered as NCT01234567.")],
+            registry_clients={CLINICAL_TRIALS_GOV: client},
+        )[0]
+        self.assertTrue(result.lookup_timestamp.endswith("+00:00"))
+
+    def test_cache_hit_reports_original_lookup_timestamp(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            first = ClinicalTrialsGovClient(
+                cache_dir=directory,
+                transport=lambda _url, _timeout: (200, _api_payload()),
+            ).lookup("NCT01234567")
+            time.sleep(0.01)
+            second = ClinicalTrialsGovClient(
+                cache_dir=directory,
+                offline_cache_only=True,
+            ).lookup("NCT01234567")
+            self.assertTrue(first.lookup_timestamp)
+            self.assertTrue(second.cache_hit)
+            self.assertEqual(second.lookup_timestamp, first.lookup_timestamp)
+
+    def test_cache_entry_without_timestamp_still_loads(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            legacy = asdict(_verified())
+            del legacy["lookup_timestamp"]
+            (Path(directory) / "NCT01234567.json").write_text(
+                json.dumps(legacy), encoding="utf-8"
+            )
+            result = ClinicalTrialsGovClient(
+                cache_dir=directory,
+                offline_cache_only=True,
+            ).lookup("NCT01234567")
+            self.assertEqual(result.lookup_status, "verified")
+            self.assertTrue(result.cache_hit)
+            self.assertEqual(result.lookup_timestamp, "")
+
+    def test_bounded_concurrency_preserves_serial_output(self) -> None:
+        trial_ids = [f"NCT0000000{index}" for index in range(1, 7)]
+        lookups = {
+            trial_id: _verified(trial_id) if index % 2 else _not_found(trial_id)
+            for index, trial_id in enumerate(trial_ids)
+        }
+        records = [_record(f"Trials {', '.join(trial_ids)} were reported.")]
+        serial = detect_unverifiable_trials(
+            records,
+            registry_clients={CLINICAL_TRIALS_GOV: FakeClient(dict(lookups))},
+            max_concurrent_lookups=1,
+        )
+        probe = ConcurrencyProbeClient(dict(lookups))
+        concurrent = detect_unverifiable_trials(
+            records,
+            registry_clients={CLINICAL_TRIALS_GOV: probe},
+            max_concurrent_lookups=2,
+        )
+        self.assertEqual(len(concurrent), len(trial_ids))
+        self.assertEqual(
+            [result.to_dict() for result in concurrent],
+            [result.to_dict() for result in serial],
+        )
+        self.assertGreater(probe.peak, 1)
+        self.assertLessEqual(probe.peak, 2)
+
+    def test_raising_lookup_fails_only_its_own_trial(self) -> None:
+        class RaisingClient:
+            def lookup(self, trial_id: str) -> RegistryLookupResult:
+                if trial_id == "NCT87654321":
+                    raise RuntimeError("registry adapter exploded")
+                return _verified(trial_id)
+
+        results = detect_unverifiable_trials(
+            [_record(
+                "Trials NCT01234567, NCT87654321 and NCT00000003 were reported."
+            )],
+            registry_clients={CLINICAL_TRIALS_GOV: RaisingClient()},
+            max_concurrent_lookups=3,
+        )
+        by_id = {result.normalized_trial_id: result for result in results}
+        self.assertEqual(by_id["NCT87654321"].lookup_status, "lookup_failed")
+        self.assertEqual(by_id["NCT87654321"].operational_error_type, "client_error")
+        self.assertFalse(by_id["NCT87654321"].check_triggered)
+        self.assertEqual(by_id["NCT01234567"].lookup_status, "verified")
+        self.assertEqual(by_id["NCT00000003"].lookup_status, "verified")
 
     def test_cli_offline_cache_and_findings_only(self) -> None:
         xml = """

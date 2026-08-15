@@ -175,6 +175,49 @@ class NumericalContradictionTests(unittest.TestCase):
             with self.subTest(sentence=sentence):
                 self.assertEqual(detect_numerical_contradictions([_record(sentence)]), [])
 
+    def test_relative_qualifier_far_from_the_percentage_is_still_relative(self) -> None:
+        self.assertEqual(
+            detect_numerical_contradictions([
+                _record(
+                    "The response rate showed a relative increase over the course of the "
+                    "extended twelve month follow up assessment period reaching 135%."
+                )
+            ]),
+            [],
+        )
+
+    def test_impossible_percentage_in_a_long_absolute_sentence_still_triggers(self) -> None:
+        finding = detect_numerical_contradictions([
+            _record(
+                "The objective response rate observed over the extended twelve month "
+                "follow up assessment period among all treated patients was 135%."
+            )
+        ])[0]
+        self.assertEqual(finding.contradiction_type, "impossible_percentage")
+        self.assertEqual(finding.calculated_value, 100.0)
+
+    def test_one_per_person_clinical_events_exceeding_the_population(self) -> None:
+        for sentence in (
+            "There were 30 recurrences among 25 evaluable patients.",
+            "There were 30 relapses among 25 treated patients.",
+        ):
+            with self.subTest(sentence=sentence):
+                findings = detect_numerical_contradictions([_record(sentence)])
+                self.assertEqual(
+                    [finding.contradiction_type for finding in findings],
+                    ["numerator_exceeds_denominator"],
+                )
+
+    def test_repeatable_procedure_counts_exceeding_the_population_are_not_flagged(self) -> None:
+        for sentence in (
+            "There were 300 doses among 25 patients.",
+            "There were 120 cycles among 25 patients.",
+            "There were 90 visits among 25 patients.",
+            "There were 75 infusions among 25 patients.",
+        ):
+            with self.subTest(sentence=sentence):
+                self.assertEqual(detect_numerical_contradictions([_record(sentence)]), [])
+
     def test_ranges_dates_ratings_and_decimal_comma_are_tokenized_safely(self) -> None:
         sentences = (
             "Response rates ranged from 25-50%.",

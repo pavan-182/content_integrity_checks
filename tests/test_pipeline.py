@@ -20,6 +20,8 @@ from content_integrity.validators.context_validator import _parse_validator_payl
 from content_integrity.xml_parser import parse_xml, parse_xml_records
 from content_integrity.utils import dedupe_records
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 def _write_temp_file(directory: Path, name: str, content: str) -> Path:
     path = directory / name
@@ -300,6 +302,108 @@ class PipelineTests(unittest.TestCase):
                 ["corridor impact", "multi-token tortured phrase"],
             )
             self.assertTrue(all(rule.rule_id.startswith("TP-") and len(rule.rule_id) == 15 for rule in rules))
+
+    def test_tortured_phrase_proximity_operator_is_enforced_not_stripped(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir_str:
+            dictionary_path = _write_temp_file(
+                Path(temp_dir_str),
+                "tortured.csv",
+                '''
+                Fingerprint - Tortured Phrase,Expected Text,Nb Retrieved Papers
+                """gatherings clustering""~10","clustering","1"
+                ''',
+            )
+            rules = load_tortured_rules(dictionary_path)
+            index = build_tortured_rule_index(rules)
+            self.assertEqual([rule.proximity for rule in rules], [10])
+
+            def matches(text: str) -> list[str]:
+                record = ParsedRecord(source_file="s.xml", record_id="R1", abstract_text=text)
+                return [finding.matched_text for finding in detect_tortured_phrases(record, rules, index)]
+
+            self.assertEqual(
+                matches("We performed several data gatherings before applying k-means clustering."),
+                ["gatherings before applying k-means clustering"],
+            )
+            self.assertEqual(matches("We used gatherings clustering directly."), ["gatherings clustering"])
+            # Outside the ten-token window, and never across a sentence boundary.
+            self.assertEqual(matches("gatherings " + "filler " * 12 + "clustering."), [])
+            self.assertEqual(matches("We did the gatherings. Then we applied clustering."), [])
+
+    def test_tortured_phrase_proximity_inside_a_not_clause_is_parsed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir_str:
+            dictionary_path = _write_temp_file(
+                Path(temp_dir_str),
+                "tortured.csv",
+                '''
+                Fingerprint - Tortured Phrase,Expected Text,Nb Retrieved Papers
+                """Chime labs"" NOT ""CHIMe labs Stanford""~5","chime laboratories","1"
+                ''',
+            )
+            rules = load_tortured_rules(dictionary_path)
+            index = build_tortured_rule_index(rules)
+            self.assertEqual([(item.phrase, item.proximity) for item in rules[0].excluded], [("CHIMe labs Stanford", 5)])
+
+            excluded = ParsedRecord(
+                source_file="s.xml",
+                record_id="R1",
+                abstract_text="Data came from the CHIMe labs Stanford collaboration.",
+            )
+            flagged = ParsedRecord(
+                source_file="s.xml", record_id="R2", abstract_text="The Chime labs reported the result.",
+            )
+            self.assertEqual(detect_tortured_phrases(excluded, rules, index), [])
+            self.assertEqual(
+                [finding.matched_text for finding in detect_tortured_phrases(flagged, rules, index)],
+                ["Chime labs"],
+            )
+
+    def test_tortured_phrase_provenance_and_confidence_basis_are_recorded(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir_str:
+            dictionary_path = _write_temp_file(
+                Path(temp_dir_str),
+                "tortured.csv",
+                '''
+                Fingerprint - Tortured Phrase,Expected Text,Nb Retrieved Papers
+                "nervous network","neural network","10"
+                ''',
+            )
+            rules = load_tortured_rules(dictionary_path, "wiley_tortured_seed_v1")
+            row = rules[0].to_dict()
+
+            self.assertEqual(row["source"], "tortured.csv")
+            self.assertTrue(row["dictionary_version"].startswith("wiley_tortured_seed_v1+sha256:"))
+            self.assertEqual(row["confidence_basis"], "heuristic_rule_strength")
+            self.assertEqual(row["rule_strength"], rules[0].severity)
+            self.assertEqual(row["expected_term"], "neural network")
+
+            dictionary_path.write_text(
+                dictionary_path.read_text(encoding="utf-8") + '"bosom peril","breast cancer","5"\n',
+                encoding="utf-8",
+            )
+            edited = load_tortured_rules(dictionary_path, "wiley_tortured_seed_v1")
+            self.assertNotEqual(edited[0].dictionary_version, rules[0].dictionary_version)
+
+    def test_legitimate_scientific_phrasing_is_not_flagged_as_tortured(self) -> None:
+        rules = load_tortured_rules(ROOT / "🤷_tortured.csv", "wiley_tortured_seed_v1")
+        index = build_tortured_rule_index(rules)
+        legitimate = [
+            "Patients received pembrolizumab plus chemotherapy for advanced non-small cell lung cancer.",
+            "The primary endpoint was progression-free survival assessed by blinded independent central review.",
+            "Deep learning models were trained on whole-slide images to predict treatment response.",
+            "Hierarchical clustering of gene expression profiles identified three molecular subtypes.",
+            "Overall survival was estimated using the Kaplan-Meier method with a two-sided log-rank test.",
+            "Neural network architectures were compared against a random forest baseline.",
+            "Machine learning classifiers were validated on an independent external cohort.",
+            "Circulating tumor DNA was measured at baseline and after two cycles of therapy.",
+        ]
+        for sentence in legitimate:
+            with self.subTest(sentence=sentence):
+                record = ParsedRecord(source_file="s.xml", record_id="R1", abstract_text=sentence)
+                findings = detect_tortured_phrases(record, rules, index)
+                self.assertEqual(
+                    [(finding.matched_text, finding.rule_id) for finding in findings], [],
+                )
 
     def test_tortured_phrase_detector_deduplicates_only_exact_matches(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir_str:

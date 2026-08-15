@@ -251,7 +251,7 @@ PRIOR_TRIAL_ANALYSIS_RE = re.compile(
     re.IGNORECASE,
 )
 DERIVED_ANALYSIS_RE = re.compile(
-    r"\b(?:subgroup|secondary|post hoc)\s+analysis\s+(?:of|from)\b",
+    r"\b(?:subgroup|secondary|post hoc)\s+analysis\b",
     re.IGNORECASE,
 )
 OPEN_LABEL_EXTENSION_RE = re.compile(
@@ -280,13 +280,6 @@ PROSPECTIVE_REGISTRY_RETROSPECTIVE_ANALYSIS_RE = re.compile(
     r"\b(?:retrospective analysis|(?:analy[sz]ed|reviewed) retrospectively)\b|"
     r"\b(?:retrospective analysis|(?:analy[sz]ed|reviewed) retrospectively)\b.*"
     r"\bregistry\b.*\b(?:data (?:were )?entered|entries were made) prospectively\b",
-    re.IGNORECASE | re.DOTALL,
-)
-BLINDED_ASSESSOR_RE = re.compile(
-    r"\bopen[- ]label\b.*\b(?:blinded (?:independent )?(?:outcome|radiology|endpoint) "
-    r"(?:assessment|review)|independent blinded review)\b|"
-    r"\b(?:blinded (?:independent )?(?:outcome|radiology|endpoint) "
-    r"(?:assessment|review)|independent blinded review)\b.*\bopen[- ]label\b",
     re.IGNORECASE | re.DOTALL,
 )
 PARENT_TRIAL_FOLLOWUP_RE = re.compile(
@@ -435,20 +428,15 @@ def _suppressed(
     if not _same_component(left, right):
         return True
     pair_text = f"{left.sentence} {right.sentence}"
-    analysis_types = {
-        "prospective_vs_retrospective",
-        "observational_vs_assigned_intervention",
-        "randomized_vs_nonrandomized",
-        "observational_cohort_vs_randomized_allocation",
-        "case_control_vs_randomized_allocation",
-    }
-    if contradiction_type in analysis_types and PRIOR_TRIAL_ANALYSIS_RE.search(pair_text):
+    # A derived analysis legitimately describes both its own design and the parent
+    # study's, whichever design attributes the pair happens to be about.
+    if PRIOR_TRIAL_ANALYSIS_RE.search(pair_text):
         return True
-    if contradiction_type in analysis_types and DERIVED_ANALYSIS_RE.search(pair_text):
+    if DERIVED_ANALYSIS_RE.search(pair_text):
         return True
     if REVIEW_SOURCE_CONTEXT_RE.search(pair_text):
         return True
-    if contradiction_type in analysis_types and PARENT_TRIAL_FOLLOWUP_RE.search(pair_text):
+    if PARENT_TRIAL_FOLLOWUP_RE.search(pair_text):
         return True
     if contradiction_type == "prospective_vs_retrospective":
         return bool(
@@ -456,17 +444,14 @@ def _suppressed(
             or PROSPECTIVE_REGISTRY_RETROSPECTIVE_ANALYSIS_RE.search(pair_text)
         )
     if contradiction_type == "open_label_vs_blinded":
-        return bool(
-            OPEN_LABEL_EXTENSION_RE.search(pair_text)
-            or BLINDED_ASSESSOR_RE.search(pair_text)
-        )
+        return bool(OPEN_LABEL_EXTENSION_RE.search(pair_text))
     if contradiction_type == "phase_2_vs_phase_3":
         return bool(
             SEAMLESS_PHASE_RE.search(pair_text)
             or SEPARATE_PHASE_RE.search(pair_text)
             or PHASE_PROGRAMME_RE.search(pair_text)
         )
-    if contradiction_type == "single_arm_vs_controlled_arms":
+    if contradiction_type in {"single_arm_vs_controlled_arms", "uncontrolled_vs_placebo_controlled"}:
         return bool(HISTORICAL_CONTROL_RE.search(pair_text))
     return False
 

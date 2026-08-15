@@ -23,10 +23,11 @@ from .detectors import (
 )
 from .detectors.llm_trace_fusion import fuse_llm_trace_candidates, llm_reviewer_priority
 from .detectors.llm_trace_semantic import (
-    PROMPT_VERSION as SEMANTIC_PROMPT_VERSION,
+    DEFAULT_MAX_CONCURRENT_BATCHES,
     SemanticRunStats,
     detect_semantic_traces,
 )
+from .detectors.nonsense_candidate import NonsenseRunStats
 from .models import Finding, OperationalIssue, ParsedRecord
 from .rules import catalogue_metadata
 from .detectors.design_contradiction import (
@@ -101,6 +102,7 @@ class PipelineConfig:
     detect_llm_semantic: bool = False
     detect_nonsense_candidates: bool = False
     verify_trials: bool = False
+    llm_max_concurrency: int = DEFAULT_MAX_CONCURRENT_BATCHES
 
 
 @dataclass(slots=True)
@@ -749,6 +751,7 @@ def _collect_operational_issues(
     findings: list[Finding],
     trial_results: list[TrialVerificationResult],
     semantic_stats: SemanticRunStats,
+    nonsense_stats: NonsenseRunStats,
 ) -> list[OperationalIssue]:
     issues = [
         OperationalIssue(
@@ -788,8 +791,20 @@ def _collect_operational_issues(
     )
     issues.extend(
         OperationalIssue(
+            component="nonsense_candidate",
+            error_type="model_failure",
+            message="Nonsense candidate review is incomplete for at least one sentence in this record.",
+            record_id=record_id,
+            source_file=next(
+                (record.source_file for record in records if record.record_id == record_id), "",
+            ),
+        )
+        for record_id in dict.fromkeys(nonsense_stats.failed_sentence_record_ids)
+    )
+    issues.extend(
+        OperationalIssue(
             component="clinical_trial_registry",
-            error_type="registry_lookup_failed",
+            error_type=result.operational_error_type or "registry_lookup_failed",
             message=result.operational_error or "Registry lookup failed.",
             record_id=result.record_id,
             source_file=result.source_file,
@@ -814,7 +829,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     records, record_id_warnings = dedupe_records(records)
     operational_issues: list[OperationalIssue] = []
     llm_rules = built_in_llm_rules()
-    tortured_rules = load_tortured_rules(config.tortured_dictionary_path)
+    tortured_rules = load_tortured_rules(config.tortured_dictionary_path, config.dictionary_version)
     tortured_index = build_tortured_rule_index(tortured_rules)
     llm_client = None
     if config.detect_nonsense_candidates or config.detect_llm_semantic or config.validate_llm:
@@ -825,13 +840,18 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
             None,
         )
     nonsense_detector = (
-        NonsenseCandidateDetector(llm_client)
+        NonsenseCandidateDetector(
+            llm_client,
+            rule_index=tortured_index,
+            max_concurrent_batches=config.llm_max_concurrency,
+        )
         if config.detect_nonsense_candidates and llm_client is not None
         else None
     )
 
     findings: list[Finding] = []
     deterministic_candidates = []
+    tortured_by_record: dict[str, list[Finding]] = {}
     for record in records:
         deterministic_candidates.extend(_run_detector(
             "llm_response_trace",
@@ -847,22 +867,27 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
             [],
             record,
         )
+        tortured_by_record[record.record_id] = tortured_findings
         findings.extend(tortured_findings)
-        if nonsense_detector:
-            findings.extend(_run_detector(
-                "nonsense_candidate",
-                lambda: nonsense_detector.detect(record, tortured_findings),
-                operational_issues,
-                [],
-                record,
-            ))
+
+    nonsense_stats = NonsenseRunStats()
+    if nonsense_detector:
+        nonsense_findings, nonsense_stats = _run_detector(
+            "nonsense_candidate",
+            lambda: nonsense_detector.detect_records(records, tortured_by_record),
+            operational_issues,
+            ([], NonsenseRunStats()),
+        )
+        findings.extend(nonsense_findings)
 
     semantic_candidates = []
     semantic_stats = SemanticRunStats()
     if config.detect_llm_semantic and llm_client is not None:
         semantic_candidates, semantic_stats = _run_detector(
             "llm_response_trace_semantic",
-            lambda: detect_semantic_traces(llm_client, records),
+            lambda: detect_semantic_traces(
+                llm_client, records, max_concurrent_batches=config.llm_max_concurrency,
+            ),
             operational_issues,
             ([], SemanticRunStats()),
         )
@@ -980,7 +1005,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         enriched_abstract_rows=enriched_abstract_rows,
     )
     operational_issues.extend(
-        _collect_operational_issues(records, findings, trial_results, semantic_stats)
+        _collect_operational_issues(records, findings, trial_results, semantic_stats, nonsense_stats)
     )
     findings_rows = _findings_rows(findings)
     titles_by_record = {record.record_id: record.title for record in records}
@@ -1043,10 +1068,14 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         ("llm_rule_catalogue_checksum", catalogue_checksum),
         ("llm_deterministic_rule_count", len(llm_rules)),
         ("llm_semantic_enabled", config.detect_llm_semantic),
-        ("llm_semantic_model_id", getattr(llm_client, "model_name", "") if config.detect_llm_semantic else ""),
-        ("llm_semantic_prompt_version", SEMANTIC_PROMPT_VERSION),
+        ("llm_semantic_model_id", semantic_stats.model_id),
+        ("llm_semantic_prompt_version", semantic_stats.prompt_version),
         ("llm_semantic_batch_count", semantic_stats.batch_count),
         ("llm_semantic_batch_failure_count", semantic_stats.batch_failure_count),
+        ("llm_semantic_request_count", semantic_stats.request_count),
+        ("llm_semantic_retry_count", semantic_stats.retry_count),
+        ("llm_semantic_failed_record_count", len(semantic_stats.failed_record_ids)),
+        ("llm_semantic_max_concurrent_batches", semantic_stats.max_concurrent_batches),
         ("llm_deterministic_finding_count", len(deterministic_candidates)),
         ("llm_semantic_variant_count", sum(finding.check_type == "semantic_variant" for finding in llm_findings)),
         ("llm_novel_candidate_count", sum(finding.check_type == "novel_pattern_candidate" for finding in llm_findings)),
@@ -1058,13 +1087,25 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         ("llm_uncertain_count", sum(finding.validation_status == "uncertain" for finding in llm_findings)),
         ("llm_supporting_only_count", sum(finding.review_status == "supporting_only" for finding in llm_findings)),
         ("tortured_rule_count", len(tortured_rules)),
+        ("tortured_proximity_rule_count", sum(1 for rule in tortured_rules if rule.proximity)),
+        ("tortured_confidence_basis", "heuristic_rule_strength_not_calibrated_probability"),
         ("dictionary_version", config.dictionary_version),
+        ("tortured_dictionary_version", tortured_rules[0].dictionary_version if tortured_rules else ""),
         ("tortured_dictionary_path", str(config.tortured_dictionary_path)),
         ("pipeline_config", json.dumps({
             field.name: str(getattr(config, field.name)) if isinstance(getattr(config, field.name), Path) else getattr(config, field.name)
             for field in fields(config)
         }, sort_keys=True)),
         ("nonsense_candidate_detection", "enabled" if config.detect_nonsense_candidates else "disabled"),
+        ("nonsense_candidate_sentence_count", nonsense_stats.candidate_sentence_count),
+        ("nonsense_candidate_batch_count", nonsense_stats.batch_count),
+        ("nonsense_candidate_request_count", nonsense_stats.request_count),
+        ("nonsense_candidate_retry_count", nonsense_stats.retry_count),
+        ("nonsense_candidate_routes", json.dumps(nonsense_stats.route_counts, sort_keys=True)),
+        ("nonsense_known_fingerprint_suppressed_count", nonsense_stats.known_fingerprint_suppressed_count),
+        ("nonsense_candidate_failed_sentence_count", len(nonsense_stats.failed_sentence_record_ids)),
+        ("nonsense_candidate_model_id", nonsense_stats.model_id),
+        ("nonsense_candidate_prompt_version", nonsense_stats.prompt_version),
         ("clinical_trial_registry_lookup", "enabled" if config.verify_trials else "local_checks_only"),
         ("enriched_report_version", REPORT_VERSION),
         ("enriched_pair_count", len(enriched_pair_rows)),
@@ -1231,6 +1272,7 @@ def run_default_pipeline(
     detect_llm_semantic: bool = False,
     detect_nonsense_candidates: bool = False,
     verify_trials: bool = False,
+    llm_max_concurrency: int = DEFAULT_MAX_CONCURRENT_BATCHES,
 ) -> PipelineResult:
     config = PipelineConfig(
         input_dir=Path(input_dir),
@@ -1240,6 +1282,7 @@ def run_default_pipeline(
         detect_llm_semantic=detect_llm_semantic,
         detect_nonsense_candidates=detect_nonsense_candidates,
         verify_trials=verify_trials,
+        llm_max_concurrency=llm_max_concurrency,
     )
     return run_pipeline(config)
 
@@ -1271,6 +1314,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Verify valid NCT identifiers against ClinicalTrials.gov; local trial-reference checks always run.",
     )
+    parser.add_argument(
+        "--llm-max-concurrency",
+        type=int,
+        default=DEFAULT_MAX_CONCURRENT_BATCHES,
+        help="Maximum semantic LLM batches in flight at once.",
+    )
     args = parser.parse_args(argv)
 
     result = run_default_pipeline(
@@ -1281,6 +1330,7 @@ def main(argv: list[str] | None = None) -> int:
         detect_llm_semantic=args.detect_llm_semantic,
         detect_nonsense_candidates=args.detect_nonsense_candidates,
         verify_trials=args.verify_trials,
+        llm_max_concurrency=args.llm_max_concurrency,
     )
     print(json.dumps({key: str(value) for key, value in result.output_paths.items()}, ensure_ascii=False, indent=2))
     return 0
