@@ -81,6 +81,24 @@ class NonsenseCandidateTests(unittest.TestCase):
         self.assertEqual(len(findings), 2)
         self.assertTrue(all(finding.validation_status == "candidate" for finding in findings))
 
+    def test_model_failure_is_not_silently_treated_as_no_candidate(self) -> None:
+        class BrokenClient:
+            def complete(self, **kwargs):
+                return "not-json"
+
+        detector = NonsenseCandidateDetector(BrokenClient())
+        record = ParsedRecord(
+            "sample.xml",
+            record_id="broken-model",
+            abstract_sections=[{
+                "section": "Results",
+                "text": "ERBB2 directly metabolized pembrolizumab into a survival receptor during tumor growth.",
+            }],
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "model failed"):
+            detector.detect(record)
+
     def test_pipeline_flag_is_opt_in(self) -> None:
         fixture = ROOT / "tests" / "fixtures" / "eval_corpus" / "positives" / "nonsense_candidate_01.xml"
         with tempfile.TemporaryDirectory() as directory:
@@ -105,7 +123,7 @@ class NonsenseCandidateTests(unittest.TestCase):
         self.assertEqual(summary["total_finding_count"], 0)
         self.assertEqual(summary["highest_severity"], "None")
         self.assertEqual(summary["overall_content_risk"], "None")
-        self.assertEqual(summary["review_required"], "No")
+        self.assertEqual(summary["review_required"], "Yes")
         self.assertTrue(
             any(
                 row["detector_type"] == "nonsense_candidate"

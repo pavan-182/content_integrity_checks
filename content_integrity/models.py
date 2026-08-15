@@ -4,6 +4,16 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
+INACTIVE_VALIDATION_STATUSES = {
+    "candidate",
+    "pending",
+    "rejected",
+    "uncertain",
+    "validation_failed",
+}
+REVIEW_CANDIDATE_VALIDATION_STATUSES = {"candidate", "pending", "uncertain"}
+
+
 @dataclass(slots=True)
 class ParseWarning:
     warning_code: str
@@ -113,6 +123,42 @@ class Finding:
     def __post_init__(self) -> None:
         if self.detector_type == "llm_response_trace" and self.check_type == "llm_trace":
             self.check_type = "known_pattern"
+
+    @property
+    def normalized_validation_status(self) -> str:
+        return self.validation_status.strip().lower() or "not_validated"
+
+    @property
+    def active(self) -> bool:
+        return self.normalized_validation_status not in INACTIVE_VALIDATION_STATUSES
+
+    @property
+    def review_candidate(self) -> bool:
+        return self.normalized_validation_status in REVIEW_CANDIDATE_VALIDATION_STATUSES
+
+    @property
+    def validation_failed(self) -> bool:
+        return self.normalized_validation_status == "validation_failed"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            **asdict(self),
+            "detected": True,
+            "active": self.active,
+            "review_candidate": self.review_candidate,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class OperationalIssue:
+    component: str
+    error_type: str
+    message: str
+    record_id: str = ""
+    source_file: str = ""
+    status: str = "failed"
+    retry_count: int = 0
+    recoverable: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

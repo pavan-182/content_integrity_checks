@@ -27,7 +27,7 @@ from .detectors.llm_trace_semantic import (
     SemanticRunStats,
     detect_semantic_traces,
 )
-from .models import Finding, ParsedRecord
+from .models import Finding, OperationalIssue, ParsedRecord
 from .rules import catalogue_metadata
 from .detectors.design_contradiction import (
     DesignContradictionFinding,
@@ -78,24 +78,15 @@ from .utils import dedupe_records, normalize_whitespace, to_pipe_string
 from .xml_parser import discover_xml_files, parse_xml_records
 
 
-RISK_INELIGIBLE_VALIDATION_STATUSES = {
-    "rejected",
-    "uncertain",
-    "validation_failed",
-    "candidate",
-}
 RISK_INELIGIBLE_CHECK_TYPES = {"unsupported_registry_manual_verification"}
 
 
 def _normalized_validation_status(finding: Finding) -> str:
-    return normalize_whitespace(finding.validation_status or "").lower() or "not_validated"
+    return finding.normalized_validation_status
 
 
 def _is_risk_eligible_finding(finding: Finding) -> bool:
-    return (
-        finding.check_type not in RISK_INELIGIBLE_CHECK_TYPES
-        and _normalized_validation_status(finding) not in RISK_INELIGIBLE_VALIDATION_STATUSES
-    )
+    return finding.active and finding.check_type not in RISK_INELIGIBLE_CHECK_TYPES
 
 
 @dataclass(slots=True)
@@ -124,6 +115,7 @@ class PipelineResult:
     parse_warning_rows: list[dict[str, Any]]
     dictionary_rows: list[dict[str, Any]]
     run_metadata_rows: list[tuple[str, Any]]
+    operational_issues: list[OperationalIssue]
     output_paths: dict[str, Path]
 
 
@@ -338,6 +330,9 @@ def _aggregate_findings(
     pair_findings: list[PairFinding],
     clusters: list[dict[str, Any]],
     llm_rules: list[Any] | None = None,
+    *,
+    enriched_pair_rows: list[dict[str, object]] | None = None,
+    enriched_abstract_rows: list[dict[str, object]] | None = None,
 ) -> list[dict[str, Any]]:
     llm_rules = llm_rules or built_in_llm_rules()
     finding_map: dict[str, list[Finding]] = defaultdict(list)
@@ -348,11 +343,29 @@ def _aggregate_findings(
         pair_map[pair.record_id].append(pair)
         pair_map[pair.matched_record_id].append(pair)
     cluster_map: dict[str, dict[str, Any]] = {row["record_id"]: row for row in clusters if row["cluster_size"] >= 3}
+    enriched_linked: dict[str, list[dict[str, object]]] = defaultdict(list)
+    for pair in enriched_pair_rows or []:
+        if pair["review_priority"] != "None":
+            enriched_linked[str(pair["left_record_id"])].append(pair)
+            enriched_linked[str(pair["right_record_id"])].append(pair)
+    enriched_abstract_lookup = {
+        str(row["record_id"]): row for row in enriched_abstract_rows or []
+    }
     summary_rows: list[dict[str, Any]] = []
     for record in records:
         record_findings = finding_map.get(record.record_id, [])
         llm_findings = [finding for finding in record_findings if finding.detector_type == "llm_response_trace"]
-        llm_priority = llm_reviewer_priority(llm_findings, llm_rules)
+        active_findings = [finding for finding in record_findings if finding.active]
+        review_candidates = [
+            finding
+            for finding in record_findings
+            if finding.review_candidate and finding.review_status != "supporting_only"
+        ]
+        active_llm_findings = [
+            finding for finding in llm_findings if finding.active
+        ]
+        llm_review_priority = llm_reviewer_priority(llm_findings, llm_rules)
+        llm_risk_priority = llm_reviewer_priority(active_llm_findings, llm_rules)
         tortured_findings = [finding for finding in record_findings if finding.detector_type == "tortured_phrase"]
         tortured_status_counts = Counter(_normalized_validation_status(finding) for finding in tortured_findings)
         nonsense_findings = [finding for finding in record_findings if finding.detector_type == "nonsense_candidate"]
@@ -388,13 +401,40 @@ def _aggregate_findings(
             ),
             default=None,
         )
+        enriched_pairs = enriched_linked.get(record.record_id, [])
+        enriched_risk_pairs = [
+            pair for pair in enriched_pairs
+            if pair["pair_class"] in {"possible_template_reuse", "possible_related_duplicate"}
+        ]
+        enriched_strongest = max(
+            enriched_pairs,
+            key=lambda pair: (
+                {"None": 0, "Low": 1, "Medium": 2, "High": 3}[str(pair["review_priority"])],
+                float(pair["editorial_score"]),
+            ),
+            default=None,
+        )
+        enriched_strongest_risk = max(
+            enriched_risk_pairs,
+            key=lambda pair: (
+                {"None": 0, "Low": 1, "Medium": 2, "High": 3}[str(pair["review_priority"])],
+                float(pair["editorial_score"]),
+            ),
+            default=None,
+        )
+        if enriched_pair_rows is not None:
+            template_flag = bool(enriched_risk_pairs)
+            template_severity = (
+                str(enriched_strongest_risk["review_priority"]).lower()
+                if enriched_strongest_risk else "none"
+            )
         risk_eligible_non_llm_findings = [
             finding
             for finding in record_findings
             if finding.detector_type != "llm_response_trace" and _is_risk_eligible_finding(finding)
         ]
         detector_types = {finding.detector_type for finding in risk_eligible_non_llm_findings}
-        if llm_priority != "None":
+        if llm_risk_priority != "None":
             detector_types.add("llm_response_trace")
         if template_flag:
             detector_types.add("template")
@@ -402,14 +442,14 @@ def _aggregate_findings(
         for finding in risk_eligible_non_llm_findings:
             if severity_rank(finding.severity) > severity_rank(highest_severity):
                 highest_severity = finding.severity
-        if severity_rank(llm_priority) > severity_rank(highest_severity):
-            highest_severity = llm_priority.lower()
+        if severity_rank(llm_risk_priority) > severity_rank(highest_severity):
+            highest_severity = llm_risk_priority.lower()
         if strongest_risk_pair:
             if severity_rank(strongest_risk_pair.severity) > severity_rank(highest_severity):
                 highest_severity = strongest_risk_pair.severity
         risk_finding_count = (
             len(risk_eligible_non_llm_findings)
-            + (1 if llm_priority != "None" else 0)
+            + (1 if llm_risk_priority != "None" else 0)
             + (1 if template_flag else 0)
         )
         overall_risk = _risk_from_signals(
@@ -419,9 +459,15 @@ def _aggregate_findings(
             template_cluster_flag=template_flag,
         )
         review_required = overall_risk != "None"
+        if review_candidates or any(
+            finding.check_type in RISK_INELIGIBLE_CHECK_TYPES for finding in active_findings
+        ):
+            review_required = True
         review_reason = ""
-        if review_required:
+        if overall_risk != "None":
             review_reason = "Potential content integrity issue detected. Manual review recommended."
+        elif review_required:
+            review_reason = "An unconfirmed or manual-verification candidate requires editor review."
         summary_rows.append(
             {
                 "record_id": record.record_id,
@@ -440,13 +486,13 @@ def _aggregate_findings(
                 "structured_abstract": record.structured_abstract,
                 "parse_status": record.parse_status,
                 "parse_warnings": to_pipe_string([warning.warning_code for warning in record.parse_warnings]),
-                "llm_trace_flag": "Yes" if llm_findings else "No",
-                "llm_review_priority": llm_priority,
-                "tortured_phrase_flag": "Yes" if tortured_findings else "No",
-                "nonsense_candidate_flag": "Yes" if nonsense_findings else "No",
-                "numerical_contradiction_flag": "Yes" if numerical_findings else "No",
-                "design_contradiction_flag": "Yes" if design_findings else "No",
-                "unverifiable_trial_flag": "Yes" if trial_findings else "No",
+                "llm_trace_flag": "Yes" if active_llm_findings else "No",
+                "llm_review_priority": llm_review_priority,
+                "tortured_phrase_flag": "Yes" if any(finding.active for finding in tortured_findings) else "No",
+                "nonsense_candidate_flag": "Yes" if any(finding.active for finding in nonsense_findings) else "No",
+                "numerical_contradiction_flag": "Yes" if any(finding.active for finding in numerical_findings) else "No",
+                "design_contradiction_flag": "Yes" if any(finding.active for finding in design_findings) else "No",
+                "unverifiable_trial_flag": "Yes" if any(finding.active for finding in trial_findings) else "No",
                 "template_cluster_flag": "Yes" if cluster_flag else "No",
                 "template_flag": "Yes" if template_flag else "No",
                 "related_or_companion_flag": "Yes" if related_pairs else "No",
@@ -499,6 +545,9 @@ def _aggregate_findings(
                 "numerical_contradiction_count": len(numerical_findings),
                 "design_contradiction_count": len(design_findings),
                 "unverifiable_trial_count": len(trial_findings),
+                "detected_finding_count": len(record_findings),
+                "active_finding_count": len(active_findings),
+                "review_candidate_count": len(review_candidates),
                 "template_cluster_id": cluster_row["template_cluster_id"] if cluster_row else "",
                 "template_cluster_size": cluster_row["cluster_size"] if cluster_row else 0,
                 "total_finding_count": risk_finding_count,
@@ -508,98 +557,56 @@ def _aggregate_findings(
                 "review_reason": review_reason,
             }
         )
+        if enriched_pair_rows is not None:
+            abstract = enriched_abstract_lookup.get(record.record_id, {})
+            strongest = enriched_strongest
+            strongest_risk = enriched_strongest_risk
+            summary_rows[-1].update({
+                "template_flag": "Yes" if template_flag else "No",
+                "related_or_companion_flag": "Yes" if any(
+                    pair["pair_class"] in {
+                        "possible_related_work", "possible_companion_analysis", "possible_related_duplicate",
+                    }
+                    for pair in enriched_pairs
+                ) else "No",
+                "template_confidence": str(strongest_risk["review_priority"]).lower() if strongest_risk else "none",
+                "template_review_priority": strongest_risk["review_priority"] if strongest_risk else "None",
+                "matched_abstract_count": len(enriched_pairs),
+                "strongest_matched_record_id": (
+                    strongest["right_record_id"] if strongest and strongest["left_record_id"] == record.record_id
+                    else strongest["left_record_id"] if strongest else ""
+                ),
+                "strongest_matched_source_file": "",
+                "strongest_matched_title": (
+                    strongest["right_title"] if strongest and strongest["left_record_id"] == record.record_id
+                    else strongest["left_title"] if strongest else ""
+                ),
+                "strongest_match_pair_id": strongest["pair_id"] if strongest else "",
+                "strongest_match_supporting_types": strongest.get("supporting_evidence", "") if strongest else "",
+                "strongest_match_sections": strongest.get("strongest_section", "") if strongest else "",
+                "strongest_match_sentence_count": "",
+                "strongest_match_shared_text_coverage": "",
+                "strongest_match_original_text_similarity": strongest.get("original_body_similarity", "") if strongest else "",
+                "strongest_match_masked_skeleton_similarity": strongest.get("masked_body_similarity", "") if strongest else "",
+                "strongest_match_ngram_similarity": "",
+                "strongest_match_high_value_section_similarity": strongest.get("strongest_masked_section_similarity", "") if strongest else "",
+                "strongest_match_weighted_section_similarity": "",
+                "strongest_match_variable_substitutions": strongest.get("likely_substitutions", "") if strongest else "",
+                "strongest_match_relationship_context": strongest.get("context_interpretation", "") if strongest else "",
+                "strongest_pair_classification": strongest["pair_class"] if strongest else "",
+                "strongest_match_evidence_excerpt": strongest.get("direct_evidence", "") if strongest else "",
+                "strongest_match_review_status": "candidate" if strongest else "",
+                "primary_template_pattern": strongest.get("primary_evidence", "") if strongest else "",
+                "matched_sections": strongest.get("strongest_section", "") if strongest else "",
+                "template_cluster_flag": "Yes" if abstract.get("family_id") else "No",
+                "template_family_id": abstract.get("family_id", ""),
+                "template_family_size": abstract.get("family_size", 0),
+                "template_family_confidence": (
+                    "high" if float(abstract.get("family_edge_score", 0)) >= 0.85 else "medium"
+                ) if abstract.get("family_id") else "none",
+                "template_evidence_summary": strongest.get("rule_path", "") if strongest else "",
+            })
     return summary_rows
-
-
-def _apply_authoritative_template_results(
-    summary_rows: list[dict[str, Any]],
-    pair_rows: list[dict[str, object]],
-    abstract_rows: list[dict[str, object]],
-) -> None:
-    linked: dict[str, list[dict[str, object]]] = defaultdict(list)
-    for pair in pair_rows:
-        if pair["review_priority"] != "None":
-            linked[str(pair["left_record_id"])].append(pair)
-            linked[str(pair["right_record_id"])].append(pair)
-    abstract_lookup = {str(row["record_id"]): row for row in abstract_rows}
-    priority_rank = {"None": 0, "Low": 1, "Medium": 2, "High": 3}
-    risk_classes = {"possible_template_reuse", "possible_related_duplicate"}
-    related_classes = {"possible_related_work", "possible_companion_analysis", "possible_related_duplicate"}
-
-    for summary in summary_rows:
-        record_id = str(summary["record_id"])
-        pairs = linked[record_id]
-        risk_pairs = [pair for pair in pairs if pair["pair_class"] in risk_classes]
-        strongest = max(
-            pairs,
-            key=lambda pair: (priority_rank[str(pair["review_priority"])], float(pair["editorial_score"])),
-            default=None,
-        )
-        strongest_risk = max(
-            risk_pairs,
-            key=lambda pair: (priority_rank[str(pair["review_priority"])], float(pair["editorial_score"])),
-            default=None,
-        )
-        abstract = abstract_lookup[record_id]
-        template_flag = bool(risk_pairs)
-        previous_count = int(summary["total_finding_count"])
-        summary.update({
-            "template_flag": "Yes" if template_flag else "No",
-            "related_or_companion_flag": "Yes" if any(pair["pair_class"] in related_classes for pair in pairs) else "No",
-            "template_confidence": str(strongest_risk["review_priority"]).lower() if strongest_risk else "none",
-            "template_review_priority": strongest_risk["review_priority"] if strongest_risk else "None",
-            "matched_abstract_count": len(pairs),
-            "strongest_matched_record_id": (
-                strongest["right_record_id"] if strongest and strongest["left_record_id"] == record_id
-                else strongest["left_record_id"] if strongest else ""
-            ),
-            "strongest_matched_source_file": "",
-            "strongest_matched_title": (
-                strongest["right_title"] if strongest and strongest["left_record_id"] == record_id
-                else strongest["left_title"] if strongest else ""
-            ),
-            "strongest_match_pair_id": (
-                f"PAIR-{min(strongest['left_record_id'], strongest['right_record_id'])}--{max(strongest['left_record_id'], strongest['right_record_id'])}"
-                if strongest else ""
-            ),
-            "strongest_match_supporting_types": strongest["supporting_evidence"] if strongest else "",
-            "strongest_match_sections": strongest["strongest_section"] if strongest else "",
-            "strongest_match_sentence_count": "",
-            "strongest_match_shared_text_coverage": "",
-            "strongest_match_original_text_similarity": strongest["original_body_similarity"] if strongest else "",
-            "strongest_match_masked_skeleton_similarity": strongest["masked_body_similarity"] if strongest else "",
-            "strongest_match_ngram_similarity": "",
-            "strongest_match_high_value_section_similarity": strongest["strongest_masked_section_similarity"] if strongest else "",
-            "strongest_match_weighted_section_similarity": "",
-            "strongest_match_variable_substitutions": strongest["likely_substitutions"] if strongest else "",
-            "strongest_match_relationship_context": strongest["context_interpretation"] if strongest else "",
-            "strongest_pair_classification": strongest["pair_class"] if strongest else "",
-            "strongest_match_evidence_excerpt": strongest["direct_evidence"] if strongest else "",
-            "strongest_match_review_status": "candidate" if strongest else "",
-            "primary_template_pattern": strongest["primary_evidence"] if strongest else "",
-            "matched_sections": strongest["strongest_section"] if strongest else "",
-            "template_cluster_flag": "Yes" if abstract["family_id"] else "No",
-            "template_family_id": abstract["family_id"],
-            "template_family_size": abstract["family_size"],
-            "template_family_confidence": (
-                "high" if float(abstract["family_edge_score"]) >= 0.85 else "medium"
-            ) if abstract["family_id"] else "none",
-            "template_evidence_summary": strongest["rule_path"] if strongest else "",
-            "total_finding_count": previous_count + (1 if template_flag else 0),
-        })
-        if template_flag:
-            priority = str(strongest_risk["review_priority"])
-            summary["highest_severity"] = max(
-                (str(summary["highest_severity"]), priority), key=severity_rank,
-            )
-            summary["overall_content_risk"] = _risk_from_signals(
-                highest_signal_severity=str(summary["highest_severity"]),
-                detector_types={"template"} if previous_count == 0 else {"template", "other"},
-                total_finding_count=int(summary["total_finding_count"]),
-                template_cluster_flag=True,
-            )
-            summary["review_required"] = "Yes"
-            summary["review_reason"] = "Potential content integrity issue detected. Manual review recommended."
 
 
 def _findings_rows(findings: list[Finding]) -> list[dict[str, Any]]:
@@ -715,6 +722,82 @@ def _parse_warning_rows(records: list[ParsedRecord]) -> list[dict[str, Any]]:
     return rows
 
 
+def _run_detector(
+    component: str,
+    operation: Any,
+    operational_issues: list[OperationalIssue],
+    default: Any,
+    record: ParsedRecord | None = None,
+) -> Any:
+    try:
+        return operation()
+    except Exception as exc:  # Detector/model boundaries must be visible in completed reports.
+        operational_issues.append(OperationalIssue(
+            component=component,
+            error_type=type(exc).__name__,
+            message=str(exc) or type(exc).__name__,
+            record_id=record.record_id if record else "",
+            source_file=record.source_file if record else "",
+        ))
+        return default
+
+
+def _collect_operational_issues(
+    records: list[ParsedRecord],
+    findings: list[Finding],
+    trial_results: list[TrialVerificationResult],
+    semantic_stats: SemanticRunStats,
+) -> list[OperationalIssue]:
+    issues = [
+        OperationalIssue(
+            component="xml_parser",
+            error_type=warning.warning_code,
+            message=warning.warning_message,
+            record_id=record.record_id,
+            source_file=record.source_file,
+            recoverable=False,
+        )
+        for record in records
+        if record.parse_status == "failed"
+        for warning in record.parse_warnings
+    ]
+    issues.extend(
+        OperationalIssue(
+            component=finding.detector_type,
+            error_type="validation_failed",
+            message=finding.validation_reason or "Finding validation failed.",
+            record_id=finding.record_id,
+            source_file=finding.source_file,
+        )
+        for finding in findings
+        if finding.validation_failed
+    )
+    issues.extend(
+        OperationalIssue(
+            component="llm_response_trace_semantic",
+            error_type="model_failure",
+            message="Semantic response-trace coverage is incomplete for this record.",
+            record_id=record_id,
+            source_file=next(
+                (record.source_file for record in records if record.record_id == record_id), "",
+            ),
+        )
+        for record_id in semantic_stats.failed_record_ids
+    )
+    issues.extend(
+        OperationalIssue(
+            component="clinical_trial_registry",
+            error_type="registry_lookup_failed",
+            message=result.operational_error or "Registry lookup failed.",
+            record_id=result.record_id,
+            source_file=result.source_file,
+        )
+        for result in trial_results
+        if result.operational_error
+    )
+    return issues
+
+
 def _dictionary_rows(llm_rules: list[dict[str, Any]], tortured_rules: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     rows.extend(llm_rules)
@@ -726,29 +809,60 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     xml_files = discover_xml_files(config.input_dir)
     records = [record for path in xml_files for record in parse_xml_records(path)]
     records, record_id_warnings = dedupe_records(records)
+    operational_issues: list[OperationalIssue] = []
     llm_rules = built_in_llm_rules()
     tortured_rules = load_tortured_rules(config.tortured_dictionary_path)
     tortured_index = build_tortured_rule_index(tortured_rules)
-    llm_client = (
-        build_gpt_oss_client()
-        if (config.detect_nonsense_candidates or config.detect_llm_semantic or config.validate_llm)
+    llm_client = None
+    if config.detect_nonsense_candidates or config.detect_llm_semantic or config.validate_llm:
+        llm_client = _run_detector(
+            "gpt_oss_model",
+            build_gpt_oss_client,
+            operational_issues,
+            None,
+        )
+    nonsense_detector = (
+        NonsenseCandidateDetector(llm_client)
+        if config.detect_nonsense_candidates and llm_client is not None
         else None
     )
-    nonsense_detector = NonsenseCandidateDetector(llm_client) if config.detect_nonsense_candidates else None
 
     findings: list[Finding] = []
     deterministic_candidates = []
     for record in records:
-        deterministic_candidates.extend(detect_llm_trace_candidates(record, llm_rules))
-        tortured_findings = detect_tortured_phrases(record, tortured_rules, tortured_index)
+        deterministic_candidates.extend(_run_detector(
+            "llm_response_trace",
+            lambda: detect_llm_trace_candidates(record, llm_rules),
+            operational_issues,
+            [],
+            record,
+        ))
+        tortured_findings = _run_detector(
+            "tortured_phrase",
+            lambda: detect_tortured_phrases(record, tortured_rules, tortured_index),
+            operational_issues,
+            [],
+            record,
+        )
         findings.extend(tortured_findings)
         if nonsense_detector:
-            findings.extend(nonsense_detector.detect(record, tortured_findings))
+            findings.extend(_run_detector(
+                "nonsense_candidate",
+                lambda: nonsense_detector.detect(record, tortured_findings),
+                operational_issues,
+                [],
+                record,
+            ))
 
     semantic_candidates = []
     semantic_stats = SemanticRunStats()
     if config.detect_llm_semantic and llm_client is not None:
-        semantic_candidates, semantic_stats = detect_semantic_traces(llm_client, records)
+        semantic_candidates, semantic_stats = _run_detector(
+            "llm_response_trace_semantic",
+            lambda: detect_semantic_traces(llm_client, records),
+            operational_issues,
+            ([], SemanticRunStats()),
+        )
     llm_candidates = fuse_llm_trace_candidates([*deterministic_candidates, *semantic_candidates])
     llm_validator = LLMTraceValidator(llm_client) if config.validate_llm and llm_client is not None else None
     apply_llm_trace_validation(llm_candidates, llm_validator)
@@ -759,17 +873,36 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         for record in records
         if record.parse_status != "failed" and (record.title.strip() or record.abstract_text.strip())
     ]
-    numerical_results = detect_numerical_contradictions(comparable_records)
-    design_validator = LLMDesignContradictionValidator(llm_client) if config.validate_llm else None
-    design_results = detect_design_contradictions(comparable_records, validator=design_validator)
-    trial_results = detect_unverifiable_trials(
-        comparable_records,
-        registry_clients={
-            CLINICAL_TRIALS_GOV: ClinicalTrialsGovClient(
-                cache_dir=config.output_dir / ".trial_registry_cache",
-                offline_cache_only=not config.verify_trials,
-            )
-        },
+    numerical_results = _run_detector(
+        "numerical_contradiction",
+        lambda: detect_numerical_contradictions(comparable_records),
+        operational_issues,
+        [],
+    )
+    design_validator = (
+        LLMDesignContradictionValidator(llm_client)
+        if config.validate_llm and llm_client is not None
+        else None
+    )
+    design_results = _run_detector(
+        "design_contradiction",
+        lambda: detect_design_contradictions(comparable_records, validator=design_validator),
+        operational_issues,
+        [],
+    )
+    trial_results = _run_detector(
+        "unverifiable_clinical_trial",
+        lambda: detect_unverifiable_trials(
+            comparable_records,
+            registry_clients={
+                CLINICAL_TRIALS_GOV: ClinicalTrialsGovClient(
+                    cache_dir=config.output_dir / ".trial_registry_cache",
+                    offline_cache_only=not config.verify_trials,
+                )
+            },
+        ),
+        operational_issues,
+        [],
     )
     findings.extend(
         _integrated_finding(result)
@@ -784,20 +917,38 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
 
     if config.validate_llm and ordered_findings:
         if llm_client is None:
-            llm_client = build_gpt_oss_client()
-        validator = ContextValidator(client=llm_client)
-        for finding in ordered_findings:
-            if finding.detector_type == "llm_response_trace":
-                continue
-            if finding.detector_type not in validator.applies_to:
-                continue
-            result = validator.validate(finding)
-            finding.validation_status = result.status
-            finding.validation_reason = result.reason
-            finding.validated_by = f"{result.model_id}:{result.prompt_version}"
+            for finding in ordered_findings:
+                if (
+                    finding.detector_type in {"tortured_phrase", "design_contradiction"}
+                    or (
+                        finding.detector_type == "llm_response_trace"
+                        and finding.normalized_validation_status == "pending"
+                    )
+                ):
+                    finding.validation_status = "validation_failed"
+                    finding.validation_reason = "Validation model was unavailable."
+                    finding.review_status = "validation_failed"
+        else:
+            validator = ContextValidator(client=llm_client)
+            for finding in ordered_findings:
+                if finding.detector_type == "llm_response_trace":
+                    continue
+                if finding.detector_type not in validator.applies_to:
+                    continue
+                result = validator.validate(finding)
+                finding.validation_status = result.status
+                finding.validation_reason = result.reason
+                finding.validated_by = f"{result.model_id}:{result.prompt_version}"
 
-    exact_template_findings = detect_exact_text_reuse(records)
-    entity_template_findings = detect_entity_normalized_templates(records)
+    exact_template_findings = _run_detector(
+        "exact_text_reuse", lambda: detect_exact_text_reuse(records), operational_issues, [],
+    )
+    entity_template_findings = _run_detector(
+        "entity_normalized_template",
+        lambda: detect_entity_normalized_templates(records),
+        operational_issues,
+        [],
+    )
     pair_findings = merge_pair_findings(exact_template_findings, entity_template_findings)
     template_rows = cluster_template_findings(pair_findings, records)
     enriched_pair_rows, enriched_family_rows, enriched_abstract_rows = build_enriched_reports(
@@ -805,8 +956,18 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     )
     reviewer_pair_rows = directional_finding_rows(enriched_pair_rows)
     field_inventory_rows, root_summary_rows = _inventory_rows(records)
-    abstract_summary_rows = _aggregate_findings(records, findings, [], [], llm_rules)
-    _apply_authoritative_template_results(abstract_summary_rows, enriched_pair_rows, enriched_abstract_rows)
+    abstract_summary_rows = _aggregate_findings(
+        records,
+        findings,
+        [],
+        [],
+        llm_rules,
+        enriched_pair_rows=enriched_pair_rows,
+        enriched_abstract_rows=enriched_abstract_rows,
+    )
+    operational_issues.extend(
+        _collect_operational_issues(records, findings, trial_results, semantic_stats)
+    )
     findings_rows = _findings_rows(findings)
     titles_by_record = {record.record_id: record.title for record in records}
     for row in findings_rows:
@@ -897,6 +1058,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         ("template_finding_directional_row_count", len(reviewer_pair_rows)),
         ("template_insufficient_evidence_count", sum(row["review_priority"] == "None" for row in enriched_pair_rows)),
         ("enriched_family_count", len(enriched_family_rows)),
+        ("operational_issue_count", len(operational_issues)),
         ("limitations", "Rule-based screening flags explicit LLM response traces, known tortured phrases, and repeated abstract skeletons; optional GPT-OSS stages only annotate candidates, and the pipeline does not detect AI-generated authorship."),
         ("excluded_scope", "AI-generated text detection"),
     ]
@@ -981,6 +1143,8 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
             findings=findings,
             enriched_pair_rows=enriched_pair_rows,
             enriched_abstract_rows=enriched_abstract_rows,
+            abstract_summary_rows=abstract_summary_rows,
+            operational_issues=operational_issues,
             generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
             git_revision=commit_sha,
         ),
@@ -1000,6 +1164,14 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         parse_warning_rows,
         WARNING_COLUMNS,
     )
+    output_paths["operational_issues_csv"] = write_csv(
+        output_dir / "operational_issues.csv",
+        [issue.to_dict() for issue in operational_issues],
+        [
+            "component", "record_id", "source_file", "status", "error_type",
+            "message", "retry_count", "recoverable",
+        ],
+    )
     output_paths["metadata_json"] = write_jsonl(output_dir / "run_metadata.jsonl", [{"key": key, "value": value} for key, value in run_metadata_rows])
     output_paths["workbook"] = write_workbook(
         output_dir / "content_integrity_screening_poc.xlsx",
@@ -1011,6 +1183,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         cluster_rows=enriched_family_rows,
         dictionary_rows=dictionary_rows,
         parse_warning_rows=parse_warning_rows,
+        operational_issue_rows=[issue.to_dict() for issue in operational_issues],
         run_metadata_rows=run_metadata_rows,
         pair_columns=PAIR_REPORT_COLUMNS,
         cluster_columns=FAMILY_REPORT_COLUMNS,
@@ -1028,6 +1201,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         parse_warning_rows=parse_warning_rows,
         dictionary_rows=dictionary_rows,
         run_metadata_rows=run_metadata_rows,
+        operational_issues=operational_issues,
         output_paths=output_paths,
     )
 

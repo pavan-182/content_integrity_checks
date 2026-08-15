@@ -188,6 +188,17 @@ WARNING_COLUMNS = [
     "schema_type",
 ]
 
+OPERATIONAL_ISSUE_COLUMNS = [
+    "component",
+    "record_id",
+    "source_file",
+    "status",
+    "error_type",
+    "message",
+    "retry_count",
+    "recoverable",
+]
+
 ABSTRACT_SUMMARY_COLUMNS = [
     "record_id",
     "source_file",
@@ -254,6 +265,9 @@ ABSTRACT_SUMMARY_COLUMNS = [
     "numerical_contradiction_count",
     "design_contradiction_count",
     "unverifiable_trial_count",
+    "detected_finding_count",
+    "active_finding_count",
+    "review_candidate_count",
     "total_finding_count",
     "highest_severity",
     "overall_content_risk",
@@ -584,11 +598,23 @@ def build_content_integrity_frontend_json(
     findings: list[Any],
     enriched_pair_rows: list[dict[str, Any]],
     enriched_abstract_rows: list[dict[str, Any]],
+    abstract_summary_rows: list[dict[str, Any]],
+    operational_issues: list[Any],
     generated_at: str,
     git_revision: str,
 ) -> dict[str, Any]:
     record_lookup = {record.record_id: record for record in records}
-    abstract_lookup = {row["record_id"]: row for row in enriched_abstract_rows}
+    template_abstract_lookup = {row["record_id"]: row for row in enriched_abstract_rows}
+    result_lookup = {str(row["record_id"]): row for row in abstract_summary_rows}
+    if set(result_lookup) != {str(record.record_id) for record in records}:
+        raise ValueError("Authoritative abstract results must cover every record exactly once.")
+    operational_issue_rows = [
+        issue.to_dict() if hasattr(issue, "to_dict") else dict(issue)
+        for issue in operational_issues
+    ]
+    operational_by_record: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for issue in operational_issue_rows:
+        operational_by_record[str(issue.get("record_id", ""))].append(issue)
     findings_by_record: dict[str, list[Finding]] = defaultdict(list)
     for finding in findings:
         if finding.detector_type not in {
@@ -638,36 +664,38 @@ def build_content_integrity_frontend_json(
             finding for finding in findings_by_record.get(record_id, []) if finding.detector_type == "unverifiable_clinical_trial"
         ]
         template_pairs = reviewed_pairs_by_record.get(record_id, [])
-        flagged_tortured = bool(tortured_findings)
-        flagged_llm = bool(llm_findings)
-        flagged_numerical = bool(numerical_findings)
-        flagged_design = bool(design_findings)
-        flagged_trial = bool(trial_findings)
-        flagged_templating = bool(template_pairs)
+        record_operational_issues = [
+            *operational_by_record.get("", []),
+            *operational_by_record.get(record_id, []),
+        ]
+
+        def _component_failed(*components: str) -> bool:
+            return any(issue.get("component") in components for issue in record_operational_issues)
+
+        result = result_lookup[record_id]
+        flagged_tortured = result["tortured_phrase_flag"] == "Yes"
+        flagged_llm = result["llm_trace_flag"] == "Yes"
+        flagged_numerical = result["numerical_contradiction_flag"] == "Yes"
+        flagged_design = result["design_contradiction_flag"] == "Yes"
+        flagged_trial = result["unverifiable_trial_flag"] == "Yes"
+        flagged_templating = result["template_flag"] == "Yes"
         flagged_checks: list[str] = []
-        why_labels: list[str] = []
         if flagged_tortured:
             flagged_checks.append("tortured_phrases")
-            why_labels.append("Tortured Phrases")
         if flagged_llm:
             flagged_checks.append("llm_response_trace")
-            why_labels.append("LLM Response Trace")
         if flagged_numerical:
             flagged_checks.append("numerical_contradiction")
-            why_labels.append("Numerical Contradiction")
         if flagged_design:
             flagged_checks.append("design_contradiction")
-            why_labels.append("Design Contradiction")
         if flagged_trial:
             flagged_checks.append("unverifiable_trial")
-            why_labels.append("Unverifiable Clinical Trial")
         if flagged_templating:
             flagged_checks.append("Templating (Cross-Author)")
-            why_labels.append("Templating (Cross-Author)")
 
-        overall_risk = "High" if any((flagged_tortured, flagged_llm, flagged_numerical, flagged_design, flagged_trial, flagged_templating)) else "Low"
-        high_confidence_flags = sum((flagged_tortured, flagged_llm, flagged_numerical, flagged_design, flagged_trial, flagged_templating))
-        abstract_template_meta = abstract_lookup.get(record_id, {})
+        overall_risk = str(result["overall_content_risk"])
+        review_required = result["review_required"] == "Yes"
+        abstract_template_meta = template_abstract_lookup.get(record_id, {})
         template_family_id = abstract_template_meta.get("family_id", "")
         template_family_size = abstract_template_meta.get("family_size", 0) or 0
         ordered_template_pairs = sorted(template_pairs, key=lambda pair: _pair_sort_key(pair, record_id))
@@ -677,14 +705,20 @@ def build_content_integrity_frontend_json(
             "title": record.title,
             "corresponding_author": record.primary_author or None,
             "overall_risk": overall_risk,
-            "why_flagged": ", ".join(why_labels) if why_labels else "No significant flags",
+            "overall_content_risk": overall_risk,
+            "review_required": review_required,
+            "review_reason": result["review_reason"],
+            "why_flagged": result["review_reason"] or "No review required.",
             "flagged_checks": flagged_checks,
-            "high_confidence_flags": high_confidence_flags,
+            "high_confidence_flags": 0,
             "corroborating_flags": 0,
+            "operational_issues": record_operational_issues,
             "checks": {
                 "tortured_phrases": {
                     "flagged": flagged_tortured,
-                    "match_count": len(tortured_findings),
+                    "match_count": sum(finding.active for finding in tortured_findings),
+                    "review_candidate": any(finding.review_candidate for finding in tortured_findings),
+                    "operational_failure": any(finding.validation_failed for finding in tortured_findings) or _component_failed("tortured_phrase"),
                     "evidence": _build_tortured_evidence([
                         {
                             "finding_id": finding.finding_id,
@@ -696,6 +730,8 @@ def build_content_integrity_frontend_json(
                             "confidence": finding.confidence,
                             "rule_id": finding.rule_id,
                             "validation_status": finding.validation_status or "not_validated",
+                            "active": finding.active,
+                            "review_candidate": finding.review_candidate,
                         }
                         for finding in tortured_findings
                     ]),
@@ -712,13 +748,17 @@ def build_content_integrity_frontend_json(
                             "validation_reason": finding.validation_reason or "",
                             "validated_by": finding.validated_by or "",
                             "rule_id": finding.rule_id,
+                            "active": finding.active,
+                            "review_candidate": finding.review_candidate,
                         }
                         for finding in tortured_findings
                     ],
                 },
                 "llm_response_trace": {
                     "flagged": flagged_llm,
-                    "match_count": len(llm_findings),
+                    "match_count": sum(finding.active for finding in llm_findings),
+                    "review_candidate": any(finding.review_candidate for finding in llm_findings),
+                    "operational_failure": any(finding.validation_failed for finding in llm_findings) or _component_failed("llm_response_trace", "llm_response_trace_semantic"),
                     "evidence": _build_llm_evidence([
                         {
                             "finding_id": finding.finding_id,
@@ -730,6 +770,8 @@ def build_content_integrity_frontend_json(
                             "confidence": finding.confidence,
                             "rule_id": finding.rule_id,
                             "validation_status": finding.validation_status or "not_validated",
+                            "active": finding.active,
+                            "review_candidate": finding.review_candidate,
                         }
                         for finding in llm_findings
                     ]),
@@ -746,25 +788,33 @@ def build_content_integrity_frontend_json(
                             "validation_reason": finding.validation_reason or "",
                             "validated_by": finding.validated_by or "",
                             "rule_id": finding.rule_id,
+                            "active": finding.active,
+                            "review_candidate": finding.review_candidate,
                         }
                         for finding in llm_findings
                     ],
                 },
                 "numerical_contradiction": {
                     "flagged": flagged_numerical,
-                    "match_count": len(numerical_findings),
+                    "match_count": sum(finding.active for finding in numerical_findings),
+                    "review_candidate": any(finding.review_candidate for finding in numerical_findings),
+                    "operational_failure": any(finding.validation_failed for finding in numerical_findings) or _component_failed("numerical_contradiction"),
                     "evidence": _join_lines(finding.evidence_snippet for finding in numerical_findings),
                     "findings": [finding.to_dict() for finding in numerical_findings],
                 },
                 "design_contradiction": {
                     "flagged": flagged_design,
-                    "match_count": len(design_findings),
+                    "match_count": sum(finding.active for finding in design_findings),
+                    "review_candidate": any(finding.review_candidate for finding in design_findings),
+                    "operational_failure": any(finding.validation_failed for finding in design_findings) or _component_failed("design_contradiction"),
                     "evidence": _join_lines(finding.evidence_snippet for finding in design_findings),
                     "findings": [finding.to_dict() for finding in design_findings],
                 },
                 "unverifiable_trial": {
                     "flagged": flagged_trial,
-                    "match_count": len(trial_findings),
+                    "match_count": sum(finding.active for finding in trial_findings),
+                    "review_candidate": any(finding.review_candidate for finding in trial_findings),
+                    "operational_failure": any(finding.validation_failed for finding in trial_findings) or _component_failed("unverifiable_clinical_trial", "clinical_trial_registry"),
                     "evidence": _join_lines(finding.evidence_snippet for finding in trial_findings),
                     "findings": [finding.to_dict() for finding in trial_findings],
                 },
@@ -772,6 +822,8 @@ def build_content_integrity_frontend_json(
                     "label": "Templating (Cross-Author)",
                     "flagged": flagged_templating,
                     "match_count": len(ordered_template_pairs),
+                    "review_candidate": False,
+                    "operational_failure": _component_failed("exact_text_reuse", "entity_normalized_template"),
                     "evidence": _build_templating_evidence([
                         {
                             "matched_abstract_id": pair["right_record_id"] if str(pair["left_record_id"]) == record_id else pair["left_record_id"],
@@ -830,19 +882,21 @@ def build_content_integrity_frontend_json(
             },
         }
         abstract_findings["high_confidence_flags"] = sum((
-            any(_is_high_confidence(finding.confidence) for finding in tortured_findings),
-            any(_is_high_confidence(finding.confidence) for finding in llm_findings),
-            any(_is_high_confidence(finding.confidence) for finding in numerical_findings),
-            any(_is_high_confidence(finding.confidence) for finding in design_findings),
-            any(_is_high_confidence(finding.confidence) for finding in trial_findings),
-            any(_is_high_confidence(pair.get("confidence", "")) for pair in ordered_template_pairs),
+            any(finding.active and _is_high_confidence(finding.confidence) for finding in tortured_findings),
+            any(finding.active and _is_high_confidence(finding.confidence) for finding in llm_findings),
+            any(finding.active and _is_high_confidence(finding.confidence) for finding in numerical_findings),
+            any(finding.active and _is_high_confidence(finding.confidence) for finding in design_findings),
+            any(finding.active and _is_high_confidence(finding.confidence) for finding in trial_findings),
+            flagged_templating and any(_is_high_confidence(pair.get("confidence", "")) for pair in ordered_template_pairs),
         ))
         abstracts.append(abstract_findings)
 
     total_submissions = len(abstracts)
     high_risk = sum(1 for item in abstracts if item["overall_risk"] == "High")
-    moderate_risk = sum(1 for item in abstracts if item["overall_risk"] == "Moderate")
+    moderate_risk = sum(1 for item in abstracts if item["overall_risk"] == "Medium")
     low_risk = sum(1 for item in abstracts if item["overall_risk"] == "Low")
+    no_risk = sum(1 for item in abstracts if item["overall_risk"] == "None")
+    requires_editor_judgement = sum(bool(item["review_required"]) for item in abstracts)
     return {
         "run": {
             "generated_at": generated_at,
@@ -854,10 +908,12 @@ def build_content_integrity_frontend_json(
             "high_risk": high_risk,
             "moderate_risk": moderate_risk,
             "low_risk": low_risk,
-            "requires_editor_judgement": high_risk,
-            "cleared_without_manual_review": low_risk,
+            "no_risk": no_risk,
+            "requires_editor_judgement": requires_editor_judgement,
+            "cleared_without_manual_review": total_submissions - requires_editor_judgement,
         },
         "abstracts": abstracts,
+        "operational_issues": operational_issue_rows,
     }
 
 
@@ -882,6 +938,7 @@ def write_workbook(
     cluster_rows: list[dict[str, Any]],
     dictionary_rows: list[dict[str, Any]],
     parse_warning_rows: list[dict[str, Any]],
+    operational_issue_rows: list[dict[str, Any]],
     run_metadata_rows: list[tuple[str, Any]],
     pair_columns: Sequence[str] = PAIR_COLUMNS,
     cluster_columns: Sequence[str] = FAMILY_COLUMNS,
@@ -1000,6 +1057,11 @@ def write_workbook(
     ws.freeze_panes = "A2"
     _auto_size_columns(ws)
 
+    ws = workbook.create_sheet("Operational Issues")
+    _write_table(ws, operational_issue_rows, OPERATIONAL_ISSUE_COLUMNS, start_row=1)
+    ws.freeze_panes = "A2"
+    _auto_size_columns(ws)
+
     # Run Metadata
     ws = workbook.create_sheet("Run Metadata")
     _write_key_value_block(ws, run_metadata_rows, start_row=1)
@@ -1021,17 +1083,17 @@ def write_editor_triage_workbook(path: str | Path, report: dict[str, Any]) -> Pa
     dashboard = workbook.create_sheet("Dashboard")
     dashboard.merge_cells("A1:H1")
     dashboard["A1"] = "Editor Triage — Submission Overview"
-    for columns, label, key, color in (
-        ("A:B", "Total Submissions", "total_submissions", "D9E1F2"),
-        ("C:D", "Low Risk (No Action Needed)", "low_risk", "C6E0B4"),
-        ("E:F", "Moderate Risk (Judgement Needed)", "moderate_risk", "FFE699"),
-        ("G:H", "High Risk (Judgement Needed)", "high_risk", "F8CBAD"),
+    for columns, label, value, color in (
+        ("A:B", "Total Submissions", summary["total_submissions"], "D9E1F2"),
+        ("C:D", "No Active Risk", summary.get("no_risk", summary.get("low_risk", 0)), "C6E0B4"),
+        ("E:F", "Medium Risk", summary["moderate_risk"], "FFE699"),
+        ("G:H", "High Risk", summary["high_risk"], "F8CBAD"),
     ):
         left, right = columns.split(":")
         dashboard.merge_cells(f"{left}3:{right}3")
         dashboard.merge_cells(f"{left}4:{right}5")
         dashboard[f"{left}3"] = label
-        dashboard[f"{left}4"] = summary[key]
+        dashboard[f"{left}4"] = value
         dashboard[f"{left}4"].fill = PatternFill("solid", fgColor=color)
     total = summary["total_submissions"] or 1
     for row, label, value in (
@@ -1050,7 +1112,7 @@ def write_editor_triage_workbook(path: str | Path, report: dict[str, Any]) -> Pa
         "Rank", "Abstract ID", "Title (short)", "Corresponding Author",
         "Why Flagged (plain English)", "High-Confidence Flags", "Corroborating Flags",
     ]
-    for risk in ("High", "Moderate", "Low"):
+    for risk in ("High", "Medium", "Low", "None"):
         sheet = workbook.create_sheet(f"{risk} Risk Queue")
         sheet.append(queue_columns)
         for rank, abstract in enumerate((item for item in abstracts if item["overall_risk"] == risk), 1):
@@ -1059,17 +1121,24 @@ def write_editor_triage_workbook(path: str | Path, report: dict[str, Any]) -> Pa
     all_abstracts = workbook.create_sheet("All Abstracts")
     all_abstracts.append([
         "Abstract ID", "Title (short)", "Corresponding Author", "Overall Risk",
-        "Why Flagged (plain English)", "High-Confidence Flags", "Corroborating Flags",
+        "Review Required", "Review Reason", "Why Flagged (plain English)",
+        "High-Confidence Flags", "Corroborating Flags",
         *(label for _, label in checks),
     ])
     for abstract in abstracts:
         check_results = abstract["checks"]
         all_abstracts.append([
             abstract["abstract_id"], abstract["title"], abstract["corresponding_author"],
-            abstract["overall_risk"], abstract["why_flagged"], abstract["high_confidence_flags"],
+            abstract["overall_risk"], "Yes" if abstract.get("review_required") else "No",
+            abstract.get("review_reason", ""), abstract["why_flagged"], abstract["high_confidence_flags"],
             abstract["corroborating_flags"],
             *("Y" if check_results.get(key, {"flagged": False})["flagged"] else "N" for key, _ in checks),
         ])
+
+    operational = workbook.create_sheet("Operational Issues")
+    operational.append([column.replace("_", " ").title() for column in OPERATIONAL_ISSUE_COLUMNS])
+    for issue in report.get("operational_issues", []):
+        operational.append([issue.get(column, "") for column in OPERATIONAL_ISSUE_COLUMNS])
 
     template_evidence = workbook.create_sheet("Template Evidence")
     template_evidence.append([
@@ -1130,8 +1199,8 @@ def write_editor_triage_workbook(path: str | Path, report: dict[str, Any]) -> Pa
     how.merge_cells("A13:F13")
     how["A13"] = "Risk Tiers"
     for row, label, description in (
-        (14, "High", "At least one high-confidence content check fired. Requires editor review."),
-        (15, "Low", "No content check fired. No action needed."),
+        (14, "High", "The authoritative aggregation result assigned High content risk."),
+        (15, "None", "No active content-integrity finding affected overall risk."),
     ):
         how.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
         how.merge_cells(start_row=row, start_column=3, end_row=row, end_column=6)
@@ -1162,10 +1231,12 @@ def write_editor_triage_workbook(path: str | Path, report: dict[str, Any]) -> Pa
 
     table_widths = {
         "High Risk Queue": [7, 13, 30, 16, 40, 14, 13],
-        "Moderate Risk Queue": [7, 13, 30, 16, 40, 14, 13],
+        "Medium Risk Queue": [7, 13, 30, 16, 40, 14, 13],
         "Low Risk Queue": [7, 13, 30, 16, 40, 14, 13],
-        "All Abstracts": [13, 30, 16, 12, 40, 12, 13, *([13] * len(checks))],
+        "None Risk Queue": [7, 13, 30, 16, 40, 14, 13],
+        "All Abstracts": [13, 30, 16, 12, 13, 40, 40, 12, 13, *([13] * len(checks))],
         "Template Evidence": [18, 18, 30, 18, 30, 46, 14, 12, 20, 60, 60],
+        "Operational Issues": [24, 18, 24, 12, 24, 60, 12, 12],
     }
     for name, widths in table_widths.items():
         sheet = workbook[name]

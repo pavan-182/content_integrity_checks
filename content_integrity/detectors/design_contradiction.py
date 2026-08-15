@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass, replace
 from itertools import combinations
 from typing import Any, Protocol
 
-from ..models import ParsedRecord
+from ..models import INACTIVE_VALIDATION_STATUSES, ParsedRecord
 from ..template_matching_common import _sentence_split
 from ..utils import normalize_for_matching, normalize_label, normalize_whitespace
 from ..validators.context_validator import _parse_validator_payload
@@ -80,8 +80,12 @@ class DesignContradictionFinding:
     validation_reason: str
     review_status: str
 
+    @property
+    def active(self) -> bool:
+        return self.validation_status.strip().lower() not in INACTIVE_VALIDATION_STATUSES
+
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return {**asdict(self), "active": self.active}
 
 
 class DesignContradictionValidator(Protocol):
@@ -122,7 +126,7 @@ class LLMDesignContradictionValidator:
             if status not in {"confirmed", "rejected", "uncertain"} or not reason:
                 raise ValueError("invalid design validator payload")
         except (KeyError, TypeError, ValueError, RuntimeError):
-            return DesignValidationResult("uncertain", "Validator response could not be parsed.")
+            return DesignValidationResult("validation_failed", "Validator response could not be parsed.")
         return DesignValidationResult(status, reason)
 
 
@@ -540,14 +544,20 @@ def detect_design_contradictions(
                         validation = validator.validate(finding)
                         status = validation.status
                         reason = validation.reason
-                        if status not in {"confirmed", "rejected", "uncertain"} or not reason:
+                        if status not in {"confirmed", "rejected", "uncertain", "validation_failed"} or not reason:
                             raise ValueError("invalid validator result")
                     except (TypeError, ValueError, RuntimeError):
-                        status, reason = "uncertain", "Validator response could not be parsed."
+                        status, reason = "validation_failed", "Validator response could not be parsed."
                     finding = replace(
                         finding,
                         validation_status=status,
                         validation_reason=reason,
+                        review_status={
+                            "confirmed": "needs_review",
+                            "rejected": "excluded_by_validation",
+                            "uncertain": "needs_editor_review",
+                            "validation_failed": "validation_failed",
+                        }[status],
                     )
                 findings.append(finding)
     return findings

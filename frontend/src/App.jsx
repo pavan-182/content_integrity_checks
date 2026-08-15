@@ -17,11 +17,13 @@ const formatDate = (value) =>
     : "Unknown";
 
 function RiskBadge({ risk }) {
-  return <span className={`risk risk-${risk.toLowerCase()}`}>{risk === "Low" ? "Low · no action" : risk}</span>;
+  return <span className={`risk risk-${risk.toLowerCase()}`}>{risk === "None" ? "None · no active risk" : risk}</span>;
 }
 
 function CheckStatus({ definition, result }) {
-  if (!result.flagged) return <span className="status-clear">✓ No finding detected</span>;
+  if (result.operational_failure) return <span className="status-flag">! Check failed</span>;
+  if (result.review_candidate && !result.flagged) return <span className="status-flag">● Editor review candidate</span>;
+  if (!result.flagged) return <span className="status-clear">✓ No active finding</span>;
   const count = definition.id === "templating"
     ? result.evidence_pairs?.length || result.match_count || 0
     : result.match_count || result.findings?.length || 0;
@@ -88,7 +90,7 @@ function TableCard({ title, children, actions }) {
 
 function Overview({ report, onNavigate, onOpen }) {
   const { summary, abstracts } = report;
-  const flagged = abstracts.filter((item) => item.overall_risk !== "Low");
+  const flagged = abstracts.filter((item) => item.review_required);
 
   return (
     <>
@@ -96,8 +98,8 @@ function Overview({ report, onNavigate, onOpen }) {
       <div className="metrics">
         <Metric label="Total submissions" value={summary.total_submissions} help="Every abstract appears once" />
         <Metric label="Needs editor judgement" value={summary.requires_editor_judgement} help="Moderate + High" />
-        <Metric label="High priority" value={summary.high_risk} help="At least one content check" />
-        <Metric label="Cleared automatically" value={summary.cleared_without_manual_review} help="No significant flags" />
+        <Metric label="High content risk" value={summary.high_risk} help="Assigned by pipeline aggregation" />
+        <Metric label="Cleared automatically" value={summary.cleared_without_manual_review} help="Review not required" />
       </div>
       <section className="section-card checks-summary">
         <div className="section-title">
@@ -123,14 +125,14 @@ function Overview({ report, onNavigate, onOpen }) {
 function ReviewQueue({ abstracts, onOpen }) {
   const [risk, setRisk] = useState("High");
   const [query, setQuery] = useState("");
-  const risks = ["High", "Moderate", "Low"];
-  const items = abstracts.filter((item) => item.overall_risk === risk && matches(item, query));
+  const risks = ["High", "Medium", "Low", "None"];
+  const items = abstracts.filter((item) => item.review_required && item.overall_risk === risk && matches(item, query));
 
   return (
     <>
       <PageHead title="Review Queue" subtitle="High, Moderate and Low pipeline results in one editor view." />
       <div className="queue-tabs">
-        {risks.map((item) => <button key={item} className={`tab-btn ${risk === item ? "active" : ""}`} onClick={() => setRisk(item)}>{item === "Low" ? "Low · no action" : item} ({abstracts.filter((a) => a.overall_risk === item).length})</button>)}
+        {risks.map((item) => <button key={item} className={`tab-btn ${risk === item ? "active" : ""}`} onClick={() => setRisk(item)}>{item} ({abstracts.filter((a) => a.review_required && a.overall_risk === item).length})</button>)}
       </div>
       <TableCard title={`${number.format(items.length)} ${risk.toLowerCase()} priority submissions`} actions={<Search value={query} onChange={setQuery} />}>
         <SubmissionTable items={items} onOpen={onOpen} />
@@ -155,7 +157,7 @@ function AllSubmissions({ abstracts, onOpen }) {
         <div className="table-actions">
           <Search value={query} onChange={setQuery} />
           <select aria-label="Priority filter" value={risk} onChange={(e) => setRisk(e.target.value)}>
-            {['All', 'High', 'Moderate', 'Low'].map((value) => <option key={value}>{value}</option>)}
+            {['All', 'High', 'Medium', 'Low', 'None'].map((value) => <option key={value}>{value}</option>)}
           </select>
           <select aria-label="Check filter" value={check} onChange={(e) => setCheck(e.target.value)}>
             <option value="All">All checks</option>
@@ -178,7 +180,7 @@ function ContentChecks({ abstracts, onOpen }) {
       <PageHead title="Content Integrity Checks" subtitle="Checks applied to abstract text and cross-submission content." />
       <div className="check-grid">
         <button className={`check-tile ${active === "All" ? "active" : ""}`} onClick={() => setActive("All")}><strong>All content findings</strong><span>{number.format(affectedCount(abstracts))} submissions</span></button>
-        {checks.map((check) => <button key={check.id} className={`check-tile ${active === check.id ? "active" : ""}`} onClick={() => setActive(check.id)}><strong>{check.label}</strong><span>High-confidence · {number.format(abstracts.filter((item) => item.checks[check.id].flagged).length)} flagged</span></button>)}
+        {checks.map((check) => <button key={check.id} className={`check-tile ${active === check.id ? "active" : ""}`} onClick={() => setActive(check.id)}><strong>{check.label}</strong><span>{number.format(abstracts.filter((item) => item.checks[check.id].flagged).length)} active</span></button>)}
       </div>
       <TableCard title={active === "All" ? "Affected submissions" : checks.find((item) => item.id === active).label}>
         <SubmissionTable items={affected} onOpen={onOpen} evidenceCheck={active === "All" ? undefined : active} />
@@ -237,6 +239,9 @@ function Detail({ abstract, onBack }) {
         <div><div className="detail-title"><h1>{abstract.title}</h1><RiskBadge risk={abstract.overall_risk} /></div><div className="detail-meta">{abstract.abstract_id} · {abstract.corresponding_author}</div></div>
       </div>
       <section className="why-box"><h2>Why this submission is here</h2><p>{abstract.why_flagged}</p></section>
+      {!!abstract.operational_issues?.length && (
+        <section className="why-box"><h2>Operational issues</h2><p>{abstract.operational_issues.map((issue) => `${issue.component}: ${issue.message}`).join(" · ")}</p></section>
+      )}
       <section className="detail-section">
         <h2>Content integrity</h2>
         {checks.map((check) => <Finding key={check.id} definition={check} result={abstract.checks[check.id]} />)}

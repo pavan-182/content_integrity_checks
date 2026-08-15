@@ -82,13 +82,15 @@ class NonsenseCandidateDetector:
             explanation = normalize_whitespace(str(payload["explanation"]))
             confidence_name = normalize_whitespace(str(payload["confidence"])).lower()
             if not isinstance(understandable, bool) or confidence_name not in CONFIDENCE:
+                raise ValueError("Nonsense detector returned invalid values")
+            if understandable:
                 return None
-            if understandable or not suspected_phrase or not explanation:
-                return None
+            if not suspected_phrase or not explanation:
+                raise ValueError("Nonsense detector omitted required evidence")
             if normalize_for_matching(suspected_phrase) not in normalize_for_matching(sentence):
-                return None
-        except (KeyError, TypeError, ValueError, RuntimeError):
-            return None
+                raise ValueError("Nonsense detector evidence was not found in source text")
+        except (KeyError, TypeError, ValueError, RuntimeError) as exc:
+            raise RuntimeError("Nonsense candidate model failed") from exc
         return Finding(
             finding_id="",
             record_id=record.record_id,

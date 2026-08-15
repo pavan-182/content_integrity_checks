@@ -46,7 +46,15 @@ export function normalizeReport(report) {
       checks: Object.fromEntries(
         checks.map((check) => [
           check.id,
-          abstract.checks?.[check.id] || { flagged: false, match_count: 0, evidence: "", reason: "", findings: [] },
+          abstract.checks?.[check.id] || {
+            flagged: false,
+            review_candidate: false,
+            operational_failure: true,
+            match_count: 0,
+            evidence: "",
+            reason: "Check result missing from the pipeline report.",
+            findings: [],
+          },
         ]),
       ),
     })),

@@ -67,7 +67,7 @@ class LLMTraceValidator:
             if status not in {"confirmed", "rejected", "uncertain"} or not reason:
                 raise ValueError("LLM trace validator returned invalid values")
         except (KeyError, TypeError, ValueError, RuntimeError):
-            status = "uncertain"
+            status = "validation_failed"
             reason = "Validator response could not be parsed."
         return ValidationResult(
             finding_id="",
@@ -101,6 +101,8 @@ def apply_llm_trace_validation(
         candidate.validated_by = f"{result.model_id}:{result.prompt_version}"
         if result.status == "rejected":
             candidate.review_status = "excluded_by_validation"
+        elif result.status == "validation_failed":
+            candidate.review_status = "validation_failed"
         elif candidate.rule and candidate.rule.signal_level == "supporting":
             candidate.review_status = "supporting_only"
         elif result.status == "uncertain":

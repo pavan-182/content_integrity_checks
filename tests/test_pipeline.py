@@ -447,12 +447,15 @@ class PipelineTests(unittest.TestCase):
             with result.output_paths["detailed_findings_csv"].open(newline="", encoding="utf-8") as handle:
                 self.assertEqual(next(csv.reader(handle)), FINDINGS_COLUMNS)
             self.assertTrue(result.output_paths["content_integrity_json"].exists())
+            self.assertTrue(result.output_paths["operational_issues_csv"].exists())
             with result.output_paths["content_integrity_json"].open(encoding="utf-8") as handle:
                 data = json.load(handle)
-            self.assertEqual(set(data), {"run", "summary", "abstracts"})
+            self.assertEqual(set(data), {"run", "summary", "abstracts", "operational_issues"})
             self.assertEqual(data["summary"]["total_submissions"], 1)
-            self.assertEqual(data["summary"]["low_risk"], 1)
+            self.assertEqual(data["summary"]["no_risk"], 1)
             self.assertEqual(data["summary"]["high_risk"], 0)
+            workbook = load_workbook(result.output_paths["workbook"], read_only=True)
+            self.assertIn("Operational Issues", workbook.sheetnames)
 
     def test_frontend_json_scoped_checks_are_reported_and_risk_is_high(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir_str:
@@ -522,8 +525,8 @@ class PipelineTests(unittest.TestCase):
 
             self.assertEqual(data["summary"]["total_submissions"], 3)
             self.assertEqual(data["summary"]["high_risk"], 2)
-            self.assertEqual(data["summary"]["low_risk"], 1)
             self.assertEqual(data["summary"]["moderate_risk"], 0)
+            self.assertEqual(data["summary"]["no_risk"], 1)
 
             tortured_abstract = next(item for item in data["abstracts"] if item["abstract_id"] == "TP-1")
             self.assertEqual(len(tortured_abstract["checks"]), 6)
@@ -555,13 +558,32 @@ class PipelineTests(unittest.TestCase):
             )
 
             clean_abstract = next(item for item in data["abstracts"] if item["abstract_id"] == "CLEAN-1")
-            self.assertEqual(clean_abstract["overall_risk"], "Low")
+            self.assertEqual(clean_abstract["overall_risk"], "None")
             self.assertFalse(clean_abstract["checks"]["tortured_phrases"]["flagged"])
             self.assertFalse(clean_abstract["checks"]["llm_response_trace"]["flagged"])
             self.assertFalse(clean_abstract["checks"]["numerical_contradiction"]["flagged"])
             self.assertFalse(clean_abstract["checks"]["design_contradiction"]["flagged"])
             self.assertFalse(clean_abstract["checks"]["unverifiable_trial"]["flagged"])
             self.assertFalse(clean_abstract["checks"]["templating"]["flagged"])
+
+            workbook = load_workbook(result.output_paths["workbook"], read_only=True, data_only=True)
+            sheet = workbook["Abstract Summary"]
+            headers = [cell.value for cell in sheet[1]]
+            excel_rows = {
+                row["record_id"]: row
+                for row in (
+                    dict(zip(headers, (cell.value for cell in cells)))
+                    for cells in sheet.iter_rows(min_row=2)
+                )
+            }
+            for abstract in data["abstracts"]:
+                excel = excel_rows[abstract["abstract_id"]]
+                self.assertEqual(abstract["overall_content_risk"], excel["overall_content_risk"])
+                self.assertEqual("Yes" if abstract["review_required"] else "No", excel["review_required"])
+                self.assertEqual(
+                    abstract["checks"]["design_contradiction"]["flagged"],
+                    excel["design_contradiction_flag"] == "Yes",
+                )
 
     def test_template_candidate_without_reviewer_finding_does_not_flag_templating(self) -> None:
         records = [ParsedRecord(source_file="sample.xml", record_id="A", title="A title"), ParsedRecord(source_file="sample.xml", record_id="B", title="B title")]
@@ -596,6 +618,12 @@ class PipelineTests(unittest.TestCase):
             findings=findings,
             enriched_pair_rows=enriched_pair_rows,
             enriched_abstract_rows=enriched_abstract_rows,
+            abstract_summary_rows=_aggregate_findings(
+                records, findings, [], [],
+                enriched_pair_rows=enriched_pair_rows,
+                enriched_abstract_rows=enriched_abstract_rows,
+            ),
+            operational_issues=[],
             generated_at="2026-01-01T00:00:00Z",
             git_revision="deadbeef",
         )
@@ -638,6 +666,12 @@ class PipelineTests(unittest.TestCase):
             findings=findings,
             enriched_pair_rows=enriched_pair_rows,
             enriched_abstract_rows=enriched_abstract_rows,
+            abstract_summary_rows=_aggregate_findings(
+                records, findings, [], [],
+                enriched_pair_rows=enriched_pair_rows,
+                enriched_abstract_rows=enriched_abstract_rows,
+            ),
+            operational_issues=[],
             generated_at="2026-01-01T00:00:00Z",
             git_revision="deadbeef",
         )
@@ -685,11 +719,98 @@ class PipelineTests(unittest.TestCase):
                 {"record_id": "A", "family_id": "", "family_size": 0},
                 {"record_id": "B", "family_id": "", "family_size": 0},
             ],
+            abstract_summary_rows=_aggregate_findings(
+                records,
+                [],
+                [],
+                [],
+                enriched_pair_rows=[pair],
+                enriched_abstract_rows=[
+                    {"record_id": "A", "family_id": "", "family_size": 0},
+                    {"record_id": "B", "family_id": "", "family_size": 0},
+                ],
+            ),
+            operational_issues=[],
             generated_at="2026-01-01T00:00:00Z",
             git_revision="deadbeef",
         )
         self.assertEqual(output["summary"]["high_risk"], 0)
         self.assertFalse(output["abstracts"][0]["checks"]["templating"]["flagged"])
+
+    def test_reporting_cannot_promote_ineligible_finding(self) -> None:
+        record = ParsedRecord(source_file="sample.xml", record_id="REC-1", title="Rejected")
+        rejected = _tortured_finding("rejected", "high")
+        failed = _tortured_finding("validation_failed", "high")
+        failed.finding_id = "FND-00002"
+        findings = [rejected, failed]
+        template_abstracts = [{"record_id": "REC-1", "family_id": "", "family_size": 0}]
+        summary = _aggregate_findings([record], findings, [], [])[0]
+
+        output = build_content_integrity_frontend_json(
+            records=[record],
+            findings=findings,
+            enriched_pair_rows=[],
+            enriched_abstract_rows=template_abstracts,
+            abstract_summary_rows=[summary],
+            operational_issues=[{
+                "component": "tortured_phrase",
+                "record_id": "REC-1",
+                "source_file": "sample.xml",
+                "status": "failed",
+                "error_type": "validation_failed",
+                "message": "Validator unavailable.",
+                "retry_count": 0,
+                "recoverable": True,
+            }],
+            generated_at="2026-01-01T00:00:00Z",
+            git_revision="deadbeef",
+        )
+
+        abstract = output["abstracts"][0]
+        self.assertEqual(abstract["overall_content_risk"], "None")
+        self.assertFalse(abstract["checks"]["tortured_phrases"]["flagged"])
+        self.assertTrue(abstract["checks"]["tortured_phrases"]["operational_failure"])
+        self.assertTrue(all(not finding["active"] for finding in abstract["checks"]["tortured_phrases"]["findings"]))
+        self.assertEqual(len(output["operational_issues"]), 1)
+
+    def test_detector_failure_is_not_reported_as_clear(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            input_dir = root / "input"
+            input_dir.mkdir()
+            _write_temp_file(
+                input_dir,
+                "record.xml",
+                """
+                <article><front><article-meta>
+                  <article-id pub-id-type="manuscript">FAILED-CHECK</article-id>
+                  <article-title>Detector failure</article-title>
+                  <abstract><p>A clean abstract.</p></abstract>
+                </article-meta></front></article>
+                """,
+            )
+            dictionary = _write_temp_file(
+                root,
+                "dict.csv",
+                "Fingerprint - Tortured Phrase,Expected Text,Nb Retrieved Papers\n",
+            )
+
+            with patch(
+                "content_integrity.pipeline.detect_numerical_contradictions",
+                side_effect=RuntimeError("detector unavailable"),
+            ):
+                result = run_default_pipeline(input_dir, dictionary, root / "output")
+
+            report = json.loads(result.output_paths["content_integrity_json"].read_text())
+            abstract = report["abstracts"][0]
+            self.assertFalse(abstract["checks"]["numerical_contradiction"]["flagged"])
+            self.assertTrue(abstract["checks"]["numerical_contradiction"]["operational_failure"])
+            self.assertTrue(any(
+                issue["component"] == "numerical_contradiction"
+                for issue in report["operational_issues"]
+            ))
+            workbook = load_workbook(result.output_paths["workbook"], read_only=True, data_only=True)
+            self.assertEqual(workbook["Operational Issues"]["A2"].value, "numerical_contradiction")
 
     def test_editor_triage_workbook_contains_only_editor_sheets_and_evidence(self) -> None:
         from openpyxl import load_workbook
@@ -719,8 +840,9 @@ class PipelineTests(unittest.TestCase):
             path = write_editor_triage_workbook(Path(directory) / "Editor_Triage_Workbook.xlsx", report)
             workbook = load_workbook(path, read_only=True, data_only=True)
             self.assertEqual(workbook.sheetnames, [
-                "Dashboard", "High Risk Queue", "Moderate Risk Queue", "Low Risk Queue",
-                "All Abstracts", "Template Evidence", "Check Detail", "How This Works",
+                "Dashboard", "High Risk Queue", "Medium Risk Queue", "Low Risk Queue",
+                "None Risk Queue", "All Abstracts", "Operational Issues", "Template Evidence",
+                "Check Detail", "How This Works",
             ])
             self.assertEqual(workbook["Check Detail"]["E2"].value, "Actual source sentence.")
             self.assertEqual(workbook["Check Detail"]["O2"].value, "A: matched text || B: matched text")
@@ -776,7 +898,7 @@ class PipelineTests(unittest.TestCase):
             self.assertTrue(row["checks"]["unverifiable_trial"]["flagged"])
             self.assertEqual(
                 row["why_flagged"],
-                "Numerical Contradiction, Design Contradiction, Unverifiable Clinical Trial",
+                "Potential content integrity issue detected. Manual review recommended.",
             )
             self.assertTrue(result.output_paths["numerical_contradictions_csv"].exists())
             self.assertTrue(result.output_paths["design_contradictions_csv"].exists())
@@ -833,6 +955,11 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(uncertain_summary["tortured_uncertain_count"], 1)
         self.assertEqual(failed_summary["overall_content_risk"], "None")
         self.assertEqual(uncertain_summary["overall_content_risk"], "None")
+        self.assertEqual(failed_summary["review_required"], "No")
+        self.assertEqual(uncertain_summary["review_required"], "Yes")
+        self.assertFalse(failed_finding.active)
+        self.assertFalse(uncertain_finding.active)
+        self.assertTrue(uncertain_finding.review_candidate)
         self.assertEqual(failed_finding.to_dict()["validation_status"], "validation_failed")
 
     def test_rejected_tortured_phrase_does_not_affect_risk(self) -> None:
@@ -867,6 +994,10 @@ class PipelineTests(unittest.TestCase):
                 self.assertEqual(summary["overall_content_risk"], risk)
                 self.assertEqual(summary["total_finding_count"], risk_count)
                 self.assertEqual(summary["tortured_phrase_count"], 1)
+                self.assertEqual(
+                    summary["review_required"],
+                    "Yes" if status in {"confirmed", "", "uncertain", "candidate"} else "No",
+                )
 
     def test_validator_parses_wrapped_json(self) -> None:
         parsed = _parse_validator_payload('Result: {"status":"confirmed","reason":"Trace confirmed."} done')

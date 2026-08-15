@@ -80,12 +80,12 @@ def _ner_model():
         return None
     try:
         import spacy
-    except ImportError:
-        return None
+    except ImportError as exc:
+        raise RuntimeError(f"Configured SciSpaCy model {model_name!r} is unavailable.") from exc
     try:
         return spacy.load(model_name)
-    except Exception:
-        return None
+    except Exception as exc:
+        raise RuntimeError(f"Configured SciSpaCy model {model_name!r} could not be loaded.") from exc
 
 
 def _ner_entities(text: str, section: str) -> list[TypedEntity]:
@@ -127,8 +127,8 @@ def _pubmedbert_pipeline():
             "token-classification", model=model_name, tokenizer=tokenizer,
             aggregation_strategy="simple", device=-1,
         )
-    except Exception:
-        return None
+    except Exception as exc:
+        raise RuntimeError(f"Configured PubMedBERT model {model_name!r} could not be loaded.") from exc
 
 
 def _pubmedbert_entities(text: str, section: str) -> list[TypedEntity]:

@@ -71,3 +71,25 @@ test("extracts validator judgments for the evals tab", () => {
     },
   ]);
 });
+
+test("preserves authoritative risk and treats a missing check as unknown", () => {
+  const report = normalizeReport({
+    summary: { total_submissions: 1 },
+    abstracts: [{
+      abstract_id: "A-1",
+      title: "Rejected finding",
+      overall_risk: "None",
+      review_required: false,
+      checks: {
+        tortured_phrases: {
+          flagged: false,
+          findings: [{ severity: "high", validation_status: "rejected", active: false }],
+        },
+      },
+    }],
+  });
+
+  assert.equal(report.abstracts[0].overall_risk, "None");
+  assert.equal(report.abstracts[0].checks.tortured_phrases.flagged, false);
+  assert.equal(report.abstracts[0].checks.design_contradiction.operational_failure, true);
+});

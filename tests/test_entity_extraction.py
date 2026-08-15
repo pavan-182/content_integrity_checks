@@ -59,6 +59,12 @@ class EntityExtractionTests(unittest.TestCase):
             [("miR-708", "mirna", "hybrid_context"), ("FOXP", "gene", "pubmedbert")],
         )
 
+    @patch("content_integrity.entity_extraction._pubmedbert_pipeline", side_effect=RuntimeError("model unavailable"))
+    def test_configured_pubmedbert_failure_is_not_silent(self, pipeline) -> None:
+        with patch.dict("os.environ", {"ASCO_PUBMEDBERT_MODEL": "test"}):
+            with self.assertRaisesRegex(RuntimeError, "model unavailable"):
+                extract_typed_entities("FOXP expression")
+
 
 if __name__ == "__main__":
     unittest.main()

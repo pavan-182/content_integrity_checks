@@ -161,6 +161,34 @@ class DesignContradictionTests(unittest.TestCase):
         ], validator=Validator())[0]
         self.assertEqual(finding.validation_status, "uncertain")
         self.assertEqual(finding.validation_reason, "The study component is unclear.")
+        self.assertFalse(finding.active)
+        self.assertEqual(finding.review_status, "needs_editor_review")
+
+    def test_rejected_validation_deactivates_detected_contradiction(self) -> None:
+        class Validator:
+            def validate(self, finding):
+                return DesignValidationResult("rejected", "The descriptions refer to different periods.")
+
+        finding = detect_design_contradictions([
+            _record("This study was open-label and double-blind.")
+        ], validator=Validator())[0]
+
+        self.assertTrue(finding.check_triggered)
+        self.assertFalse(finding.active)
+        self.assertEqual(finding.review_status, "excluded_by_validation")
+
+    def test_validator_failure_is_operational_not_uncertain(self) -> None:
+        class Validator:
+            def validate(self, finding):
+                raise RuntimeError("model unavailable")
+
+        finding = detect_design_contradictions([
+            _record("This study was open-label and double-blind.")
+        ], validator=Validator())[0]
+
+        self.assertEqual(finding.validation_status, "validation_failed")
+        self.assertFalse(finding.active)
+        self.assertEqual(finding.review_status, "validation_failed")
 
     def test_subgroup_and_secondary_analyses_are_separate_components(self) -> None:
         for analysis in ("subgroup", "secondary"):
