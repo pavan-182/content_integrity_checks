@@ -496,7 +496,7 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(len(candidates), 1)
 
             workbook = load_workbook(result.output_paths["workbook"])
-            worksheet = workbook["Template Pairs"]
+            worksheet = workbook["Template_Pairs"]
             headers = [cell.value for cell in worksheet[1]]
             editor_column = headers.index("editor_label") + 1
             self.assertEqual(worksheet.max_row - 1, len(rows))
@@ -558,12 +558,15 @@ class PipelineTests(unittest.TestCase):
             self.assertTrue(result.output_paths["operational_issues_csv"].exists())
             with result.output_paths["content_integrity_json"].open(encoding="utf-8") as handle:
                 data = json.load(handle)
-            self.assertEqual(set(data), {"run", "summary", "abstracts", "operational_issues"})
+            self.assertEqual(
+                set(data),
+                {"schema_version", "run", "summary", "abstracts", "findings", "template_pairs", "template_families", "operational_issues"},
+            )
             self.assertEqual(data["summary"]["total_submissions"], 1)
             self.assertEqual(data["summary"]["no_risk"], 1)
             self.assertEqual(data["summary"]["high_risk"], 0)
             workbook = load_workbook(result.output_paths["workbook"], read_only=True)
-            self.assertIn("Operational Issues", workbook.sheetnames)
+            self.assertIn("Operational_Issues", workbook.sheetnames)
 
     def test_frontend_json_scoped_checks_are_reported_and_risk_is_high(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir_str:
@@ -675,7 +678,7 @@ class PipelineTests(unittest.TestCase):
             self.assertFalse(clean_abstract["checks"]["templating"]["flagged"])
 
             workbook = load_workbook(result.output_paths["workbook"], read_only=True, data_only=True)
-            sheet = workbook["Abstract Summary"]
+            sheet = workbook["Abstracts"]
             headers = [cell.value for cell in sheet[1]]
             excel_rows = {
                 row["record_id"]: row
@@ -918,47 +921,7 @@ class PipelineTests(unittest.TestCase):
                 for issue in report["operational_issues"]
             ))
             workbook = load_workbook(result.output_paths["workbook"], read_only=True, data_only=True)
-            self.assertEqual(workbook["Operational Issues"]["A2"].value, "numerical_contradiction")
-
-    def test_editor_triage_workbook_contains_only_editor_sheets_and_evidence(self) -> None:
-        from openpyxl import load_workbook
-        from content_integrity.reporting import write_editor_triage_workbook
-
-        report = {
-            "summary": {
-                "total_submissions": 1, "high_risk": 1, "moderate_risk": 0,
-                "low_risk": 0, "requires_editor_judgement": 1,
-                "cleared_without_manual_review": 0,
-            },
-            "abstracts": [{
-                "abstract_id": "A", "title": "Title", "corresponding_author": None,
-                "overall_risk": "High", "why_flagged": "Tortured Phrases",
-                "high_confidence_flags": 1, "corroborating_flags": 0,
-                "checks": {
-                    "tortured_phrases": {"flagged": True, "evidence": "Actual source sentence."},
-                    "llm_response_trace": {"flagged": False, "evidence": ""},
-                    "numerical_contradiction": {"flagged": False, "evidence": ""},
-                    "design_contradiction": {"flagged": False, "evidence": ""},
-                    "unverifiable_trial": {"flagged": False, "evidence": ""},
-                    "templating": {"flagged": True, "evidence": "A: matched text || B: matched text", "reason": "96% structural overlap in Results with B."},
-                },
-            }],
-        }
-        with tempfile.TemporaryDirectory() as directory:
-            path = write_editor_triage_workbook(Path(directory) / "Editor_Triage_Workbook.xlsx", report)
-            workbook = load_workbook(path, read_only=True, data_only=True)
-            self.assertEqual(workbook.sheetnames, [
-                "Dashboard", "High Risk Queue", "Medium Risk Queue", "Low Risk Queue",
-                "None Risk Queue", "All Abstracts", "Operational Issues", "Template Evidence",
-                "Check Detail", "How This Works",
-            ])
-            self.assertEqual(workbook["Check Detail"]["E2"].value, "Actual source sentence.")
-            self.assertEqual(workbook["Check Detail"]["O2"].value, "A: matched text || B: matched text")
-            self.assertEqual(workbook["Check Detail"]["P2"].value, "96% structural overlap in Results with B.")
-            self.assertEqual(workbook["Dashboard"]["A1"].value, "Editor Triage — Submission Overview")
-            self.assertEqual(str(workbook["Dashboard"]["A4"].fill.fgColor.rgb), "00D9E1F2")
-            self.assertEqual(workbook["All Abstracts"]["D1"].value, "Overall Risk")
-            self.assertEqual(workbook["All Abstracts"]["D2"].value, "High")
+            self.assertEqual(workbook["Operational_Issues"]["A2"].value, "numerical_contradiction")
 
     def test_pipeline_integrates_contradiction_and_trial_checks(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1184,14 +1147,15 @@ class PipelineTests(unittest.TestCase):
             )
 
             workbook = load_workbook(result.output_paths["workbook"], read_only=True)
-            ws = workbook["Integrity Findings"]
+            ws = workbook["Findings"]
             headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
             self.assertLess(headers.index("confidence"), headers.index("validation_status"))
             self.assertLess(headers.index("validation_status"), headers.index("validation_reason"))
             self.assertLess(headers.index("validation_reason"), headers.index("validated_by"))
             self.assertLess(headers.index("validated_by"), headers.index("rule_id"))
-            summary_headers = [cell.value for cell in next(workbook["Abstract Summary"].iter_rows(max_row=1))]
-            self.assertIn("tortured_rejected_count", summary_headers)
+            summary_headers = [cell.value for cell in next(workbook["Abstracts"].iter_rows(max_row=1))]
+            self.assertIn("overall_content_risk", summary_headers)
+            self.assertIn("tortured_rejected_count", result.abstract_summary_rows[0])
 
     def test_default_pipeline_leaves_validation_columns_blank(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir_str:

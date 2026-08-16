@@ -2,7 +2,6 @@ import json
 import subprocess
 import tempfile
 import unittest
-from unittest import mock
 from pathlib import Path
 
 from server import run_pipeline
@@ -23,12 +22,12 @@ class ServerTests(unittest.TestCase):
                 self.assertEqual([path.name for path in input_dir.glob("*.xml")], ["input.xml"])
                 pipeline_output.mkdir()
                 (pipeline_output / "content_integrity_results.json").write_text(json.dumps(expected), encoding="utf-8")
+                (pipeline_output / "content_integrity_screening_poc.xlsx").write_bytes(b"workbook-bytes")
                 return subprocess.CompletedProcess(command, 0)
 
-            with mock.patch("server.write_editor_triage_workbook") as write_workbook:
-                self.assertEqual(run_pipeline(source, output, runner), expected)
-            write_workbook.assert_called_once_with(output / "Editor_Triage_Workbook.xlsx", expected)
+            self.assertEqual(run_pipeline(source, output, runner), expected)
             self.assertEqual(json.loads((output / "content_integrity_results.json").read_text()), expected)
+            self.assertEqual((output / "content_integrity_screening_poc.xlsx").read_bytes(), b"workbook-bytes")
 
 
 if __name__ == "__main__":

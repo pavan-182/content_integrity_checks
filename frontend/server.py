@@ -19,8 +19,6 @@ REPORT = OUTPUT / "content_integrity_results.json"
 LOCK = threading.Lock()
 sys.path.insert(0, str(ROOT))
 
-from content_integrity.reporting import write_editor_triage_workbook
-
 
 def run_pipeline(input_path: Path = INPUT, output_dir: Path = OUTPUT, runner=subprocess.run) -> dict:
     if not input_path.exists():
@@ -55,7 +53,9 @@ def run_pipeline(input_path: Path = INPUT, output_dir: Path = OUTPUT, runner=sub
             shutil.rmtree(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(generated_report, output_dir / "content_integrity_results.json")
-        write_editor_triage_workbook(output_dir / "Editor_Triage_Workbook.xlsx", report)
+        generated_workbook = pipeline_output / "content_integrity_screening_poc.xlsx"
+        if generated_workbook.exists():
+            shutil.copy2(generated_workbook, output_dir / generated_workbook.name)
         return report
 
 

@@ -1205,6 +1205,8 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
             operational_issues=operational_issues,
             generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
             git_revision=commit_sha,
+            run_metadata=dict(run_metadata_rows),
+            template_family_rows=enriched_family_rows,
         ),
     )
     output_paths["clusters_csv"] = write_csv(

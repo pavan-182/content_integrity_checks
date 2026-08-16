@@ -9,10 +9,14 @@ from typing import Any
 
 from openpyxl import Workbook
 from openpyxl.worksheet.datavalidation import DataValidation
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.styles import Alignment, Font, PatternFill
 
 from .utils import ensure_parent_dir, normalize_whitespace, to_pipe_string
 
+
+# Bump when the top-level JSON contract (build_content_integrity_frontend_json)
+# gains/removes/renames a field in a way a machine consumer must react to.
+SCHEMA_VERSION = "1.0"
 
 HEADER_FILL = PatternFill("solid", fgColor="1F4E78")
 HEADER_FONT = Font(color="FFFFFF", bold=True)
@@ -31,15 +35,6 @@ EDITOR_LABELS = (
     "false_positive",
     "new_pattern_confirmed",
     "uncertain",
-)
-
-CONTENT_CHECKS = (
-    ("tortured_phrases", "Tortured Phrases", "tortured_phrase"),
-    ("llm_response_trace", "LLM Response Trace", "llm_response_trace"),
-    ("numerical_contradiction", "Numerical Contradiction", "numerical_contradiction"),
-    ("design_contradiction", "Design Contradiction", "design_contradiction"),
-    ("unverifiable_trial", "Unverifiable Clinical Trial", "unverifiable_clinical_trial"),
-    ("templating", "Templating (Cross-Author)", "templating"),
 )
 
 FINDINGS_COLUMNS = [
@@ -279,6 +274,30 @@ ABSTRACT_SUMMARY_COLUMNS = [
     "review_reason",
 ]
 
+# Editor-facing subset of ABSTRACT_SUMMARY_COLUMNS for the Abstracts review-queue
+# sheet: the full column set above is a diagnostic dump, not a reviewer queue.
+ABSTRACTS_SHEET_COLUMNS = [
+    "record_id",
+    "title",
+    "source_file",
+    "parse_status",
+    "overall_content_risk",
+    "review_required",
+    "review_reason",
+    "llm_trace_flag",
+    "tortured_phrase_flag",
+    "nonsense_candidate_flag",
+    "numerical_contradiction_flag",
+    "design_contradiction_flag",
+    "unverifiable_trial_flag",
+    "template_flag",
+    "active_finding_count",
+    "highest_severity",
+    "strongest_matched_record_id",
+    "strongest_matched_title",
+    "primary_template_pattern",
+]
+
 
 def _stringify(value: Any) -> str:
     if value is None:
@@ -400,9 +419,24 @@ def _write_dashboard(
     findings_rows: list[dict[str, Any]],
     cluster_rows: list[dict[str, Any]],
     parse_warning_rows: list[dict[str, Any]],
+    operational_issue_rows: Sequence[dict[str, Any]] = (),
 ) -> None:
     ws = workbook.create_sheet("Dashboard")
     row = 1
+
+    records_with_issues = len({str(issue.get("record_id")) for issue in operational_issue_rows if issue.get("record_id")})
+    row = _dashboard_block(
+        ws,
+        "Run overview",
+        [
+            {"metric": "total_abstracts", "count": len(abstract_summary_rows)},
+            {"metric": "successfully_processed", "count": sum(1 for item in abstract_summary_rows if item.get("parse_status") != "failed")},
+            {"metric": "records_with_operational_issues", "count": records_with_issues},
+            {"metric": "records_requiring_review", "count": sum(1 for item in abstract_summary_rows if item.get("review_required") == "Yes")},
+        ],
+        ["metric", "count"],
+        row,
+    )
 
     priority_counts = Counter(row["overall_content_risk"] for row in abstract_summary_rows)
     row = _dashboard_block(
@@ -606,21 +640,25 @@ def build_content_integrity_frontend_json(
     operational_issues: list[Any],
     generated_at: str,
     git_revision: str,
+    run_metadata: dict[str, Any] | None = None,
+    template_family_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     record_lookup = {record.record_id: record for record in records}
     template_abstract_lookup = {row["record_id"]: row for row in enriched_abstract_rows}
     result_lookup = {str(row["record_id"]): row for row in abstract_summary_rows}
     if set(result_lookup) != {str(record.record_id) for record in records}:
         raise ValueError("Authoritative abstract results must cover every record exactly once.")
-    operational_issue_rows = [
-        issue.to_dict() if hasattr(issue, "to_dict") else dict(issue)
-        for issue in operational_issues
-    ]
+    operational_issue_rows = sorted(
+        (issue.to_dict() if hasattr(issue, "to_dict") else dict(issue) for issue in operational_issues),
+        key=lambda issue: (str(issue.get("component", "")), str(issue.get("record_id", "")), str(issue.get("error_type", ""))),
+    )
     operational_by_record: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for issue in operational_issue_rows:
         operational_by_record[str(issue.get("record_id", ""))].append(issue)
     findings_by_record: dict[str, list[Finding]] = defaultdict(list)
+    all_findings_by_record: dict[str, list[Finding]] = defaultdict(list)
     for finding in findings:
+        all_findings_by_record[finding.record_id].append(finding)
         if finding.detector_type not in {
             "tortured_phrase",
             "llm_response_trace",
@@ -716,6 +754,8 @@ def build_content_integrity_frontend_json(
             "flagged_checks": flagged_checks,
             "high_confidence_flags": 0,
             "corroborating_flags": 0,
+            "finding_ids": [finding.finding_id for finding in all_findings_by_record.get(record_id, [])],
+            "template_pair_ids": [pair["pair_id"] for pair in ordered_template_pairs],
             "operational_issues": record_operational_issues,
             "checks": {
                 "tortured_phrases": {
@@ -902,10 +942,12 @@ def build_content_integrity_frontend_json(
     no_risk = sum(1 for item in abstracts if item["overall_risk"] == "None")
     requires_editor_judgement = sum(bool(item["review_required"]) for item in abstracts)
     return {
+        "schema_version": SCHEMA_VERSION,
         "run": {
             "generated_at": generated_at,
             "git_revision": git_revision,
             "report_version": "content-integrity-frontend-v1",
+            **(run_metadata or {}),
         },
         "summary": {
             "total_submissions": total_submissions,
@@ -917,6 +959,34 @@ def build_content_integrity_frontend_json(
             "cleared_without_manual_review": total_submissions - requires_editor_judgement,
         },
         "abstracts": abstracts,
+        "findings": [
+            finding.to_dict()
+            for finding in sorted(findings, key=lambda item: (item.record_id, item.detector_type, item.finding_id))
+        ],
+        "template_pairs": [
+            {
+                "pair_id": pair["pair_id"],
+                "record_a": pair["left_record_id"],
+                "record_b": pair["right_record_id"],
+                "title_a": pair["left_title"],
+                "title_b": pair["right_title"],
+                "pair_class": pair["pair_class"],
+                "review_priority": pair["review_priority"],
+                "confidence": pair.get("confidence", ""),
+                "editorial_score": pair.get("editorial_score", ""),
+                "primary_evidence": pair.get("primary_evidence", ""),
+                "supporting_evidence": _split_values(str(pair.get("supporting_evidence", ""))),
+                "strongest_section": pair.get("strongest_section", ""),
+                "masked_body_similarity": pair.get("masked_body_similarity", 0.0),
+                "original_body_similarity": pair.get("original_body_similarity", 0.0),
+                "likely_substitutions": _split_semicolon_values(str(pair.get("likely_substitutions", ""))),
+                "context_interpretation": pair.get("context_interpretation", ""),
+                "matching_text_evidence": pair.get("matching_text_evidence", ""),
+                "family_id": pair.get("family_id", ""),
+            }
+            for pair in sorted(reviewable_pairs, key=lambda pair: str(pair["pair_id"]))
+        ],
+        "template_families": template_family_rows or [],
         "operational_issues": operational_issue_rows,
     }
 
@@ -952,7 +1022,7 @@ def write_workbook(
     default_sheet = workbook.active
     workbook.remove(default_sheet)
 
-    _write_dashboard(workbook, abstract_summary_rows, findings_rows, cluster_rows, parse_warning_rows)
+    _write_dashboard(workbook, abstract_summary_rows, findings_rows, cluster_rows, parse_warning_rows, operational_issue_rows)
 
     # Data Inventory sheet
     ws = workbook.create_sheet("Data Inventory")
@@ -991,52 +1061,39 @@ def write_workbook(
     ws.freeze_panes = f"A{row+1}"
     _auto_size_columns(ws)
 
-    # Abstract Summary
-    ws = workbook.create_sheet("Abstract Summary")
-    _write_table(ws, abstract_summary_rows, ABSTRACT_SUMMARY_COLUMNS, start_row=1)
+    # Abstracts - the primary editor review queue (trimmed to reviewer-relevant
+    # fields; the full diagnostic column set stays available in the JSON export).
+    ws = workbook.create_sheet("Abstracts")
+    _write_table(ws, abstract_summary_rows, ABSTRACTS_SHEET_COLUMNS, start_row=1)
     ws.freeze_panes = "A2"
     _auto_size_columns(ws)
 
-    # Integrity Findings
-    ws = workbook.create_sheet("Integrity Findings")
+    # Findings - one row per editor-visible finding, same authoritative rows as
+    # the JSON "findings" array (REVIEW_FINDINGS_COLUMNS, not the raw detector dump).
+    ws = workbook.create_sheet("Findings")
     _write_table(
         ws,
         findings_rows
         or [
             {
                 "finding_id": "",
+                "detector_type": "",
+                "check_type": "",
                 "record_id": "",
                 "source_file": "",
-                "detector_type": "",
-                "category": "",
-                "matched_text": "",
-                "expected_term": "",
                 "evidence_snippet": "No integrity findings detected in this run.",
-                "section_or_field": "",
-                "severity": "",
-                "confidence": "",
-                "validation_status": "",
-                "validation_reason": "",
-                "validated_by": "",
-                "rule_id": "",
-                "template_cluster_id": "",
-                "cluster_size": "",
-                "similar_record_ids": "",
-                "similarity_score": "",
-                "cluster_severity": "",
-                "shared_skeleton_excerpt": "No integrity findings detected in this run.",
-                "metadata_context": "",
             }
         ],
-        FINDINGS_COLUMNS,
+        REVIEW_FINDINGS_COLUMNS,
         start_row=1,
     )
-    _add_editor_label_validation(ws, FINDINGS_COLUMNS)
+    _add_editor_label_validation(ws, REVIEW_FINDINGS_COLUMNS)
     ws.freeze_panes = "A2"
     _auto_size_columns(ws)
 
-    # Template Pair Evidence
-    ws = workbook.create_sheet("Template Pairs")
+    # Template_Pairs - editor-facing pair evidence, generated from the same
+    # canonical pair computation as the JSON "template_pairs" array.
+    ws = workbook.create_sheet("Template_Pairs")
     _write_table(ws, pair_rows, pair_columns, start_row=1)
     if "editor_label" in pair_columns:
         _add_editor_label_validation(ws, pair_columns)
@@ -1061,218 +1118,18 @@ def write_workbook(
     ws.freeze_panes = "A2"
     _auto_size_columns(ws)
 
-    ws = workbook.create_sheet("Operational Issues")
+    # Operational_Issues - checks that could not complete, kept separate from
+    # integrity findings so "no issue found" is never confused with "not checked".
+    ws = workbook.create_sheet("Operational_Issues")
     _write_table(ws, operational_issue_rows, OPERATIONAL_ISSUE_COLUMNS, start_row=1)
     ws.freeze_panes = "A2"
     _auto_size_columns(ws)
 
-    # Run Metadata
-    ws = workbook.create_sheet("Run Metadata")
+    # Run_Metadata - human-readable version of the JSON run block.
+    ws = workbook.create_sheet("Run_Metadata")
     _write_key_value_block(ws, run_metadata_rows, start_row=1)
     _auto_size_columns(ws)
 
     workbook.save(resolved)
     return resolved
 
-
-def write_editor_triage_workbook(path: str | Path, report: dict[str, Any]) -> Path:
-    """Write the content-only, editor-facing workbook consumed by the frontend."""
-    resolved = ensure_parent_dir(path)
-    workbook = Workbook()
-    workbook.remove(workbook.active)
-    abstracts = report["abstracts"]
-    summary = report["summary"]
-    checks = tuple((check_id, label) for check_id, label, _ in CONTENT_CHECKS)
-
-    dashboard = workbook.create_sheet("Dashboard")
-    dashboard.merge_cells("A1:H1")
-    dashboard["A1"] = "Editor Triage — Submission Overview"
-    for columns, label, value, color in (
-        ("A:B", "Total Submissions", summary["total_submissions"], "D9E1F2"),
-        ("C:D", "No Active Risk", summary.get("no_risk", summary.get("low_risk", 0)), "C6E0B4"),
-        ("E:F", "Medium Risk", summary["moderate_risk"], "FFE699"),
-        ("G:H", "High Risk", summary["high_risk"], "F8CBAD"),
-    ):
-        left, right = columns.split(":")
-        dashboard.merge_cells(f"{left}3:{right}3")
-        dashboard.merge_cells(f"{left}4:{right}5")
-        dashboard[f"{left}3"] = label
-        dashboard[f"{left}4"] = value
-        dashboard[f"{left}4"].fill = PatternFill("solid", fgColor=color)
-    total = summary["total_submissions"] or 1
-    for row, label, value in (
-        (7, "Requires Editor Judgement (Moderate + High)", summary["requires_editor_judgement"]),
-        (8, "Share of Submissions Cleared Without Manual Review (Low ÷ Total)", summary["cleared_without_manual_review"] / total),
-        (9, "Share Requiring Editor Judgement (Moderate + High ÷ Total)", summary["requires_editor_judgement"] / total),
-    ):
-        dashboard.merge_cells(start_row=row, start_column=1, end_row=row, end_column=3)
-        dashboard.merge_cells(start_row=row, start_column=4, end_row=row, end_column=6)
-        dashboard.cell(row, 1, label)
-        dashboard.cell(row, 4, value)
-        if row > 7:
-            dashboard.cell(row, 4).number_format = "0%"
-
-    queue_columns = [
-        "Rank", "Abstract ID", "Title (short)", "Corresponding Author",
-        "Why Flagged (plain English)", "High-Confidence Flags", "Corroborating Flags",
-    ]
-    for risk in ("High", "Medium", "Low", "None"):
-        sheet = workbook.create_sheet(f"{risk} Risk Queue")
-        sheet.append(queue_columns)
-        for rank, abstract in enumerate((item for item in abstracts if item["overall_risk"] == risk), 1):
-            sheet.append([rank, abstract["abstract_id"], abstract["title"], abstract["corresponding_author"], abstract["why_flagged"], abstract["high_confidence_flags"], abstract["corroborating_flags"]])
-
-    all_abstracts = workbook.create_sheet("All Abstracts")
-    all_abstracts.append([
-        "Abstract ID", "Title (short)", "Corresponding Author", "Overall Risk",
-        "Review Required", "Review Reason", "Why Flagged (plain English)",
-        "High-Confidence Flags", "Corroborating Flags",
-        *(label for _, label in checks),
-    ])
-    for abstract in abstracts:
-        check_results = abstract["checks"]
-        all_abstracts.append([
-            abstract["abstract_id"], abstract["title"], abstract["corresponding_author"],
-            abstract["overall_risk"], "Yes" if abstract.get("review_required") else "No",
-            abstract.get("review_reason", ""), abstract["why_flagged"], abstract["high_confidence_flags"],
-            abstract["corroborating_flags"],
-            *("Y" if check_results.get(key, {"flagged": False})["flagged"] else "N" for key, _ in checks),
-        ])
-
-    operational = workbook.create_sheet("Operational Issues")
-    operational.append([column.replace("_", " ").title() for column in OPERATIONAL_ISSUE_COLUMNS])
-    for issue in report.get("operational_issues", []):
-        operational.append([issue.get(column, "") for column in OPERATIONAL_ISSUE_COLUMNS])
-
-    template_evidence = workbook.create_sheet("Template Evidence")
-    template_evidence.append([
-        "Pair ID", "Submitted Abstract ID", "Submitted Title", "Matched Abstract ID", "Matched Title",
-        "Reason", "Section", "Similarity", "Author Group", "Submitted Matched Text", "Matched Abstract Text",
-    ])
-    for abstract in abstracts:
-        for pair in abstract["checks"].get("templating", {}).get("evidence_pairs", []):
-            template_evidence.append([
-                pair["pair_id"], pair["submitted_abstract_id"], pair["submitted_title"],
-                pair["matched_abstract_id"], pair["matched_title"], pair["reason"], pair["section"],
-                pair["similarity"], "Same author group" if pair["same_author_group"] else "Different author group",
-                pair["submitted_evidence"], pair["matched_evidence"],
-            ])
-
-    detail = workbook.create_sheet("Check Detail")
-    detail.append(
-        ["Abstract ID", "Title (short)", "Corresponding Author"]
-        + [value for key, label in checks for value in (
-            f"{label} - Flag", f"{label} - Evidence", *((f"{label} - Reason",) if key == "templating" else ()),
-        )]
-    )
-    for abstract in abstracts:
-        check_results = abstract["checks"]
-        detail.append([
-            abstract["abstract_id"], abstract["title"], abstract["corresponding_author"],
-            *(value for key, _ in checks for value in (
-                "Y" if check_results.get(key, {"flagged": False})["flagged"] else "N",
-                (
-                    f"See Template Evidence ({len(check_results.get(key, {}).get('evidence_pairs', []))} pair(s))."
-                    if key == "templating" and check_results.get(key, {}).get("evidence_pairs")
-                    else check_results.get(key, {"flagged": False, "evidence": ""}).get("evidence") or None
-                ),
-                *((check_results.get(key, {}).get("reason") or None,) if key == "templating" else ()),
-            )),
-        ])
-
-    how = workbook.create_sheet("How This Works")
-    how.merge_cells("A1:F1")
-    how["A1"] = "Editor Triage Workbook — How This Works"
-    how.merge_cells("A3:F3")
-    how["A3"] = "Open Dashboard for the overview, then High Risk Queue and Moderate Risk Queue for your worklists. All Abstracts is the full master list."
-    how.merge_cells("A5:F5")
-    how["A5"] = "Content Integrity Checks"
-    descriptions = {
-        "Tortured Phrases": "Known paraphrase-evasion patterns detected in the abstract text.",
-        "LLM Response Trace": "Residual AI-assistant response language detected in the abstract text.",
-        "Numerical Contradiction": "Conflicting numeric claims detected within the abstract text.",
-        "Design Contradiction": "Conflicting study-design claims detected within the abstract text.",
-        "Unverifiable Clinical Trial": "Trial-registration details could not be verified locally or against a registry.",
-        "Templating (Cross-Author)": "Strong structural overlap with another submission was detected.",
-    }
-    for row, (label, description) in enumerate(descriptions.items(), 6):
-        how.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
-        how.merge_cells(start_row=row, start_column=3, end_row=row, end_column=6)
-        how.cell(row, 1, label)
-        how.cell(row, 3, description)
-    how.merge_cells("A13:F13")
-    how["A13"] = "Risk Tiers"
-    for row, label, description in (
-        (14, "High", "The authoritative aggregation result assigned High content risk."),
-        (15, "None", "No active content-integrity finding affected overall risk."),
-    ):
-        how.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
-        how.merge_cells(start_row=row, start_column=3, end_row=row, end_column=6)
-        how.cell(row, 1, label)
-        how.cell(row, 3, description)
-
-    thin = Side(style="thin", color="D9E2F3")
-    for sheet in workbook.worksheets:
-        sheet.sheet_view.showGridLines = False
-        for row in sheet.iter_rows():
-            for cell in row:
-                cell.font = Font(name="Arial", size=10, bold=cell.font.bold, color=cell.font.color)
-                cell.alignment = Alignment(vertical="center", wrap_text=True, horizontal=cell.alignment.horizontal)
-
-    dashboard["A1"].font = Font(name="Arial", size=14, bold=True, color="1F4E78")
-    for column in "ABCDEFGH":
-        dashboard.column_dimensions[column].width = 13
-    dashboard.column_dimensions["A"].width = 26
-    for column in (1, 3, 5, 7):
-        dashboard.cell(3, column).alignment = Alignment(horizontal="center", vertical="bottom", wrap_text=True)
-        dashboard.cell(3, column).font = Font(name="Arial", size=10, color="595959")
-        dashboard.cell(4, column).alignment = Alignment(horizontal="center", vertical="center")
-        dashboard.cell(4, column).font = Font(name="Arial", size=22, bold=True)
-    for row in range(7, 10):
-        dashboard.cell(row, 1).font = Font(name="Arial", size=10, bold=True)
-        dashboard.cell(row, 4).font = Font(name="Arial", size=12, bold=True)
-        dashboard.cell(row, 4).alignment = Alignment(horizontal="center")
-
-    table_widths = {
-        "High Risk Queue": [7, 13, 30, 16, 40, 14, 13],
-        "Medium Risk Queue": [7, 13, 30, 16, 40, 14, 13],
-        "Low Risk Queue": [7, 13, 30, 16, 40, 14, 13],
-        "None Risk Queue": [7, 13, 30, 16, 40, 14, 13],
-        "All Abstracts": [13, 30, 16, 12, 13, 40, 40, 12, 13, *([13] * len(checks))],
-        "Template Evidence": [18, 18, 30, 18, 30, 46, 14, 12, 20, 60, 60],
-        "Operational Issues": [24, 18, 24, 12, 24, 60, 12, 12],
-    }
-    for name, widths in table_widths.items():
-        sheet = workbook[name]
-        for cell in sheet[1]:
-            cell.fill = HEADER_FILL
-            cell.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
-            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-        for index, width in enumerate(widths, 1):
-            sheet.column_dimensions[chr(64 + index)].width = width
-        for row in sheet.iter_rows(min_row=2):
-            for cell in row:
-                cell.border = Border(bottom=thin)
-        sheet.freeze_panes = "D2" if name == "All Abstracts" else "A2"
-        sheet.auto_filter.ref = sheet.dimensions
-
-    detail.freeze_panes = "D2"
-    detail.auto_filter.ref = detail.dimensions
-    for index, cell in enumerate(detail[1], 1):
-        cell.fill = PatternFill("solid", fgColor="8EA9DB" if index <= 3 else "C0504D")
-        cell.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
-        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-        detail.column_dimensions[cell.column_letter].width = 13 if index == 1 else 26 if index == 2 else 15 if index == 3 else 9 if "Flag" in str(cell.value) else 34
-    for row in detail.iter_rows(min_row=2):
-        for cell in row:
-            cell.border = Border(bottom=thin)
-
-    how["A1"].font = Font(name="Arial", size=14, bold=True, color="1F4E78")
-    for row in (5, 13):
-        how.cell(row, 1).font = Font(name="Arial", size=11, bold=True, color="FFFFFF")
-        how.cell(row, 1).fill = HEADER_FILL
-    for column, width in zip("ABCDEF", (24, 16, 13, 13, 13, 13)):
-        how.column_dimensions[column].width = width
-
-    workbook.save(resolved)
-    return resolved

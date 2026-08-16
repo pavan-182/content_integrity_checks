@@ -609,7 +609,7 @@ class PipelineIntegrationTests(unittest.TestCase):
             self.assertIn("validation_status", row)
             self.assertIn("rule_id", row)
             workbook = load_workbook(result.output_paths["workbook"], read_only=True)
-            sheet = workbook["Integrity Findings"]
+            sheet = workbook["Findings"]
             rows = sheet.iter_rows(values_only=True)
             headers = next(rows)
             excel_row = dict(zip(headers, next(rows)))

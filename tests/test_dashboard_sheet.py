@@ -33,8 +33,8 @@ class DashboardSheetTests(unittest.TestCase):
         warnings = self._block(dashboard, "Parse failures and warnings by type")
         sections = self._block(dashboard, "Findings by abstract section")
 
-        abstract_count = workbook["Abstract Summary"].max_row - 1
-        finding_count = workbook["Integrity Findings"].max_row - 1
+        abstract_count = workbook["Abstracts"].max_row - 1
+        finding_count = workbook["Findings"].max_row - 1
         warning_count = workbook["Parse Warnings"].max_row - 1
         cluster_sheet = workbook["Template Clusters"]
         headers = [cell.value for cell in cluster_sheet[1]]
