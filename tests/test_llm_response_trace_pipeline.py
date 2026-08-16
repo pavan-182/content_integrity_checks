@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
-from csv import DictReader
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
@@ -603,18 +602,20 @@ class PipelineIntegrationTests(unittest.TestCase):
             metadata = dict(result.run_metadata_rows)
             self.assertTrue(metadata["llm_semantic_enabled"])
             self.assertEqual(metadata["llm_novel_candidate_count"], 1)
-            with result.output_paths["findings_csv"].open(encoding="utf-8", newline="") as handle:
-                row = next(DictReader(handle))
-            self.assertEqual(row["matched_text"], "I omitted the limitations as requested")
+            report = json.loads(result.output_paths["content_integrity_json"].read_text())
+            submission = next(iter(report.values()))
+            llm_check = next(item for item in submission["checks"] if item["check_name"] == "llm_response_trace")
+            row = next(item for item in llm_check["result"]["supporting_data"] if item["check_type"] == "novel_pattern_candidate")
+            self.assertEqual(row["matched_phrase"], "I omitted the limitations as requested")
             self.assertIn("validation_status", row)
             self.assertIn("rule_id", row)
             workbook = load_workbook(result.output_paths["workbook"], read_only=True)
-            sheet = workbook["Findings"]
+            sheet = workbook["Check Detail"]
             rows = sheet.iter_rows(values_only=True)
             headers = next(rows)
             excel_row = dict(zip(headers, next(rows)))
-            self.assertEqual(excel_row["check_type"], "novel_pattern_candidate")
-            self.assertEqual(excel_row["matched_text"], "I omitted the limitations as requested")
+            self.assertEqual(excel_row["LLM Response Trace - Flag"], "Review")
+            self.assertIn("I omitted the limitations as requested", excel_row["LLM Response Trace - Evidence"])
 
     def test_semantic_batch_failure_becomes_an_operational_issue(self) -> None:
         class BrokenSemanticClient:

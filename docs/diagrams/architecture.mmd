@@ -33,8 +33,8 @@ flowchart LR
 
     subgraph Presentation["Reporting layer"]
         Reporting["reporting.py<br/>tables and workbook"]
-        Files[("JSONL and CSV artifacts")]
-        Workbook[("Excel workbook<br/>Dashboard plus detail sheets")]
+        JSON[("content_integrity_results.json")]
+        Workbook[("Editor_Triage_Workbook.xlsx<br/>Dashboard, queues, master list, detail")]
     end
 
     XML --> Parser
@@ -60,7 +60,7 @@ flowchart LR
     Template --> Risk
     Risk --> Reporting
     Dedupe --> Reporting
-    Reporting --> Files
+    Reporting --> JSON
     Reporting --> Workbook
 
     Models -. "shared data contracts" .-> Parser
@@ -78,4 +78,4 @@ flowchart LR
     class XML,Dictionary,Flags,Secrets input;
     class Parser,Dedupe,LLMTrace,Tortured,Nonsense,Template,Risk,Models domain;
     class Client,Gateway external;
-    class Reporting,Files,Workbook output;
+    class Reporting,JSON,Workbook output;

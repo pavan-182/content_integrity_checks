@@ -55,6 +55,6 @@ sequenceDiagram
     Pipeline->>Risk: Aggregate raw findings plus template membership per record
     Risk-->>Pipeline: None, Low, Medium, or High plus review flag
     Pipeline->>Reports: Supply records, findings, clusters, warnings, and metadata
-    Reports-->>Editor: JSONL, CSV files, and consolidated Excel workbook
+    Reports-->>Editor: Canonical JSON and Editor_Triage_Workbook.xlsx
 
     Note over GPT,Risk: GPT validation annotations never alter deterministic risk

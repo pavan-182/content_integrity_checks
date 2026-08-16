@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import json
 import tempfile
 import textwrap
@@ -13,7 +12,7 @@ from openpyxl import load_workbook
 from content_integrity.detectors import built_in_llm_rules, build_tortured_rule_index, detect_llm_trace, detect_tortured_phrases, load_tortured_rules
 from content_integrity.models import Finding, ParsedRecord
 from content_integrity.pipeline import _aggregate_findings, run_default_pipeline
-from content_integrity.reporting import build_content_integrity_frontend_json, FINDINGS_COLUMNS, REVIEW_FINDINGS_COLUMNS
+from content_integrity.reporting import _normalized_doi, build_content_integrity_frontend_json
 from content_integrity.template_matching_common import _candidate_pairs, _content_class, _similarity, build_normalized_text, build_skeleton_text
 from content_integrity.validators import ContextValidator
 from content_integrity.validators.context_validator import _parse_validator_payload
@@ -47,7 +46,28 @@ def _tortured_finding(status: str = "", severity: str = "medium") -> Finding:
     )
 
 
+def _submission(report: dict, abstract_id: str) -> dict:
+    return next(item for item in report.values() if item["abstract_id"] == abstract_id)
+
+
+def _check(submission: dict, name: str) -> dict:
+    return next(item for item in submission["checks"] if item["check_name"] == name)
+
+
+def _record_supporting_checks(submission: dict) -> dict[str, dict]:
+    template = _check(submission, "template_detection")
+    record = next(item for item in template["result"]["supporting_data"] if item["evidence_scope"] == "RECORD")
+    return {item["check_name"]: item for item in record["supporting_checks"]}
+
+
+def _summary_data(submission: dict) -> dict:
+    return _check(submission, "content_integrity_summary")["result"]["supporting_data"][0]
+
+
 class PipelineTests(unittest.TestCase):
+    def test_integration_doi_key_is_canonical(self) -> None:
+        self.assertEqual(_normalized_doi(" HTTPS://doi.org/10.1002/CAM4.2839 "), "10.1002/cam4.2839")
+
     def test_parser_splits_bundled_asco_sub_articles(self) -> None:
         path = self._temp_xml(
             """
@@ -478,35 +498,37 @@ class PipelineTests(unittest.TestCase):
 
             result = run_default_pipeline(input_dir=input_dir, tortured_dictionary_path=dict_path, output_dir=output_dir)
 
-            with result.output_paths["template_pairs_csv"].open(newline="", encoding="utf-8") as handle:
-                rows = list(csv.DictReader(handle))
-
-            self.assertEqual(len(rows), 2)
-            self.assertEqual({row["pair_id"] for row in rows}, {"PAIR-TPL-A--TPL-B"})
+            report = json.loads(result.output_paths["content_integrity_json"].read_text())
+            template = _check(_submission(report, "TPL-A"), "template_detection")
+            pairs = [item for item in template["result"]["supporting_data"] if item["evidence_scope"] == "PAIR"]
+            self.assertEqual(len(pairs), 1)
+            pair = pairs[0]
+            self.assertEqual(pair["pair_id"], "PAIR-TPL-A--TPL-B")
+            self.assertEqual(pair["matched_abstract_id"], "TPL-B")
+            self.assertEqual(pair["classification"], "possible_template_reuse")
             self.assertEqual(
-                {(row["left_record_id"], row["right_record_id"]) for row in rows},
-                {("TPL-A", "TPL-B"), ("TPL-B", "TPL-A")},
+                [check["check_name"] for check in pair["sub_checks"]],
+                ["exact_text_reuse", "entity_normalized_template", "title_template", "section_similarity"],
             )
-            self.assertEqual({row["pair_class"] for row in rows}, {"possible_template_reuse"})
-            self.assertTrue(all(row["review_priority"] != "None" for row in rows))
-            self.assertTrue(all(row["editor_label"] == "not_reviewed" for row in rows))
+            self.assertTrue(next(
+                check for check in pair["sub_checks"] if check["check_name"] == "exact_text_reuse"
+            )["result"]["supporting_data"])
+            self.assertEqual(
+                set(_record_supporting_checks(_submission(report, "TPL-A"))),
+                {"numerical_contradiction", "design_contradiction", "unverifiable_clinical_trial"},
+            )
 
-            with result.output_paths["template_pair_candidates_csv"].open(newline="", encoding="utf-8") as handle:
-                candidates = list(csv.DictReader(handle))
-            self.assertEqual(len(candidates), 1)
-
-            workbook = load_workbook(result.output_paths["workbook"])
-            worksheet = workbook["Template_Pairs"]
+            workbook = load_workbook(result.output_paths["workbook"], read_only=True, data_only=True)
+            worksheet = workbook["Check Detail"]
             headers = [cell.value for cell in worksheet[1]]
-            editor_column = headers.index("editor_label") + 1
-            self.assertEqual(worksheet.max_row - 1, len(rows))
-            self.assertEqual(worksheet.cell(2, editor_column).value, "not_reviewed")
-            self.assertIn("acceptable_overlap", worksheet.data_validations.dataValidation[0].formula1)
+            details = [dict(zip(headers, row)) for row in worksheet.iter_rows(min_row=2, values_only=True)]
+            self.assertEqual({row["Templating (Cross-Author) - Flag"] for row in details}, {"Y"})
+            self.assertTrue(all("PAIR-TPL-A--TPL-B" in row["Templating (Cross-Author) - Evidence"] for row in details))
             summaries = {row["record_id"]: row for row in result.abstract_summary_rows}
             self.assertEqual({row["template_flag"] for row in summaries.values()}, {"Yes"})
             self.assertEqual(
                 {row["strongest_pair_classification"] for row in summaries.values()},
-                {rows[0]["pair_class"]},
+                {pair["classification"]},
             )
             self.assertEqual(result.abstract_summary_rows[0]["template_cluster_flag"], "No")
             self.assertEqual(result.abstract_summary_rows[1]["template_cluster_flag"], "No")
@@ -515,7 +537,7 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(metadata["template_final_pair_count"], 1)
             self.assertEqual(metadata["entity_model_inference_count"], 0)
 
-    def test_full_pipeline_creates_workbook(self) -> None:
+    def test_full_pipeline_creates_only_canonical_outputs_without_deleting_existing_files(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)
             input_dir = temp_dir / "xmls"
@@ -543,30 +565,35 @@ class PipelineTests(unittest.TestCase):
                 "Fingerprint - Tortured Phrase,Expected Text,Nb Retrieved Papers\n\"nervous network\",\"neural network\",\"1\"\n",
                 encoding="utf-8",
             )
+            output_dir.mkdir()
+            legacy_csv = output_dir / "integrity_findings.csv"
+            legacy_csv.write_text("user-owned", encoding="utf-8")
             result = run_default_pipeline(input_dir=input_dir, tortured_dictionary_path=dict_path, output_dir=output_dir)
             self.assertTrue(result.output_paths["workbook"].exists())
-            self.assertTrue(result.output_paths["parsed_jsonl"].exists())
-            self.assertTrue(result.output_paths["findings_csv"].exists())
-            self.assertTrue(result.output_paths["detailed_findings_csv"].exists())
-            self.assertTrue(result.output_paths["template_pair_candidates_csv"].exists())
-            self.assertTrue(result.output_paths["enriched_abstracts_csv"].exists())
-            with result.output_paths["findings_csv"].open(newline="", encoding="utf-8") as handle:
-                self.assertEqual(next(csv.reader(handle)), REVIEW_FINDINGS_COLUMNS)
-            with result.output_paths["detailed_findings_csv"].open(newline="", encoding="utf-8") as handle:
-                self.assertEqual(next(csv.reader(handle)), FINDINGS_COLUMNS)
             self.assertTrue(result.output_paths["content_integrity_json"].exists())
-            self.assertTrue(result.output_paths["operational_issues_csv"].exists())
+            self.assertEqual(set(result.output_paths), {"content_integrity_json", "workbook"})
+            self.assertEqual(result.output_paths["workbook"].name, "Editor_Triage_Workbook.xlsx")
+            self.assertEqual(legacy_csv.read_text(encoding="utf-8"), "user-owned")
+            self.assertEqual(
+                {path.name for path in output_dir.iterdir()},
+                {"content_integrity_results.json", "Editor_Triage_Workbook.xlsx", "integrity_findings.csv"},
+            )
             with result.output_paths["content_integrity_json"].open(encoding="utf-8") as handle:
                 data = json.load(handle)
+            self.assertEqual(set(data), {"TEST-6"})
+            submission = _submission(data, "TEST-6")
             self.assertEqual(
-                set(data),
-                {"schema_version", "run", "summary", "abstracts", "findings", "template_pairs", "template_families", "operational_issues"},
+                [check["check_name"] for check in submission["checks"]],
+                ["content_integrity_summary", "tortured_phrases", "llm_response_trace", "template_detection"],
             )
-            self.assertEqual(data["summary"]["total_submissions"], 1)
-            self.assertEqual(data["summary"]["no_risk"], 1)
-            self.assertEqual(data["summary"]["high_risk"], 0)
+            summary = _check(submission, "content_integrity_summary")
+            self.assertEqual(summary["result"]["level"], "LOW")
+            self.assertEqual(summary["result"]["supporting_data"][0]["overall_content_risk"], "NONE")
             workbook = load_workbook(result.output_paths["workbook"], read_only=True)
-            self.assertIn("Operational_Issues", workbook.sheetnames)
+            self.assertEqual(
+                workbook.sheetnames,
+                ["Dashboard", "High Risk Queue", "Moderate Risk Queue", "Low Risk Queue", "All Abstracts", "Check Detail", "How This Works"],
+            )
 
     def test_frontend_json_scoped_checks_are_reported_and_risk_is_high(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir_str:
@@ -634,67 +661,64 @@ class PipelineTests(unittest.TestCase):
             with result.output_paths["content_integrity_json"].open(encoding="utf-8") as handle:
                 data = json.load(handle)
 
-            self.assertEqual(data["summary"]["total_submissions"], 3)
-            self.assertEqual(data["summary"]["high_risk"], 2)
-            self.assertEqual(data["summary"]["moderate_risk"], 0)
-            self.assertEqual(data["summary"]["no_risk"], 1)
+            self.assertEqual(len(data), 3)
+            self.assertEqual(sum(_summary_data(item)["overall_content_risk"] == "HIGH" for item in data.values()), 2)
+            self.assertEqual(sum(_summary_data(item)["overall_content_risk"] == "NONE" for item in data.values()), 1)
 
-            tortured_abstract = next(item for item in data["abstracts"] if item["abstract_id"] == "TP-1")
-            self.assertEqual(len(tortured_abstract["checks"]), 6)
-            self.assertTrue(tortured_abstract["checks"]["tortured_phrases"]["flagged"])
+            tortured_abstract = _submission(data, "TP-1")
+            self.assertEqual(len(tortured_abstract["checks"]), 4)
+            tortured_check = _check(tortured_abstract, "tortured_phrases")
+            self.assertEqual(tortured_check["result"]["level"], "HIGH")
             self.assertEqual(
-                tortured_abstract["checks"]["tortured_phrases"]["evidence"],
+                tortured_check["result"]["comment"],
                 "nervous network → neural network",
             )
-            self.assertEqual(tortured_abstract["overall_risk"], "High")
-            self.assertEqual(tortured_abstract["high_confidence_flags"], 1)
-            self.assertEqual(tortured_abstract["corroborating_flags"], 0)
-            self.assertEqual(tortured_abstract["checks"]["llm_response_trace"]["flagged"], False)
-            self.assertFalse(tortured_abstract["checks"]["numerical_contradiction"]["flagged"])
-            self.assertFalse(tortured_abstract["checks"]["design_contradiction"]["flagged"])
-            self.assertFalse(tortured_abstract["checks"]["unverifiable_trial"]["flagged"])
-            self.assertEqual(tortured_abstract["checks"]["templating"]["flagged"], False)
-
-            llm_abstract = next(item for item in data["abstracts"] if item["abstract_id"] == "LLM-1")
-            self.assertTrue(llm_abstract["checks"]["llm_response_trace"]["flagged"])
+            self.assertEqual(_summary_data(tortured_abstract)["overall_content_risk"], "HIGH")
+            self.assertEqual(_check(tortured_abstract, "llm_response_trace")["result"]["supporting_data"], [])
+            self.assertTrue(all(
+                not check["result"]["supporting_data"]
+                for check in _record_supporting_checks(tortured_abstract).values()
+            ))
             self.assertEqual(
-                llm_abstract["checks"]["llm_response_trace"]["evidence"],
+                [item for item in _check(tortured_abstract, "template_detection")["result"]["supporting_data"] if item["evidence_scope"] == "PAIR"],
+                [],
+            )
+
+            llm_abstract = _submission(data, "LLM-1")
+            llm_check = _check(llm_abstract, "llm_response_trace")
+            self.assertEqual(
+                llm_check["result"]["comment"],
                 "As an AI language model, I cannot provide medical advice.",
             )
-            self.assertEqual(llm_abstract["checks"]["llm_response_trace"]["findings"][0]["category"], "ai_self_identification")
-            self.assertEqual(llm_abstract["checks"]["llm_response_trace"]["findings"][0]["rule_id"], "LLM-001")
+            self.assertEqual(llm_check["result"]["supporting_data"][0]["category"], "ai_self_identification")
+            self.assertEqual(llm_check["result"]["supporting_data"][0]["rule_id"], "LLM-001")
             self.assertIn(
-                llm_abstract["checks"]["llm_response_trace"]["findings"][0]["validation_status"],
+                llm_check["result"]["supporting_data"][0]["validation_status"],
                 {"not_validated", "not_required", ""},
             )
 
-            clean_abstract = next(item for item in data["abstracts"] if item["abstract_id"] == "CLEAN-1")
-            self.assertEqual(clean_abstract["overall_risk"], "None")
-            self.assertFalse(clean_abstract["checks"]["tortured_phrases"]["flagged"])
-            self.assertFalse(clean_abstract["checks"]["llm_response_trace"]["flagged"])
-            self.assertFalse(clean_abstract["checks"]["numerical_contradiction"]["flagged"])
-            self.assertFalse(clean_abstract["checks"]["design_contradiction"]["flagged"])
-            self.assertFalse(clean_abstract["checks"]["unverifiable_trial"]["flagged"])
-            self.assertFalse(clean_abstract["checks"]["templating"]["flagged"])
+            clean_abstract = _submission(data, "CLEAN-1")
+            self.assertEqual(_summary_data(clean_abstract)["overall_content_risk"], "NONE")
+            self.assertEqual(_check(clean_abstract, "tortured_phrases")["result"]["supporting_data"], [])
+            self.assertEqual(_check(clean_abstract, "llm_response_trace")["result"]["supporting_data"], [])
 
             workbook = load_workbook(result.output_paths["workbook"], read_only=True, data_only=True)
-            sheet = workbook["Abstracts"]
+            sheet = workbook["All Abstracts"]
             headers = [cell.value for cell in sheet[1]]
             excel_rows = {
-                row["record_id"]: row
+                row["Abstract ID"]: row
                 for row in (
                     dict(zip(headers, (cell.value for cell in cells)))
                     for cells in sheet.iter_rows(min_row=2)
                 )
             }
-            for abstract in data["abstracts"]:
+            for abstract in data.values():
                 excel = excel_rows[abstract["abstract_id"]]
-                self.assertEqual(abstract["overall_content_risk"], excel["overall_content_risk"])
-                self.assertEqual("Yes" if abstract["review_required"] else "No", excel["review_required"])
-                self.assertEqual(
-                    abstract["checks"]["design_contradiction"]["flagged"],
-                    excel["design_contradiction_flag"] == "Yes",
-                )
+                summary = _summary_data(abstract)
+                self.assertEqual(summary["overall_content_risk"].title(), excel["Overall Risk"])
+                self.assertEqual("Yes" if summary["review_required"] else "No", excel["Review Required"])
+                design = _record_supporting_checks(abstract)["design_contradiction"]
+                self.assertEqual(bool(design["result"]["supporting_data"]), excel["Design Contradiction"] == "Y")
 
     def test_template_candidate_without_reviewer_finding_does_not_flag_templating(self) -> None:
         records = [ParsedRecord(source_file="sample.xml", record_id="A", title="A title"), ParsedRecord(source_file="sample.xml", record_id="B", title="B title")]
@@ -913,15 +937,20 @@ class PipelineTests(unittest.TestCase):
                 result = run_default_pipeline(input_dir, dictionary, root / "output")
 
             report = json.loads(result.output_paths["content_integrity_json"].read_text())
-            abstract = report["abstracts"][0]
-            self.assertFalse(abstract["checks"]["numerical_contradiction"]["flagged"])
-            self.assertTrue(abstract["checks"]["numerical_contradiction"]["operational_failure"])
+            abstract = _submission(report, "FAILED-CHECK")
+            numerical = _record_supporting_checks(abstract)["numerical_contradiction"]
+            self.assertEqual(numerical["result"]["level"], "UNKNOWN")
+            self.assertEqual(numerical["result"]["supporting_data"], [])
             self.assertTrue(any(
                 issue["component"] == "numerical_contradiction"
-                for issue in report["operational_issues"]
+                for issue in _summary_data(abstract)["operational_issues"]
             ))
             workbook = load_workbook(result.output_paths["workbook"], read_only=True, data_only=True)
-            self.assertEqual(workbook["Operational_Issues"]["A2"].value, "numerical_contradiction")
+            sheet = workbook["Check Detail"]
+            headers = [cell.value for cell in sheet[1]]
+            detail = dict(zip(headers, next(sheet.iter_rows(min_row=2, values_only=True))))
+            self.assertEqual(detail["Operational Issues - Flag"], "Y")
+            self.assertIn("numerical_contradiction", detail["Operational Issues - Evidence"])
 
     def test_pipeline_integrates_contradiction_and_trial_checks(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -951,29 +980,16 @@ class PipelineTests(unittest.TestCase):
 
             result = run_default_pipeline(input_dir, dictionary, root / "outputs")
 
-            with result.output_paths["findings_csv"].open(newline="", encoding="utf-8") as handle:
-                rows = list(csv.DictReader(handle))
+            data = json.loads(result.output_paths["content_integrity_json"].read_text())
+            row = _submission(data, "CHECKS-1")
+            supporting = _record_supporting_checks(row)
+            self.assertTrue(supporting["numerical_contradiction"]["result"]["supporting_data"])
+            self.assertTrue(supporting["design_contradiction"]["result"]["supporting_data"])
+            self.assertTrue(supporting["unverifiable_clinical_trial"]["result"]["supporting_data"])
             self.assertEqual(
-                {row["detector_type"] for row in rows},
-                {
-                    "numerical_contradiction",
-                    "design_contradiction",
-                    "unverifiable_clinical_trial",
-                },
+                _check(row, "content_integrity_summary")["result"]["comment"],
+                "Numerical Contradiction, Design Contradiction, Unverifiable Clinical Trial",
             )
-            with result.output_paths["content_integrity_json"].open(encoding="utf-8") as handle:
-                data = json.load(handle)
-            row = next(item for item in data["abstracts"] if item["abstract_id"] == "CHECKS-1")
-            self.assertTrue(row["checks"]["numerical_contradiction"]["flagged"])
-            self.assertTrue(row["checks"]["design_contradiction"]["flagged"])
-            self.assertTrue(row["checks"]["unverifiable_trial"]["flagged"])
-            self.assertEqual(
-                row["why_flagged"],
-                "Potential content integrity issue detected. Manual review recommended.",
-            )
-            self.assertTrue(result.output_paths["numerical_contradictions_csv"].exists())
-            self.assertTrue(result.output_paths["design_contradictions_csv"].exists())
-            self.assertTrue(result.output_paths["trial_verification_csv"].exists())
 
     def test_validator_marks_bad_json_validation_failed(self) -> None:
         class BrokenClient:
@@ -1136,25 +1152,21 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(summary["overall_content_risk"], "None")
             self.assertEqual(summary["review_required"], "No")
 
-            with result.output_paths["detailed_findings_csv"].open(newline="", encoding="utf-8") as handle:
-                detailed_rows = list(csv.DictReader(handle))
+            report = json.loads(result.output_paths["content_integrity_json"].read_text())
+            detailed_rows = _check(_submission(report, "TEST-7"), "tortured_phrases")["result"]["supporting_data"]
             self.assertTrue(
                 any(
-                    row["detector_type"] == "tortured_phrase"
-                    and row["validation_status"] == "rejected"
+                    row["validation_status"] == "rejected"
                     for row in detailed_rows
                 )
             )
 
             workbook = load_workbook(result.output_paths["workbook"], read_only=True)
-            ws = workbook["Findings"]
+            ws = workbook["Check Detail"]
             headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
-            self.assertLess(headers.index("confidence"), headers.index("validation_status"))
-            self.assertLess(headers.index("validation_status"), headers.index("validation_reason"))
-            self.assertLess(headers.index("validation_reason"), headers.index("validated_by"))
-            self.assertLess(headers.index("validated_by"), headers.index("rule_id"))
-            summary_headers = [cell.value for cell in next(workbook["Abstracts"].iter_rows(max_row=1))]
-            self.assertIn("overall_content_risk", summary_headers)
+            self.assertIn("Tortured Phrases - Evidence", headers)
+            summary_headers = [cell.value for cell in next(workbook["All Abstracts"].iter_rows(max_row=1))]
+            self.assertIn("Overall Risk", summary_headers)
             self.assertIn("tortured_rejected_count", result.abstract_summary_rows[0])
 
     def test_default_pipeline_leaves_validation_columns_blank(self) -> None:

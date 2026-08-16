@@ -8,7 +8,7 @@
     "api": "python server.py",
     "start": "npm run build && python server.py",
     "build": "vite build",
-    "test": "node --test && python -m unittest server_test.py"
+    "test": "node --test && python3 -m unittest server_test.py"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",

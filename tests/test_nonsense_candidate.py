@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import csv
 import json
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+
+from openpyxl import load_workbook
 
 from content_integrity.detectors import build_tortured_rule_index, load_tortured_rules
 from content_integrity.detectors.nonsense_candidate import NonsenseCandidateDetector
@@ -224,8 +225,16 @@ class NonsenseCandidateTests(unittest.TestCase):
                     Path(directory) / "enabled",
                     detect_nonsense_candidates=True,
                 )
-            with enabled_result.output_paths["detailed_findings_csv"].open(newline="", encoding="utf-8") as handle:
-                detailed_rows = list(csv.DictReader(handle))
+            report = json.loads(enabled_result.output_paths["content_integrity_json"].read_text())
+            workbook = load_workbook(enabled_result.output_paths["workbook"], read_only=True, data_only=True)
+            workbook_values = [
+                str(cell.value).lower()
+                for sheet in workbook.worksheets
+                for row in sheet.iter_rows()
+                for cell in row
+                if cell.value is not None
+            ]
+            workbook.close()
 
         self.assertFalse(any(item.detector_type == "nonsense_candidate" for item in default_result.findings))
         self.assertTrue(any(item.detector_type == "nonsense_candidate" for item in enabled_result.findings))
@@ -234,14 +243,12 @@ class NonsenseCandidateTests(unittest.TestCase):
         self.assertEqual(summary["total_finding_count"], 0)
         self.assertEqual(summary["highest_severity"], "None")
         self.assertEqual(summary["overall_content_risk"], "None")
-        self.assertEqual(summary["review_required"], "Yes")
-        self.assertTrue(
-            any(
-                row["detector_type"] == "nonsense_candidate"
-                and row["validation_status"] == "candidate"
-                for row in detailed_rows
-            )
-        )
+        self.assertEqual(summary["review_required"], "No")
+        self.assertNotIn("nonsense_candidate", json.dumps(report).lower())
+        self.assertFalse(any(
+            "nonsense candidate" in value or "nonsense_candidate" in value
+            for value in workbook_values
+        ))
 
 
 if __name__ == "__main__":

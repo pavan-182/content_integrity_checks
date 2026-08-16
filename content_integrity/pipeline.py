@@ -31,12 +31,10 @@ from .detectors.nonsense_candidate import NonsenseRunStats
 from .models import Finding, OperationalIssue, ParsedRecord
 from .rules import catalogue_metadata
 from .detectors.design_contradiction import (
-    DesignContradictionFinding,
     LLMDesignContradictionValidator,
     detect_design_contradictions,
 )
 from .detectors.numerical_contradiction import (
-    NumericalContradictionFinding,
     detect_numerical_contradictions,
 )
 from .detectors.unverifiable_trial import (
@@ -46,9 +44,6 @@ from .detectors.unverifiable_trial import (
     detect_unverifiable_trials,
 )
 from .enriched_reporting import (
-    ABSTRACT_REPORT_COLUMNS,
-    FAMILY_REPORT_COLUMNS,
-    PAIR_REPORT_COLUMNS,
     REPORT_VERSION,
     build_enriched_reports,
     directional_finding_rows,
@@ -63,16 +58,9 @@ from .template_clustering import (
 )
 from .template_features import build_template_features
 from .reporting import (
-    DICTIONARY_COLUMNS,
-    FAMILY_COLUMNS,
-    FINDINGS_COLUMNS,
-    PAIR_COLUMNS,
-    REVIEW_FINDINGS_COLUMNS,
-    WARNING_COLUMNS,
     build_content_integrity_frontend_json,
-    write_csv,
+    build_integrated_content_integrity_json,
     write_json,
-    write_jsonl,
     write_workbook,
 )
 from .validators import ContextValidator, LLMTraceValidator, apply_llm_trace_validation, build_gpt_oss_client
@@ -363,7 +351,11 @@ def _aggregate_findings(
         review_candidates = [
             finding
             for finding in record_findings
-            if finding.review_candidate and finding.review_status != "supporting_only"
+            if (
+                finding.detector_type != "nonsense_candidate"
+                and finding.review_candidate
+                and finding.review_status != "supporting_only"
+            )
         ]
         active_llm_findings = [
             finding for finding in llm_findings if finding.active
@@ -477,6 +469,7 @@ def _aggregate_findings(
                 "record_id": record.record_id,
                 "source_file": record.source_file,
                 "title": record.title,
+                "primary_author": record.primary_author,
                 "doi": record.doi,
                 "journal": record.journal,
                 "publication_year": record.publication_year,
@@ -1007,12 +1000,18 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     operational_issues.extend(
         _collect_operational_issues(records, findings, trial_results, semantic_stats, nonsense_stats)
     )
+    reporting_findings = [finding for finding in findings if finding.detector_type != "nonsense_candidate"]
+    reporting_operational_issues = [
+        issue for issue in operational_issues if issue.component != "nonsense_candidate"
+    ]
     findings_rows = _findings_rows(findings)
     titles_by_record = {record.record_id: record.title for record in records}
     for row in findings_rows:
         row["title"] = titles_by_record.get(row["record_id"], "")
-    template_finding_rows = _pair_finding_rows(pair_findings)
-    integrity_finding_rows = sorted(findings_rows, key=_finding_row_sort_key)
+    integrity_finding_rows = sorted(
+        (row for row in findings_rows if row.get("detector_type") != "nonsense_candidate"),
+        key=_finding_row_sort_key,
+    )
     family_rows = _family_rows(template_rows)
     parse_warning_rows = _parse_warning_rows(records)
     parse_warning_rows.extend(
@@ -1095,17 +1094,8 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         ("pipeline_config", json.dumps({
             field.name: str(getattr(config, field.name)) if isinstance(getattr(config, field.name), Path) else getattr(config, field.name)
             for field in fields(config)
+            if field.name != "detect_nonsense_candidates"
         }, sort_keys=True)),
-        ("nonsense_candidate_detection", "enabled" if config.detect_nonsense_candidates else "disabled"),
-        ("nonsense_candidate_sentence_count", nonsense_stats.candidate_sentence_count),
-        ("nonsense_candidate_batch_count", nonsense_stats.batch_count),
-        ("nonsense_candidate_request_count", nonsense_stats.request_count),
-        ("nonsense_candidate_retry_count", nonsense_stats.retry_count),
-        ("nonsense_candidate_routes", json.dumps(nonsense_stats.route_counts, sort_keys=True)),
-        ("nonsense_known_fingerprint_suppressed_count", nonsense_stats.known_fingerprint_suppressed_count),
-        ("nonsense_candidate_failed_sentence_count", len(nonsense_stats.failed_sentence_record_ids)),
-        ("nonsense_candidate_model_id", nonsense_stats.model_id),
-        ("nonsense_candidate_prompt_version", nonsense_stats.prompt_version),
         ("clinical_trial_registry_lookup", "enabled" if config.verify_trials else "local_checks_only"),
         ("enriched_report_version", REPORT_VERSION),
         ("enriched_pair_count", len(enriched_pair_rows)),
@@ -1116,7 +1106,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         ("template_finding_directional_row_count", len(reviewer_pair_rows)),
         ("template_insufficient_evidence_count", sum(row["review_priority"] == "None" for row in enriched_pair_rows)),
         ("enriched_family_count", len(enriched_family_rows)),
-        ("operational_issue_count", len(operational_issues)),
+        ("operational_issue_count", len(reporting_operational_issues)),
         ("limitations", "Rule-based screening flags explicit LLM response traces, known tortured phrases, and repeated abstract skeletons; optional GPT-OSS stages only annotate candidates, and the pipeline does not detect AI-generated authorship."),
         ("excluded_scope", "AI-generated text detection"),
     ]
@@ -1124,129 +1114,29 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     output_dir = config.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
     output_paths: dict[str, Path] = {}
-    output_paths["parsed_jsonl"] = write_jsonl(output_dir / "parsed_records.jsonl", [record.to_dict() for record in records])
-    output_paths["parsed_csv"] = write_csv(
-        output_dir / "parsed_records.csv",
-        [record.to_dict() for record in records],
-        [
-            "source_file",
-            "schema_type",
-            "record_id",
-            "doi",
-            "title",
-            "abstract_text",
-            "keywords",
-            "trial_ids",
-            "authors",
-            "primary_author",
-            "affiliations",
-            "journal",
-            "article_type",
-            "publication_year",
-            "raw_text",
-            "excluded_sections",
-            "parse_status",
-            "parse_warnings",
-        ],
-    )
-    output_paths["findings_csv"] = write_csv(
-        output_dir / "integrity_findings.csv",
-        integrity_finding_rows,
-        REVIEW_FINDINGS_COLUMNS,
-    )
-    output_paths["detailed_findings_csv"] = write_csv(
-        output_dir / "detailed_findings.csv",
-        integrity_finding_rows,
-        FINDINGS_COLUMNS,
-    )
-    output_paths["numerical_contradictions_csv"] = write_csv(
-        output_dir / "numerical_contradictions.csv",
-        [result.to_dict() for result in numerical_results],
-        [field.name for field in fields(NumericalContradictionFinding)],
-    )
-    output_paths["design_contradictions_csv"] = write_csv(
-        output_dir / "design_contradictions.csv",
-        [result.to_dict() for result in design_results],
-        [field.name for field in fields(DesignContradictionFinding)],
-    )
-    output_paths["trial_verification_csv"] = write_csv(
-        output_dir / "trial_verification.csv",
-        [result.to_dict() for result in trial_results],
-        [field.name for field in fields(TrialVerificationResult)],
-    )
-    output_paths["template_pairs_csv"] = write_csv(
-        output_dir / "template_pair_findings.csv",
-        reviewer_pair_rows,
-        PAIR_REPORT_COLUMNS,
-    )
-    output_paths["template_pair_candidates_csv"] = write_csv(
-        output_dir / "template_pair_candidates.csv",
-        enriched_pair_rows,
-        PAIR_REPORT_COLUMNS,
-    )
-    output_paths["template_detector_evidence_csv"] = write_csv(
-        output_dir / "template_detector_evidence.csv",
-        template_finding_rows,
-        PAIR_COLUMNS,
-    )
-    output_paths["enriched_abstracts_csv"] = write_csv(
-        output_dir / "enriched_template_abstracts.csv",
-        enriched_abstract_rows,
-        ABSTRACT_REPORT_COLUMNS,
+    canonical_report = build_content_integrity_frontend_json(
+        records=records,
+        findings=reporting_findings,
+        enriched_pair_rows=enriched_pair_rows,
+        enriched_abstract_rows=enriched_abstract_rows,
+        abstract_summary_rows=abstract_summary_rows,
+        operational_issues=reporting_operational_issues,
+        generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        git_revision=commit_sha,
+        run_metadata=dict(run_metadata_rows),
+        template_family_rows=enriched_family_rows,
     )
     output_paths["content_integrity_json"] = write_json(
         output_dir / "content_integrity_results.json",
-        build_content_integrity_frontend_json(
-            records=records,
-            findings=findings,
-            enriched_pair_rows=enriched_pair_rows,
-            enriched_abstract_rows=enriched_abstract_rows,
-            abstract_summary_rows=abstract_summary_rows,
-            operational_issues=operational_issues,
-            generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            git_revision=commit_sha,
-            run_metadata=dict(run_metadata_rows),
-            template_family_rows=enriched_family_rows,
-        ),
+        build_integrated_content_integrity_json(canonical_report),
     )
-    output_paths["clusters_csv"] = write_csv(
-        output_dir / "template_clusters.csv",
-        enriched_family_rows,
-        FAMILY_REPORT_COLUMNS,
-    )
-    output_paths["dictionary_csv"] = write_csv(
-        output_dir / "pattern_dictionary.csv",
-        dictionary_rows,
-        DICTIONARY_COLUMNS,
-    )
-    output_paths["warnings_csv"] = write_csv(
-        output_dir / "parse_warnings.csv",
-        parse_warning_rows,
-        WARNING_COLUMNS,
-    )
-    output_paths["operational_issues_csv"] = write_csv(
-        output_dir / "operational_issues.csv",
-        [issue.to_dict() for issue in operational_issues],
-        [
-            "component", "record_id", "source_file", "status", "error_type",
-            "message", "retry_count", "recoverable",
-        ],
-    )
-    output_paths["metadata_json"] = write_jsonl(output_dir / "run_metadata.jsonl", [{"key": key, "value": value} for key, value in run_metadata_rows])
     output_paths["workbook"] = write_workbook(
-        output_dir / "content_integrity_screening_poc.xlsx",
-        inventory_rows=field_inventory_rows,
-        root_summary_rows=root_summary_rows,
+        output_dir / "Editor_Triage_Workbook.xlsx",
         abstract_summary_rows=abstract_summary_rows,
         findings_rows=integrity_finding_rows,
         pair_rows=reviewer_pair_rows,
-        cluster_rows=enriched_family_rows,
-        dictionary_rows=dictionary_rows,
-        parse_warning_rows=parse_warning_rows,
-        operational_issue_rows=[issue.to_dict() for issue in operational_issues],
+        operational_issue_rows=[issue.to_dict() for issue in reporting_operational_issues],
         run_metadata_rows=run_metadata_rows,
-        pair_columns=PAIR_REPORT_COLUMNS,
-        cluster_columns=FAMILY_REPORT_COLUMNS,
     )
     return PipelineResult(
         xml_files=xml_files,

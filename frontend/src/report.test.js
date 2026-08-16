@@ -10,7 +10,7 @@ test("maps the pipeline report into dashboard records", async () => {
 
   assert.equal(report.abstracts.length, report.summary.total_submissions);
   assert.equal(report.abstracts.filter((item) => item.overall_risk === "High").length, report.summary.high_risk);
-  assert.ok(report.abstracts.every((item) => Object.keys(item.checks).length === 6));
+  assert.ok(report.abstracts.every((item) => Object.keys(item.checks).length === 3));
   assert.ok(report.abstracts.every((item) => item.corresponding_author));
 
   const flagged = report.abstracts.flatMap((item) =>
@@ -91,5 +91,61 @@ test("preserves authoritative risk and treats a missing check as unknown", () =>
 
   assert.equal(report.abstracts[0].overall_risk, "None");
   assert.equal(report.abstracts[0].checks.tortured_phrases.flagged, false);
-  assert.equal(report.abstracts[0].checks.design_contradiction.operational_failure, true);
+  assert.equal(report.abstracts[0].checks.templating.operational_failure, true);
+});
+
+test("normalizes DOI-keyed template sub-checks and record support", () => {
+  const report = normalizeReport({
+    "10.1000/example": {
+      title: "Example",
+      abstract_id: "A-1",
+      checks: [
+        {
+          check_name: "content_integrity_summary",
+          result: {
+            level: "HIGH",
+            supporting_data: [{ overall_content_risk: "HIGH", review_required: true }],
+            comment: "LLM Response Trace, Template Detection",
+          },
+        },
+        { check_name: "tortured_phrases", result: { level: "LOW", supporting_data: [], comment: "Clear." } },
+        { check_name: "llm_response_trace", result: { level: "LOW", supporting_data: [], comment: "Clear." } },
+        {
+          check_name: "template_detection",
+          result: {
+            level: "HIGH",
+            comment: "Possible template reuse.",
+            supporting_data: [
+              {
+                evidence_scope: "PAIR",
+                pair_id: "PAIR-A-1--B-1",
+                matched_abstract_id: "B-1",
+                submitted_evidence: "Left text",
+                matched_evidence: "Right text",
+                sub_checks: [{
+                  check_name: "section_similarity",
+                  result: { supporting_data: [{ strongest_section: "results", strongest_section_similarity: 0.96 }] },
+                }],
+              },
+              {
+                evidence_scope: "RECORD",
+                supporting_checks: [{
+                  check_name: "numerical_contradiction",
+                  evidence_role: "CORROBORATING",
+                  result: { level: "MEDIUM", supporting_data: [{ finding_id: "F-1" }], comment: "Mismatch." },
+                }],
+              },
+            ],
+          },
+        },
+      ],
+    },
+  });
+
+  assert.equal(report.summary.total_submissions, 1);
+  assert.equal(report.abstracts[0].overall_risk, "High");
+  assert.equal(report.abstracts[0].why_flagged, "LLM Response Trace, Template Detection");
+  assert.equal(report.abstracts[0].checks.templating.evidence_pairs[0].matched_abstract_id, "B-1");
+  assert.equal(report.abstracts[0].checks.templating.evidence_pairs[0].section, "results");
+  assert.equal(report.abstracts[0].checks.templating.supporting_checks[0].check_name, "numerical_contradiction");
 });

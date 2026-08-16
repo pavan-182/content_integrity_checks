@@ -30,9 +30,8 @@ flowchart TD
     Inventory["Inventory, warning, dictionary,<br/>and run-metadata rows"]
     FindingsRows["Unified Integrity Findings rows<br/>rules plus template findings"]
 
-    JSONL[("parsed_records.jsonl<br/>run_metadata.jsonl")]
-    FlatFiles[("parsed_records.csv<br/>integrity_findings.csv<br/>template_clusters.csv<br/>pattern_dictionary.csv<br/>parse_warnings.csv")]
-    Excel[("content_integrity_screening_poc.xlsx<br/>Dashboard and seven detail sheets")]
+    JSON[("content_integrity_results.json<br/>canonical machine-readable report")]
+    Excel[("Editor_Triage_Workbook.xlsx<br/>Dashboard, queues, master list, check detail")]
 
     XML --> Discover --> Parse --> Parsed --> Dedupe --> Records
     CSV --> Compile --> RuleIndex
@@ -62,12 +61,10 @@ flowchart TD
     Annotated --> FindingsRows
     Clusters --> FindingsRows
 
-    Records --> JSONL
-    Inventory --> JSONL
-    Records --> FlatFiles
-    Inventory --> FlatFiles
-    FindingsRows --> FlatFiles
-    Clusters --> FlatFiles
+    Records --> JSON
+    Inventory --> JSON
+    FindingsRows --> JSON
+    Clusters --> JSON
     Summary --> Excel
     Inventory --> Excel
     FindingsRows --> Excel
@@ -80,4 +77,4 @@ flowchart TD
     class XML,CSV,Config source;
     class Parsed,Records,RuleIndex,RawFindings,CandidateFindings,Annotated,Clusters,Summary,Inventory,FindingsRows contract;
     class Prefilter,SentenceReview,Validation optional;
-    class JSONL,FlatFiles,Excel output;
+    class JSON,Excel output;

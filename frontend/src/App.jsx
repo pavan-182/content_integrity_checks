@@ -52,7 +52,6 @@ function SubmissionTable({ items, onOpen, evidenceCheck, showCheckFlags = false 
             <th>Priority</th><th>Submission</th><th>Corresponding author</th>
             <th>{evidenceCheck ? "Evidence" : "Why flagged"}</th>
             {evidenceCheck === "templating" && <th>Reason</th>}
-            <th>High-confidence flags</th><th>Corroborating flags</th>
             {showCheckFlags && checks.map((check) => <th key={check.id}>{check.label}</th>)}
             <th><span className="sr-only">Actions</span></th>
           </tr>
@@ -67,8 +66,6 @@ function SubmissionTable({ items, onOpen, evidenceCheck, showCheckFlags = false 
                 ? `${item.checks.templating.evidence_pairs?.length || item.checks.templating.match_count || 0} matched pair(s) — open for evidence`
                 : evidenceCheck ? item.checks[evidenceCheck].evidence : item.why_flagged}</td>
               {evidenceCheck === "templating" && <td>{item.checks.templating.reason || "—"}</td>}
-              <td>{item.high_confidence_flags}</td>
-              <td>{item.corroborating_flags}</td>
               {showCheckFlags && checks.map((check) => <td key={check.id}><CheckStatus definition={check} result={item.checks[check.id]} /></td>)}
               <td><button className="open-btn" onClick={() => onOpen(item.abstract_id)}>Open</button></td>
             </tr>
@@ -109,7 +106,7 @@ function Overview({ report, onNavigate, onOpen }) {
         <div className="simple-list">
           {checks.map((check) => (
             <div className="simple-row" key={check.id}>
-              <div>{check.label}<small>High-confidence check</small></div>
+              <div>{check.label}</div>
               <strong>{number.format(abstracts.filter((item) => item.checks[check.id].flagged).length)}</strong>
             </div>
           ))}
@@ -173,7 +170,7 @@ function AllSubmissions({ abstracts, onOpen }) {
 
 function ContentChecks({ abstracts, onOpen }) {
   const [active, setActive] = useState("All");
-  const affected = abstracts.filter((item) => active === "All" ? checks.some((check) => item.checks[check.id].flagged) : item.checks[active].flagged);
+  const affected = abstracts.filter((item) => active === "All" ? hasContentFinding(item) : item.checks[active].flagged);
 
   return (
     <>
@@ -251,7 +248,7 @@ function Detail({ abstract, onBack }) {
 }
 
 function Finding({ definition, result }) {
-  if (definition.id === "templating" && result.flagged) {
+  if (definition.id === "templating") {
     return (
       <article className="finding">
         <div className="finding-top"><strong>{definition.label}</strong><CheckStatus definition={definition} result={result} /></div>
@@ -265,9 +262,19 @@ function Finding({ definition, result }) {
                 <div><strong>{pair.submitted_abstract_id}</strong><p>{pair.submitted_evidence || "No matched text available."}</p></div>
                 <div><strong>{pair.matched_abstract_id}</strong><p>{pair.matched_evidence || "No matched text available."}</p></div>
               </div>
+              <div className="nested-checks">
+                {(pair.sub_checks || []).map((check) => <NestedCheck key={check.check_name} check={check} />)}
+              </div>
             </details>
           ))}
           {!result.evidence_pairs?.length && <p><strong>Evidence:</strong> {result.evidence || "None"}</p>}
+          <div className="nested-checks">
+            <strong>Record-level supporting checks</strong>
+            {(result.supporting_checks || []).map((check) => <NestedCheck key={check.check_name} check={check} />)}
+          </div>
+          {result.template_family?.family_id && (
+            <p><strong>Template family:</strong> {result.template_family.family_id} · {result.template_family.family_size} submissions</p>
+          )}
         </div>
       </article>
     );
@@ -281,16 +288,26 @@ function Finding({ definition, result }) {
   );
 }
 
+function NestedCheck({ check }) {
+  const evidenceCount = check.result?.supporting_data?.length || 0;
+  return (
+    <div className="nested-check">
+      <div><strong>{check.check_name.replaceAll("_", " ")}</strong><span>{check.evidence_role || "SUPPORTING"} · {check.result?.level || "UNKNOWN"}</span></div>
+      <p>{check.result?.comment || "No result comment."}{evidenceCount ? ` · ${evidenceCount} evidence item(s)` : ""}</p>
+    </div>
+  );
+}
+
 function HowItWorks() {
   return (
     <>
       <PageHead title="How It Works" subtitle="The triage logic represented by the current content-integrity report." />
       <div className="logic">
         <article><h3><RiskBadge risk="High" /> High</h3><p>Any one high-confidence content check requires editor review.</p></article>
-        <article><h3><RiskBadge risk="Moderate" /> Moderate</h3><p>Reserved by the report format; this pipeline run contains no corroborating checks.</p></article>
-        <article><h3><RiskBadge risk="Low" /> Low</h3><p>No content check fired, so no manual action is required.</p></article>
+        <article><h3><RiskBadge risk="Medium" /> Medium</h3><p>Medium evidence or multiple low-severity signals require editor review.</p></article>
+        <article><h3><RiskBadge risk="Low" /> Low</h3><p>A low-severity signal may require editor review; clean submissions retain the authoritative None result.</p></article>
       </div>
-      <section className="rule-section"><h2>Checks in this report</h2><div className="rule-note">Any one flagged → High priority</div>{checks.map((check) => <div className="rule-row" key={check.id}><strong>{check.label}<span>Content</span></strong>{check.description}</div>)}</section>
+      <section className="rule-section"><h2>Checks in this report</h2><div className="rule-note">Template evidence is pair-scoped; contradictions and trial checks are record-scoped support.</div>{checks.map((check) => <div className="rule-row" key={check.id}><strong>{check.label}<span>Content</span></strong>{check.description}</div>)}</section>
     </>
   );
 }
@@ -298,7 +315,11 @@ function HowItWorks() {
 function PageHead({ title, subtitle }) { return <header className="page-head"><h1>{title}</h1><p>{subtitle}</p></header>; }
 function Search({ value, onChange }) { return <input className="search" type="search" placeholder="Search submissions…" aria-label="Search submissions" value={value} onChange={(e) => onChange(e.target.value)} />; }
 function matches(item, query) { return `${item.abstract_id} ${item.title} ${item.corresponding_author} ${item.why_flagged}`.toLowerCase().includes(query.trim().toLowerCase()); }
-function affectedCount(abstracts) { return abstracts.filter((item) => checks.some((check) => item.checks[check.id].flagged)).length; }
+function hasContentFinding(item) {
+  return checks.some((check) => item.checks[check.id].flagged) ||
+    item.checks.templating.supporting_checks?.some((check) => check.result?.supporting_data?.length);
+}
+function affectedCount(abstracts) { return abstracts.filter(hasContentFinding).length; }
 
 export default function App({ report }) {
   const [page, setPage] = useState("overview");

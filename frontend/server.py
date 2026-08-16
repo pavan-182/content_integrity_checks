@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DIST = Path(__file__).resolve().parent / "dist"
 INPUT = Path(os.environ.get("ASCO_PIPELINE_INPUT", ROOT / "synthetic_asco_retractionwatch_validation.xml")).resolve()
-OUTPUT = Path(os.environ.get("ASCO_PIPELINE_OUTPUT", ROOT / "outputs/frontend_run")).resolve()
+OUTPUT = ROOT / "outputs/frontend_run"
 REPORT = OUTPUT / "content_integrity_results.json"
 LOCK = threading.Lock()
 sys.path.insert(0, str(ROOT))
@@ -32,14 +32,13 @@ def run_pipeline(input_path: Path = INPUT, output_dir: Path = OUTPUT, runner=sub
             input_dir.mkdir()
             shutil.copy2(input_path, input_dir / input_path.name)
 
-        pipeline_output = temporary / "pipeline-output"
         runner(
             [
                 str(ROOT / ".venv/bin/python"),
                 str(ROOT / "scripts/run_pipeline.py"),
                 "--input-dir", str(input_dir),
                 "--tortured-dictionary", str(ROOT / "🤷_tortured.csv"),
-                "--output-dir", str(pipeline_output),
+                "--output-dir", str(output_dir),
             ],
             cwd=ROOT,
             check=True,
@@ -47,15 +46,8 @@ def run_pipeline(input_path: Path = INPUT, output_dir: Path = OUTPUT, runner=sub
             text=True,
         )
 
-        generated_report = pipeline_output / "content_integrity_results.json"
+        generated_report = output_dir / "content_integrity_results.json"
         report = json.loads(generated_report.read_text(encoding="utf-8"))
-        if output_dir.exists():
-            shutil.rmtree(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(generated_report, output_dir / "content_integrity_results.json")
-        generated_workbook = pipeline_output / "content_integrity_screening_poc.xlsx"
-        if generated_workbook.exists():
-            shutil.copy2(generated_workbook, output_dir / generated_workbook.name)
         return report
 
 

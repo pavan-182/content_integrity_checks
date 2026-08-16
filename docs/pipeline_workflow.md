@@ -48,7 +48,7 @@ flowchart TD
     E3 --> K[Template cluster findings]
     J --> L[Aggregate record-level risk]
     K --> L
-    L --> M[Write JSONL, CSV, and Excel reports]
+    L --> M[Write canonical JSON and editor workbook]
 ```
 
 The default path is deterministic and local. Network access occurs only when `--validate-llm`, `--detect-nonsense-candidates`, or `--verify-trials` enables an external service.
@@ -191,7 +191,7 @@ All findings receive stable run-local IDs (`FND-00001`, `FND-00002`, and so on) 
 
 `--detect-nonsense-candidates` runs after Level A tortured-phrase matching. Sentences with a Level A match, fewer than eight tokens, heading-only/boilerplate text, or no gene-and-drug pattern co-occurrence are skipped locally. Each surviving sentence is reviewed by GPT-OSS using the same IntelliHub client and strict-JSON parsing as context validation.
 
-Only a model response marking the sentence not understandable creates a `nonsense_candidate` finding. It quotes the suspected phrase, preserves the full sentence as evidence, records the explanation/model/prompt version, and always has low severity. The check is sentence-level and candidate-only; it does not classify the abstract or infer authorship. Invalid model responses create no candidate.
+Only a model response marking the sentence not understandable creates an internal `nonsense_candidate`. This optional research signal is excluded from risk, JSON, Excel, run metadata, and the frontend. It does not classify the abstract or infer authorship. Invalid model responses create no candidate.
 
 ### 7.4 Contradiction and trial-reference checks
 
@@ -235,42 +235,26 @@ Any risk other than `None` sets `review_required` to `Yes` with neutral language
 
 ## 11. Stage 8 — Outputs
 
-Every run creates these files in the configured output directory:
+Every run creates only these files in the configured output directory:
 
 | File | Contents |
 |---|---|
-| `parsed_records.jsonl` | Full normalized record objects, including abstract sections and warnings |
-| `parsed_records.csv` | Flat record export for analysis |
-| `integrity_findings.csv` | Compact reviewer queue with evidence, severity, confidence, and review status |
-| `detailed_findings.csv` | Full diagnostic fields for non-template integrity findings |
-| `numerical_contradictions.csv` | Native detailed numerical-contradiction findings |
-| `design_contradictions.csv` | Native detailed study-design contradiction findings |
-| `trial_verification.csv` | All discovered trial references and their verification outcomes |
-| `template_pair_findings.csv` | Reviewable authoritative findings only, with two directional rows sharing one stable pair ID |
-| `template_pair_candidates.csv` | One canonical row per routed candidate, including insufficient-evidence candidates |
-| `template_detector_evidence.csv` | Raw merged exact-text and entity-normalized evidence retained for audit |
-| `template_clusters.csv` | Authoritative verified family rows for groups of at least three abstracts |
-| `enriched_template_abstracts.csv` | One summary row per abstract for the template-review workflow |
-| `pattern_dictionary.csv` | Effective LLM and tortured-phrase rules used by the run |
-| `parse_warnings.csv` | Parser warnings and record-ID deduplication actions |
-| `run_metadata.jsonl` | Timestamp, commit/dirty state, corpus checksum, complete config, counts, versions, and scope notes |
-| `content_integrity_screening_poc.xlsx` | Consolidated editorial workbook |
+| `content_integrity_results.json` | DOI-keyed, merge-ready content-integrity checks and evidence |
+| `Editor_Triage_Workbook.xlsx` | Compact editorial triage workbook matching the approved review layout |
 
-The workbook contains nine sheets:
+The workbook contains seven sheets:
 
-1. **Dashboard** — review priority, check, cluster, warning, and section counts;
-2. **Data Inventory** — parse totals, XML roots, and field coverage;
-3. **Abstract Summary** — one row per retained record with flags, counts, risk, and review status;
-4. **Integrity Findings** — one row per rule or template finding with exact evidence;
-5. **Template Pairs** — detailed pair evidence using the same ordered schema as the pair CSV;
-6. **Template Clusters** — verified family summaries;
-7. **Pattern Dictionary** — rules used for the run;
-8. **Parse Warnings** — ingestion and data-quality issues; and
-9. **Run Metadata** — configuration and audit context.
+1. **Dashboard** — submission and active-check counts;
+2. **High Risk Queue** — high-risk editor worklist;
+3. **Moderate Risk Queue** — medium-risk editor worklist;
+4. **Low Risk Queue** — low/no-risk records;
+5. **All Abstracts** — complete authoritative master list;
+6. **Check Detail** — flags, evidence, validation state, and operational failures; and
+7. **How This Works** — reviewer guidance and run metadata.
 
-`template_cluster_flag` means membership in a verified family of at least three abstracts; `template_flag` means at least one accepted pair finding.
+Each JSON submission contains `title`, `abstract_id`, and a `checks` array compatible with the authorship-integrity output. `template_detection` owns pair-scoped `exact_text_reuse`, `entity_normalized_template`, title, and section sub-checks. Numerical contradictions, design contradictions, and unverifiable-trial findings appear once in its record-scoped supporting block. They remain corroborating evidence and cannot create or promote a template pair by themselves. A family-scoped block is emitted only for verified families of at least three abstracts.
 
-The summary includes every retained record, including records with no findings.
+The key is the normalized DOI when present, otherwise the abstract ID. Duplicate output keys fail the run rather than overwrite a submission.
 
 ## 12. Failure handling and operational behavior
 
@@ -332,6 +316,6 @@ python -m unittest discover -s tests -v
 | `content_integrity/validators/context_validator.py` | Optional IntelliHub/GPT-OSS finding validation |
 | `content_integrity/validators/llm_trace_validator.py` | Selective response-residue validation with source context |
 | `content_integrity/aggregation/risk_engine.py` | Record-level risk rules |
-| `content_integrity/reporting.py` | JSONL, CSV, and Excel generation |
+| `content_integrity/reporting.py` | Canonical JSON and editor workbook generation |
 | `content_integrity/models.py` | Records, findings, and validation-result data models |
 | `content_integrity/utils.py` | Shared normalization, formatting, and deduplication helpers |

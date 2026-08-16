@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import csv
 import json
-from collections import Counter, defaultdict
+from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
 from openpyxl import Workbook
-from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.styles import Alignment, Font, PatternFill
 
 from .utils import ensure_parent_dir, normalize_whitespace, to_pipe_string
@@ -21,100 +20,6 @@ SCHEMA_VERSION = "1.0"
 HEADER_FILL = PatternFill("solid", fgColor="1F4E78")
 HEADER_FONT = Font(color="FFFFFF", bold=True)
 THIN_FONT = Font(name="Calibri", size=11)
-EDITOR_LABELS = (
-    "not_reviewed",
-    "no_issue",
-    "acceptable_overlap",
-    "unclear",
-    "concerning_overlap",
-    "duplicate_or_near_duplicate",
-    "confirmed_response_residue",
-    "legitimate_quotation",
-    "legitimate_ai_discussion",
-    "ordinary_academic_language",
-    "false_positive",
-    "new_pattern_confirmed",
-    "uncertain",
-)
-
-FINDINGS_COLUMNS = [
-    "finding_id",
-    "record_id",
-    "source_file",
-    "detector_type",
-    "check_type",
-    "category",
-    "matched_text",
-    "expected_term",
-    "evidence_snippet",
-    "section_or_field",
-    "severity",
-    "confidence",
-    "validation_status",
-    "validation_reason",
-    "validated_by",
-    "rule_id",
-    "template_cluster_id",
-    "cluster_size",
-    "similar_record_ids",
-    "similarity_score",
-    "cluster_severity",
-    "shared_skeleton_excerpt",
-    "metadata_context",
-    "template_pattern_type",
-    "original_text_similarity",
-    "masked_skeleton_similarity",
-    "ngram_similarity",
-    "weighted_section_similarity",
-    "section_similarities",
-    "variable_substitutions",
-    "exclusion_reason",
-    "pair_id",
-    "matched_record_id",
-    "matched_source_file",
-    "title",
-    "matched_title",
-    "primary_match_type",
-    "supporting_match_types",
-    "matched_sections",
-    "matched_sentence_count",
-    "shared_text_coverage",
-    "high_value_section_similarity",
-    "relationship_context",
-    "pair_classification",
-    "review_status",
-    "editor_label",
-    "editor_notes",
-]
-
-REVIEW_FINDINGS_COLUMNS = [
-    "finding_id",
-    "detector_type",
-    "check_type",
-    "record_id",
-    "source_file",
-    "matched_record_id",
-    "title",
-    "matched_title",
-    "category",
-    "matched_text",
-    "evidence_snippet",
-    "section_or_field",
-    "matched_sentence_count",
-    "shared_text_coverage",
-    "relationship_context",
-    "pair_classification",
-    "severity",
-    "confidence",
-    "validation_status",
-    "validation_reason",
-    "validated_by",
-    "rule_id",
-    "review_status",
-    "editor_label",
-    "editor_notes",
-]
-
 PAIR_COLUMNS = [
     "pair_id",
     "record_id",
@@ -144,158 +49,13 @@ PAIR_COLUMNS = [
     "editor_notes",
 ]
 
-FAMILY_COLUMNS = [
-    "template_family_id",
-    "member_count",
-    "family_confidence",
-    "representative_record_id",
-    "template_pattern_type",
-    "matched_sections",
-    "edge_density",
-    "median_pair_confidence",
-    "changed_entity_types",
-    "member_ids",
-    "shared_skeleton_excerpt",
-    "medoid_verification_passed",
-]
-
-DICTIONARY_COLUMNS = [
-    "detector_type",
-    "rule_id",
-    "category",
-    "pattern",
-    "matched_phrase",
-    "expected_term",
-    "severity",
-    "confidence",
-    "confidence_basis",
-    "rule_strength",
-    "proximity",
-    "retrieved_papers",
-    "source",
-    "dictionary_version",
-]
-
-WARNING_COLUMNS = [
-    "source_file",
-    "record_id",
-    "warning_code",
-    "warning_message",
-    "field_name",
-    "severity",
-    "evidence_snippet",
-    "schema_type",
-]
-
-OPERATIONAL_ISSUE_COLUMNS = [
-    "component",
-    "record_id",
-    "source_file",
-    "status",
-    "error_type",
-    "message",
-    "retry_count",
-    "recoverable",
-]
-
-ABSTRACT_SUMMARY_COLUMNS = [
-    "record_id",
-    "source_file",
-    "schema_type",
-    "title",
-    "doi",
-    "journal",
-    "publication_year",
-    "article_type",
-    "authors",
-    "affiliations",
-    "keywords",
-    "trial_ids",
-    "abstract_section_count",
-    "structured_abstract",
-    "parse_status",
-    "parse_warnings",
-    "llm_trace_flag",
-    "llm_review_priority",
-    "tortured_phrase_flag",
-    "nonsense_candidate_flag",
-    "numerical_contradiction_flag",
-    "design_contradiction_flag",
-    "unverifiable_trial_flag",
-    "template_flag",
-    "related_or_companion_flag",
-    "template_confidence",
-    "template_review_priority",
-    "matched_abstract_count",
-    "strongest_matched_record_id",
-    "strongest_matched_source_file",
-    "strongest_matched_title",
-    "strongest_match_pair_id",
-    "strongest_match_supporting_types",
-    "strongest_match_sections",
-    "strongest_match_sentence_count",
-    "strongest_match_shared_text_coverage",
-    "strongest_match_original_text_similarity",
-    "strongest_match_masked_skeleton_similarity",
-    "strongest_match_ngram_similarity",
-    "strongest_match_high_value_section_similarity",
-    "strongest_match_weighted_section_similarity",
-    "strongest_match_variable_substitutions",
-    "strongest_match_relationship_context",
-    "strongest_pair_classification",
-    "strongest_match_evidence_excerpt",
-    "strongest_match_review_status",
-    "primary_template_pattern",
-    "matched_sections",
-    "template_cluster_flag",
-    "template_family_id",
-    "template_family_size",
-    "template_family_confidence",
-    "template_evidence_summary",
-    "llm_trace_count",
-    "tortured_phrase_count",
-    "tortured_confirmed_count",
-    "tortured_rejected_count",
-    "tortured_uncertain_count",
-    "tortured_validation_failed_count",
-    "tortured_candidate_count",
-    "tortured_not_validated_count",
-    "nonsense_candidate_count",
-    "numerical_contradiction_count",
-    "design_contradiction_count",
-    "unverifiable_trial_count",
-    "detected_finding_count",
-    "active_finding_count",
-    "review_candidate_count",
-    "total_finding_count",
-    "highest_severity",
-    "overall_content_risk",
-    "review_required",
-    "review_reason",
-]
-
-# Editor-facing subset of ABSTRACT_SUMMARY_COLUMNS for the Abstracts review-queue
-# sheet: the full column set above is a diagnostic dump, not a reviewer queue.
-ABSTRACTS_SHEET_COLUMNS = [
-    "record_id",
-    "title",
-    "source_file",
-    "parse_status",
-    "overall_content_risk",
-    "review_required",
-    "review_reason",
-    "llm_trace_flag",
-    "tortured_phrase_flag",
-    "nonsense_candidate_flag",
-    "numerical_contradiction_flag",
-    "design_contradiction_flag",
-    "unverifiable_trial_flag",
-    "template_flag",
-    "active_finding_count",
-    "highest_severity",
-    "strongest_matched_record_id",
-    "strongest_matched_title",
-    "primary_template_pattern",
+TRIAGE_CHECKS = [
+    ("tortured_phrase", "tortured_phrase_flag", "Tortured Phrases"),
+    ("llm_response_trace", "llm_trace_flag", "LLM Response Trace"),
+    ("numerical_contradiction", "numerical_contradiction_flag", "Numerical Contradiction"),
+    ("design_contradiction", "design_contradiction_flag", "Design Contradiction"),
+    ("unverifiable_clinical_trial", "unverifiable_trial_flag", "Unverifiable Trial"),
+    ("template", "template_flag", "Templating (Cross-Author)"),
 ]
 
 
@@ -357,162 +117,6 @@ def _write_table(
     if auto_filter and rows:
         ws.auto_filter.ref = f"{ws.cell(start_row, start_col).coordinate}:{ws.cell(row=row_idx, column=col_idx + len(columns) - 1).coordinate}"
     return row_idx, col_idx + len(columns) - 1
-
-
-def _write_key_value_block(ws, items: Sequence[tuple[str, Any]], start_row: int = 1, title: str | None = None) -> int:
-    row = start_row
-    if title:
-        cell = ws.cell(row=row, column=1, value=title)
-        cell.font = Font(bold=True)
-        row += 1
-    for key, value in items:
-        ws.cell(row=row, column=1, value=key).font = Font(bold=True)
-        ws.cell(row=row, column=2, value=_stringify(value))
-        row += 1
-    return row
-
-
-def _auto_size_columns(ws, max_width: int = 60) -> None:
-    widths: dict[str, int] = {}
-    for row in ws.iter_rows():
-        for cell in row:
-            if cell.value is None:
-                continue
-            text = str(cell.value)
-            widths[cell.column_letter] = max(widths.get(cell.column_letter, 0), min(len(text), max_width))
-    for column_letter, width in widths.items():
-        ws.column_dimensions[column_letter].width = max(12, min(width + 2, max_width))
-
-
-def _add_editor_label_validation(ws, columns: Sequence[str]) -> None:
-    column = columns.index("editor_label") + 1
-    validation = DataValidation(
-        type="list",
-        formula1=f'"{",".join(EDITOR_LABELS)}"',
-        allow_blank=False,
-    )
-    ws.add_data_validation(validation)
-    validation.add(f"{ws.cell(2, column).coordinate}:{ws.cell(max(ws.max_row, 2), column).coordinate}")
-
-
-def _dashboard_block(ws, title: str, rows: list[dict[str, Any]], columns: list[str], start_row: int) -> int:
-    ws.cell(row=start_row, column=1, value=title).font = Font(bold=True, size=12)
-    end_row, _ = _write_table(ws, rows, columns, start_row=start_row + 1, auto_filter=False)
-    return end_row + 2
-
-
-def _dashboard_section(value: Any) -> str:
-    section = normalize_whitespace(str(value)).lower()
-    if section == "title":
-        return "Title"
-    for label in ("background", "methods", "results", "conclusions"):
-        if label.rstrip("s") in section:
-            return label.title()
-    if section == "cross_document":
-        return "Cross-document"
-    return "Abstract"
-
-
-def _write_dashboard(
-    workbook: Workbook,
-    abstract_summary_rows: list[dict[str, Any]],
-    findings_rows: list[dict[str, Any]],
-    cluster_rows: list[dict[str, Any]],
-    parse_warning_rows: list[dict[str, Any]],
-    operational_issue_rows: Sequence[dict[str, Any]] = (),
-) -> None:
-    ws = workbook.create_sheet("Dashboard")
-    row = 1
-
-    records_with_issues = len({str(issue.get("record_id")) for issue in operational_issue_rows if issue.get("record_id")})
-    row = _dashboard_block(
-        ws,
-        "Run overview",
-        [
-            {"metric": "total_abstracts", "count": len(abstract_summary_rows)},
-            {"metric": "successfully_processed", "count": sum(1 for item in abstract_summary_rows if item.get("parse_status") != "failed")},
-            {"metric": "records_with_operational_issues", "count": records_with_issues},
-            {"metric": "records_requiring_review", "count": sum(1 for item in abstract_summary_rows if item.get("review_required") == "Yes")},
-        ],
-        ["metric", "count"],
-        row,
-    )
-
-    priority_counts = Counter(row["overall_content_risk"] for row in abstract_summary_rows)
-    row = _dashboard_block(
-        ws,
-        "Abstracts by review priority",
-        [{"review_priority": priority, "count": priority_counts[priority]} for priority in ("High", "Medium", "Low", "None")],
-        ["review_priority", "count"],
-        row,
-    )
-
-    check_names = {
-        "llm_response_trace": "llm_trace",
-        "tortured_phrase": "tortured_phrase",
-        "template_cluster": "template",
-        "nonsense_candidate": "nonsense_candidate",
-    }
-    check_counts = Counter(item.get("check_type") or check_names.get(item.get("detector_type", ""), item.get("detector_type", "")) for item in findings_rows)
-    row = _dashboard_block(
-        ws,
-        "Findings by check type",
-        [{"check_type": check_type, "count": count} for check_type, count in sorted(check_counts.items())],
-        ["check_type", "count"],
-        row,
-    )
-
-    clusters: dict[str, tuple[int, str]] = {}
-    for item in cluster_rows:
-        cluster_id = str(item.get("template_family_id") or item.get("family_id", ""))
-        if not cluster_id:
-            continue
-        size = int(item.get("member_count") or item.get("family_size") or 0)
-        representative = str(item.get("representative_record_id", ""))
-        current = clusters.get(cluster_id)
-        clusters[cluster_id] = (max(size, current[0] if current else 0), min(representative, current[1]) if current else representative)
-    size_counts = Counter("5+" if size >= 5 else str(size) for size, _ in clusters.values())
-    row = _dashboard_block(
-        ws,
-        "Template cluster summary",
-        [
-            {"metric": "total_clusters", "count": len(clusters)},
-            *({"metric": f"size_{bucket}", "count": size_counts[bucket]} for bucket in ("2", "3", "4", "5+")),
-        ],
-        ["metric", "count"],
-        row,
-    )
-    row = _dashboard_block(
-        ws,
-        "Largest 10 template clusters",
-        [
-            {"template_cluster_id": cluster_id, "cluster_size": size, "representative_record_id": representative}
-            for cluster_id, (size, representative) in sorted(clusters.items(), key=lambda item: (-item[1][0], item[0]))[:10]
-        ],
-        ["template_cluster_id", "cluster_size", "representative_record_id"],
-        row,
-    )
-
-    warning_counts = Counter(str(item.get("warning_code", "")) for item in parse_warning_rows)
-    row = _dashboard_block(
-        ws,
-        "Parse failures and warnings by type",
-        [{"warning_type": warning_type, "count": count} for warning_type, count in sorted(warning_counts.items())]
-        or [{"warning_type": "NONE", "count": 0}],
-        ["warning_type", "count"],
-        row,
-    )
-
-    section_counts = Counter(_dashboard_section(item.get("section_or_field", "")) for item in findings_rows)
-    _dashboard_block(
-        ws,
-        "Findings by abstract section",
-        [{"section": section, "count": count} for section, count in sorted(section_counts.items())],
-        ["section", "count"],
-        row,
-    )
-    ws.freeze_panes = "A3"
-    _auto_size_columns(ws)
 
 
 def write_jsonl(path: str | Path, rows: Iterable[dict[str, Any]]) -> Path:
@@ -744,6 +348,7 @@ def build_content_integrity_frontend_json(
 
         abstract_findings: dict[str, Any] = {
             "abstract_id": record_id,
+            "doi": record.doi,
             "title": record.title,
             "corresponding_author": record.primary_author or None,
             "overall_risk": overall_risk,
@@ -806,6 +411,7 @@ def build_content_integrity_frontend_json(
                     "evidence": _build_llm_evidence([
                         {
                             "finding_id": finding.finding_id,
+                            "check_type": finding.check_type,
                             "category": finding.category,
                             "matched_phrase": finding.matched_text,
                             "evidence_snippet": finding.evidence_snippet,
@@ -822,6 +428,7 @@ def build_content_integrity_frontend_json(
                     "findings": [
                         {
                             "finding_id": finding.finding_id,
+                            "check_type": finding.check_type,
                             "category": finding.category,
                             "matched_phrase": finding.matched_text,
                             "evidence_snippet": finding.evidence_snippet,
@@ -905,7 +512,10 @@ def build_content_integrity_frontend_json(
                             "editorial_score": pair["editorial_score"],
                             "primary_evidence": pair["primary_evidence"],
                             "supporting_evidence": _split_values(str(pair.get("supporting_evidence", ""))),
+                            "contextual_evidence": _split_values(str(pair.get("contextual_evidence", ""))),
                             "direct_evidence": pair.get("direct_evidence", ""),
+                            "detector_evidence": _split_values(str(pair.get("detector_evidence", ""))),
+                            "retrieval_routes": _split_values(str(pair.get("retrieval_routes", ""))),
                             "evidence": pair.get("matching_text_evidence", ""),
                             "reason": _build_templating_reason([{
                                 "matched_abstract_id": pair["right_record_id"] if str(pair["left_record_id"]) == record_id else pair["left_record_id"],
@@ -914,11 +524,18 @@ def build_content_integrity_frontend_json(
                                 "same_author_group": _same_author_group(record_lookup[record_id], record_lookup[str(pair["right_record_id"] if str(pair["left_record_id"]) == record_id else pair["left_record_id"])]),
                             }]),
                             "strongest_section": pair.get("strongest_section", ""),
+                            "masked_title_similarity": pair.get("masked_title_similarity", 0.0),
+                            "original_title_similarity": pair.get("original_title_similarity", 0.0),
                             "masked_body_similarity": pair.get("masked_body_similarity", 0.0),
                             "original_body_similarity": pair.get("original_body_similarity", 0.0),
                             "strongest_section_similarity": pair.get("strongest_masked_section_similarity", 0.0),
                             "likely_substitutions": _split_semicolon_values(str(pair.get("likely_substitutions", ""))),
                             "context_interpretation": pair.get("context_interpretation", ""),
+                            "shared_trial_ids": _split_values(str(pair.get("shared_trial_ids", ""))),
+                            "shared_databases": _split_values(str(pair.get("shared_databases", ""))),
+                            "shared_populations": _split_values(str(pair.get("shared_populations", ""))),
+                            "shared_endpoints": _split_values(str(pair.get("shared_endpoints", ""))),
+                            "explicit_companion_wording": bool(pair.get("explicit_companion_wording", False)),
                         }
                         for pair in ordered_template_pairs
                     ],
@@ -991,6 +608,297 @@ def build_content_integrity_frontend_json(
     }
 
 
+_LEVEL_RANK = {"NONE": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3}
+
+
+def _integration_level(value: Any) -> str:
+    normalized = normalize_whitespace(str(value)).upper()
+    return "LOW" if normalized in {"", "NONE"} else normalized
+
+
+def _normalized_doi(value: Any) -> str:
+    doi = normalize_whitespace(str(value or "")).lower()
+    for prefix in ("https://doi.org/", "http://doi.org/", "doi:"):
+        if doi.startswith(prefix):
+            return doi[len(prefix):].strip()
+    return doi
+
+
+def _finding_level(findings: list[dict[str, Any]], *, failed: bool = False) -> str:
+    active = [finding for finding in findings if finding.get("active", True)]
+    if not active:
+        return "UNKNOWN" if failed else "LOW"
+    return max(
+        (_integration_level(finding.get("severity")) for finding in active),
+        key=lambda level: _LEVEL_RANK.get(level, 0),
+    )
+
+
+def _integration_check(
+    check_name: str,
+    check_description: str,
+    source: dict[str, Any],
+    clear_comment: str,
+    *,
+    evidence_role: str | None = None,
+) -> dict[str, Any]:
+    findings = list(source.get("findings") or [])
+    check = {
+        "check_name": check_name,
+        "check_description": check_description,
+        "result": {
+            "level": _finding_level(findings, failed=bool(source.get("operational_failure"))),
+            "supporting_data": findings,
+            "comment": str(source.get("evidence") or clear_comment),
+        },
+    }
+    if evidence_role:
+        check["evidence_role"] = evidence_role
+    return check
+
+
+def _template_sub_checks(pair: dict[str, Any]) -> list[dict[str, Any]]:
+    priority = _integration_level(pair.get("review_priority"))
+    direct = set(_split_values(str(pair.get("direct_evidence", ""))))
+    detectors = set(pair.get("detector_evidence") or [])
+    primary = set(_split_values(str(pair.get("primary_evidence", ""))))
+    routes = set(pair.get("retrieval_routes") or [])
+    exact_signals = sorted((direct | detectors | primary) & {
+        "exact_original_body",
+        "exact_results_section",
+        "substantial_shared_original_block",
+        "distinctive_shared_text",
+        "multiple_distinctive_sentences",
+        "rare_exact_phrase",
+        "substantial_shared_text",
+        "partial_or_reordered_reuse",
+    })
+    entity_triggered = "entity_normalized_template" in direct | detectors | primary
+    title_triggered = "title_template" in routes or "masked_title_template_with_original_support" in direct | primary
+    section_triggered = bool(pair.get("strongest_section")) and float(pair.get("strongest_section_similarity") or 0.0) > 0
+
+    def result(level: str, data: list[dict[str, Any]], comment: str) -> dict[str, Any]:
+        return {"level": level, "supporting_data": data, "comment": comment}
+
+    return [
+        {
+            "check_name": "exact_text_reuse",
+            "check_description": "Detects distinctive original text shared by two submissions.",
+            "evidence_role": "PRIMARY",
+            "result": result(
+                priority if exact_signals else "LOW",
+                [{
+                    "signals": exact_signals,
+                    "original_body_similarity": pair.get("original_body_similarity", 0.0),
+                    "evidence": pair.get("evidence", ""),
+                }] if exact_signals else [],
+                "Direct text-reuse evidence contributed to this pair."
+                if exact_signals else "No direct text-reuse evidence contributed to this pair.",
+            ),
+        },
+        {
+            "check_name": "entity_normalized_template",
+            "check_description": "Detects a shared writing skeleton after biomedical entities are normalized.",
+            "evidence_role": "PRIMARY",
+            "result": result(
+                priority if entity_triggered else "LOW",
+                [{
+                    "masked_body_similarity": pair.get("masked_body_similarity", 0.0),
+                    "original_body_similarity": pair.get("original_body_similarity", 0.0),
+                    "likely_substitutions": pair.get("likely_substitutions", []),
+                }] if entity_triggered else [],
+                "Entity-normalized reuse evidence contributed to this pair."
+                if entity_triggered else "No entity-normalized reuse evidence contributed to this pair.",
+            ),
+        },
+        {
+            "check_name": "title_template",
+            "check_description": "Detects structurally similar titles after entity normalization.",
+            "evidence_role": "SUPPORTING",
+            "result": result(
+                priority if title_triggered else "LOW",
+                [{
+                    "masked_title_similarity": pair.get("masked_title_similarity", 0.0),
+                    "original_title_similarity": pair.get("original_title_similarity", 0.0),
+                }] if title_triggered else [],
+                "Title-template evidence supported this pair."
+                if title_triggered else "No title-template evidence supported this pair.",
+            ),
+        },
+        {
+            "check_name": "section_similarity",
+            "check_description": "Compares corresponding sections of the two abstracts.",
+            "evidence_role": "SUPPORTING",
+            "result": result(
+                priority if section_triggered else "LOW",
+                [{
+                    "strongest_section": pair.get("strongest_section", ""),
+                    "strongest_section_similarity": pair.get("strongest_section_similarity", 0.0),
+                    "supporting_evidence": pair.get("supporting_evidence", []),
+                }] if section_triggered else [],
+                "Section-level similarity supported this pair."
+                if section_triggered else "No section-level similarity supported this pair.",
+            ),
+        },
+    ]
+
+
+def build_integrated_content_integrity_json(canonical_report: dict[str, Any]) -> dict[str, Any]:
+    """Project the authoritative report into the DOI-keyed cross-pipeline contract."""
+    output: dict[str, Any] = {}
+    hidden_finding_ids = {
+        finding.get("finding_id")
+        for finding in canonical_report.get("findings", [])
+        if finding.get("detector_type") == "nonsense_candidate"
+    }
+    for abstract in canonical_report["abstracts"]:
+        key = _normalized_doi(abstract.get("doi")) or str(abstract["abstract_id"])
+        if key in output:
+            raise ValueError(f"Duplicate content-integrity integration key: {key}")
+
+        checks = abstract["checks"]
+        template = checks["templating"]
+        evidence_pairs = {item["pair_id"]: item for item in template.get("evidence_pairs", [])}
+        pair_data = []
+        for pair in template.get("findings", []):
+            evidence_pair = evidence_pairs.get(pair["pair_id"], {})
+            pair_data.append({
+                "evidence_scope": "PAIR",
+                "pair_id": pair["pair_id"],
+                "matched_abstract_id": pair["matched_abstract_id"],
+                "matched_title": pair.get("matched_title", ""),
+                "classification": pair.get("pair_class", ""),
+                "review_priority": _integration_level(pair.get("review_priority")),
+                "editorial_score": pair.get("editorial_score", 0.0),
+                "sub_checks": _template_sub_checks(pair),
+                "context": {
+                    "shared_trial_ids": pair.get("shared_trial_ids", []),
+                    "shared_databases": pair.get("shared_databases", []),
+                    "shared_populations": pair.get("shared_populations", []),
+                    "shared_endpoints": pair.get("shared_endpoints", []),
+                    "explicit_companion_wording": pair.get("explicit_companion_wording", False),
+                    "interpretation": pair.get("context_interpretation", ""),
+                },
+                "submitted_evidence": evidence_pair.get("submitted_evidence", ""),
+                "matched_evidence": evidence_pair.get("matched_evidence", ""),
+            })
+
+        record_supporting_checks = [
+            _integration_check(
+                "numerical_contradiction",
+                "Detects inconsistent percentages, counts, ranges, or other numerical claims.",
+                checks["numerical_contradiction"],
+                "No active numerical contradiction was detected.",
+                evidence_role="CORROBORATING",
+            ),
+            _integration_check(
+                "design_contradiction",
+                "Detects mutually inconsistent study-design statements.",
+                checks["design_contradiction"],
+                "No active study-design contradiction was detected.",
+                evidence_role="CORROBORATING",
+            ),
+            _integration_check(
+                "unverifiable_clinical_trial",
+                "Checks whether stated clinical-trial identifiers are valid and verifiable.",
+                checks["unverifiable_trial"],
+                "No unverifiable clinical-trial reference was detected.",
+                evidence_role="CORROBORATING",
+            ),
+        ]
+        template_supporting_data = [*pair_data, {
+            "evidence_scope": "RECORD",
+            "supporting_checks": record_supporting_checks,
+        }]
+        if template.get("template_family_id"):
+            family = next(
+                (
+                    item for item in canonical_report.get("template_families", [])
+                    if item.get("family_id") == template["template_family_id"]
+                ),
+                {},
+            )
+            template_supporting_data.append({
+                "evidence_scope": "FAMILY",
+                "family_id": template["template_family_id"],
+                "family_size": template.get("family_size", 0),
+                "representative_abstract_id": family.get("representative_record_id", ""),
+                "member_abstract_ids": _split_values(str(family.get("member_ids", ""))),
+            })
+
+        template_level = (
+            "UNKNOWN"
+            if template.get("operational_failure") and not pair_data
+            else _integration_level(template.get("highest_review_priority"))
+        )
+        triggered_checks = []
+        if checks["tortured_phrases"].get("flagged") or checks["tortured_phrases"].get("review_candidate"):
+            triggered_checks.append("Tortured Phrase")
+        if checks["llm_response_trace"].get("flagged") or checks["llm_response_trace"].get("review_candidate"):
+            triggered_checks.append("LLM Response Trace")
+        if pair_data:
+            triggered_checks.append("Template Detection")
+        supporting_labels = {
+            "numerical_contradiction": "Numerical Contradiction",
+            "design_contradiction": "Design Contradiction",
+            "unverifiable_clinical_trial": "Unverifiable Clinical Trial",
+        }
+        triggered_checks.extend(
+            supporting_labels[check["check_name"]]
+            for check in record_supporting_checks
+            if check["result"]["supporting_data"]
+        )
+        summary_comment = ", ".join(triggered_checks) or "No active content-integrity detection."
+        summary_data = {
+            "overall_content_risk": abstract["overall_content_risk"].upper(),
+            "review_required": abstract["review_required"],
+            "flagged_checks": triggered_checks,
+            "finding_ids": [
+                finding_id for finding_id in abstract["finding_ids"]
+                if finding_id not in hidden_finding_ids
+            ],
+            "template_pair_ids": abstract["template_pair_ids"],
+            "operational_issues": abstract["operational_issues"],
+        }
+        output[key] = {
+            "title": abstract["title"],
+            "abstract_id": abstract["abstract_id"],
+            "checks": [
+                {
+                    "check_name": "content_integrity_summary",
+                    "check_description": "Authoritative aggregate result for all content-integrity checks.",
+                    "result": {
+                        "level": _integration_level(abstract["overall_content_risk"]),
+                        "supporting_data": [summary_data],
+                        "comment": summary_comment,
+                    },
+                },
+                _integration_check(
+                    "tortured_phrases",
+                    "Detects known tortured or nonsensical scientific phrases.",
+                    checks["tortured_phrases"],
+                    "No active tortured phrase was detected.",
+                ),
+                _integration_check(
+                    "llm_response_trace",
+                    "Detects residual language associated with an LLM or conversational assistant response.",
+                    checks["llm_response_trace"],
+                    "No active LLM response trace was detected.",
+                ),
+                {
+                    "check_name": "template_detection",
+                    "check_description": "Detects suspicious text or writing-template reuse across submissions.",
+                    "result": {
+                        "level": template_level,
+                        "supporting_data": template_supporting_data,
+                        "comment": template.get("reason") or "No accepted template pair was detected.",
+                    },
+                },
+            ],
+        }
+    return output
+
+
 def write_csv(path: str | Path, rows: Sequence[dict[str, Any]], columns: Sequence[str]) -> Path:
     resolved = ensure_parent_dir(path)
     with resolved.open("w", encoding="utf-8", newline="") as handle:
@@ -1004,132 +912,208 @@ def write_csv(path: str | Path, rows: Sequence[dict[str, Any]], columns: Sequenc
 def write_workbook(
     path: str | Path,
     *,
-    inventory_rows: list[dict[str, Any]],
-    root_summary_rows: list[dict[str, Any]],
     abstract_summary_rows: list[dict[str, Any]],
     findings_rows: list[dict[str, Any]],
     pair_rows: list[dict[str, Any]],
-    cluster_rows: list[dict[str, Any]],
-    dictionary_rows: list[dict[str, Any]],
-    parse_warning_rows: list[dict[str, Any]],
     operational_issue_rows: list[dict[str, Any]],
     run_metadata_rows: list[tuple[str, Any]],
-    pair_columns: Sequence[str] = PAIR_COLUMNS,
-    cluster_columns: Sequence[str] = FAMILY_COLUMNS,
 ) -> Path:
+    """Write the compact editor-triage workbook; JSON retains the diagnostic detail."""
     resolved = ensure_parent_dir(path)
     workbook = Workbook()
-    default_sheet = workbook.active
-    workbook.remove(default_sheet)
+    dashboard = workbook.active
+    dashboard.title = "Dashboard"
 
-    _write_dashboard(workbook, abstract_summary_rows, findings_rows, cluster_rows, parse_warning_rows, operational_issue_rows)
+    findings_by_record: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for finding in findings_rows:
+        findings_by_record[str(finding.get("record_id", ""))].append(finding)
+    pairs_by_record: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for pair in pair_rows:
+        pairs_by_record[str(pair.get("left_record_id", ""))].append(pair)
+    issues_by_record: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for issue in operational_issue_rows:
+        issues_by_record[str(issue.get("record_id", ""))].append(issue)
 
-    # Data Inventory sheet
-    ws = workbook.create_sheet("Data Inventory")
-    metrics = [item for item in root_summary_rows if not item[0].startswith("root_element_")]
-    root_elements = [item for item in root_summary_rows if item[0].startswith("root_element_")]
-    ws.cell(row=1, column=1, value="metric").fill = HEADER_FILL
-    ws.cell(row=1, column=1).font = HEADER_FONT
-    ws.cell(row=1, column=2, value="value").fill = HEADER_FILL
-    ws.cell(row=1, column=2).font = HEADER_FONT
-    row = 2
-    for metric, value in metrics:
-        ws.cell(row=row, column=1, value=metric).font = Font(bold=True)
-        ws.cell(row=row, column=2, value=_stringify(value))
-        row += 1
-    row += 1
-    ws.cell(row=row, column=1, value="root_element").fill = HEADER_FILL
-    ws.cell(row=row, column=1).font = HEADER_FONT
-    ws.cell(row=row, column=2, value="count").fill = HEADER_FILL
-    ws.cell(row=row, column=2).font = HEADER_FONT
-    row += 1
-    for root_metric, value in root_elements:
-        ws.cell(row=row, column=1, value=root_metric.replace("root_element_", "")).font = THIN_FONT
-        ws.cell(row=row, column=2, value=value).font = THIN_FONT
-        row += 1
-    row += 1
-    field_columns = [
-        "field_name",
-        "primary_xml_path",
-        "present_count",
-        "present_pct",
-        "example_value",
-        "useful_for_poc",
-        "notes",
+    def evidence(record_id: str, detector: str) -> str:
+        if detector == "template":
+            return _join_lines(
+                f"{pair.get('pair_id', '')}: {pair.get('right_record_id', '')} — "
+                f"{pair.get('primary_evidence') or pair.get('matching_text_evidence') or pair.get('priority_reason', '')}"
+                for pair in pairs_by_record.get(record_id, [])
+            )
+        return _join_lines(
+            f"{item.get('evidence_snippet', '')} [{item.get('validation_status')}]"
+            if item.get("validation_status") else str(item.get("evidence_snippet", ""))
+            for item in findings_by_record.get(record_id, [])
+            if item.get("detector_type") == detector
+        )
+
+    def check_value(row: dict[str, Any], detector: str, flag: str) -> str:
+        if row.get(flag) == "Yes":
+            return "Y"
+        if any(item.get("review_candidate") for item in findings_by_record.get(str(row["record_id"]), []) if item.get("detector_type") == detector):
+            return "Review"
+        return "N"
+
+    master_rows: list[dict[str, Any]] = []
+    check_rows: list[dict[str, Any]] = []
+    for row in abstract_summary_rows:
+        record_id = str(row["record_id"])
+        values = {label: check_value(row, detector, flag) for detector, flag, label in TRIAGE_CHECKS}
+        record_issues = [*issues_by_record.get("", []), *issues_by_record.get(record_id, [])]
+        active_checks = sum(value == "Y" for value in values.values())
+        high_confidence = sum(
+            bool(item.get("active")) and str(item.get("severity", "")).lower() == "high"
+            for item in findings_by_record.get(record_id, [])
+        ) + int(values["Templating (Cross-Author)"] == "Y" and row.get("template_review_priority") == "High")
+        why = row.get("review_reason") or "No active integrity findings."
+        if record_issues and not row.get("review_reason"):
+            why = "Processing issue requires attention."
+        master = {
+            "Abstract ID": record_id,
+            "Title (short)": str(row.get("title", ""))[:120],
+            "Corresponding Author": row.get("primary_author") or str(row.get("authors", "")).split(" | ")[0],
+            "Overall Risk": row.get("overall_content_risk", "None"),
+            "Why Flagged (plain English)": why,
+            "High-Confidence Flags": high_confidence,
+            "Corroborating Flags": max(active_checks - high_confidence, 0),
+            **values,
+            "Operational Issues": "Y" if record_issues else "N",
+            "Finding Count": row.get("active_finding_count", 0),
+            "Review Required": row.get("review_required", "No"),
+        }
+        master_rows.append(master)
+        detail = {
+            "Abstract ID": master["Abstract ID"],
+            "Title (short)": master["Title (short)"],
+            "Corresponding Author": master["Corresponding Author"],
+        }
+        for detector, _, label in TRIAGE_CHECKS:
+            detail[f"{label} - Flag"] = values[label]
+            detail[f"{label} - Evidence"] = evidence(record_id, detector)
+        detail["Operational Issues - Flag"] = master["Operational Issues"]
+        detail["Operational Issues - Evidence"] = _join_lines(
+            f"{item.get('component', '')}: {item.get('message', '')}" for item in record_issues
+        )
+        check_rows.append(detail)
+
+    risk_groups = {
+        "High": [row for row in master_rows if row["Overall Risk"] == "High"],
+        "Medium": [row for row in master_rows if row["Overall Risk"] == "Medium"],
+        "Low": [row for row in master_rows if row["Overall Risk"] not in {"High", "Medium"}],
+    }
+    for label, rows in risk_groups.items():
+        for rank, row in enumerate(rows, 1):
+            row[f"{label} Risk Rank"] = rank
+    for row in master_rows:
+        for label in risk_groups:
+            row.setdefault(f"{label} Risk Rank", "")
+
+    def style_table(ws, rows: list[dict[str, Any]], columns: list[str], *, detail: bool = False) -> None:
+        _write_table(ws, rows, columns)
+        ws.freeze_panes = "D2" if len(columns) > 7 else "B2"
+        ws.sheet_view.showGridLines = False
+        ws.row_dimensions[1].height = 42
+        for column, name in enumerate(columns, 1):
+            color = "8EA9DB" if column <= 3 else ("C0504D" if detail and name.endswith("- Flag") else "1F4E78")
+            ws.cell(1, column).fill = PatternFill("solid", fgColor=color)
+            ws.cell(1, column).font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+            ws.cell(1, column).alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        for row_index in range(2, ws.max_row + 1):
+            ws.row_dimensions[row_index].height = 34
+            for cell in ws[row_index]:
+                cell.font = Font(name="Arial", size=10)
+                cell.alignment = Alignment(horizontal="center" if cell.column <= 4 else "left", vertical="center", wrap_text=True)
+        widths = {1: 15, 2: 38, 3: 22, 4: 14, 5: 48}
+        for column in range(1, len(columns) + 1):
+            ws.column_dimensions[ws.cell(1, column).column_letter].width = widths.get(column, 18 if "Flag" in columns[column - 1] else 42)
+
+    # Dashboard mirrors the supplied editor workbook: four cards plus compact triage summaries.
+    dashboard.sheet_view.showGridLines = False
+    dashboard.merge_cells("A1:H1")
+    dashboard["A1"] = "Editor Triage — Submission Overview"
+    dashboard["A1"].font = Font(name="Arial", size=14, bold=True, color="1F4E78")
+    cards = [
+        ("A3:B3", "A4:B5", "Total Submissions", len(master_rows), "D9E1F2"),
+        ("C3:D3", "C4:D5", "No / Low Risk", len(risk_groups["Low"]), "E2F0D9"),
+        ("E3:F3", "E4:F5", "Moderate Risk", len(risk_groups["Medium"]), "FCE4D6"),
+        ("G3:H3", "G4:H5", "High Risk", len(risk_groups["High"]), "F4CCCC"),
     ]
-    _write_table(ws, inventory_rows, field_columns, start_row=row)
-    ws.freeze_panes = f"A{row+1}"
-    _auto_size_columns(ws)
+    for label_range, value_range, label, value, color in cards:
+        dashboard.merge_cells(label_range)
+        dashboard.merge_cells(value_range)
+        label_cell = dashboard[label_range.split(":")[0]]
+        value_cell = dashboard[value_range.split(":")[0]]
+        label_cell.value, value_cell.value = label, value
+        label_cell.font = Font(name="Arial", size=10, color="595959")
+        value_cell.font = Font(name="Arial", size=22, bold=True)
+        label_cell.alignment = value_cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        value_cell.fill = PatternFill("solid", fgColor=color)
+    dashboard.merge_cells("A7:H7")
+    dashboard["A7"] = f"{sum(row['Review Required'] == 'Yes' for row in master_rows)} submissions require editor judgement"
+    dashboard["A7"].font = Font(name="Arial", size=11, bold=True, color="1F4E78")
+    dashboard["A7"].alignment = Alignment(horizontal="center")
+    dashboard.merge_cells("A10:H10")
+    dashboard["A10"] = "Active checks"
+    dashboard["A10"].font = Font(name="Arial", size=11, bold=True, color="FFFFFF")
+    dashboard["A10"].fill = HEADER_FILL
+    check_summary = [{"Check": label, "Flagged Abstracts": sum(row[label] == "Y" for row in master_rows)} for _, _, label in TRIAGE_CHECKS]
+    _write_table(dashboard, check_summary, ["Check", "Flagged Abstracts"], start_row=11, auto_filter=False)
+    dashboard.column_dimensions["A"].width = 32
+    for column in "BCDEFGH":
+        dashboard.column_dimensions[column].width = 14
 
-    # Abstracts - the primary editor review queue (trimmed to reviewer-relevant
-    # fields; the full diagnostic column set stays available in the JSON export).
-    ws = workbook.create_sheet("Abstracts")
-    _write_table(ws, abstract_summary_rows, ABSTRACTS_SHEET_COLUMNS, start_row=1)
-    ws.freeze_panes = "A2"
-    _auto_size_columns(ws)
+    queue_columns = ["Rank", "Abstract ID", "Title (short)", "Corresponding Author", "Why Flagged (plain English)", "High-Confidence Flags", "Corroborating Flags"]
+    for sheet_name, key in (("High Risk Queue", "High"), ("Moderate Risk Queue", "Medium"), ("Low Risk Queue", "Low")):
+        rows = [{"Rank": index, **row} for index, row in enumerate(risk_groups[key], 1)]
+        ws = workbook.create_sheet(sheet_name)
+        style_table(ws, rows, queue_columns)
 
-    # Findings - one row per editor-visible finding, same authoritative rows as
-    # the JSON "findings" array (REVIEW_FINDINGS_COLUMNS, not the raw detector dump).
-    ws = workbook.create_sheet("Findings")
-    _write_table(
-        ws,
-        findings_rows
-        or [
-            {
-                "finding_id": "",
-                "detector_type": "",
-                "check_type": "",
-                "record_id": "",
-                "source_file": "",
-                "evidence_snippet": "No integrity findings detected in this run.",
-            }
-        ],
-        REVIEW_FINDINGS_COLUMNS,
-        start_row=1,
-    )
-    _add_editor_label_validation(ws, REVIEW_FINDINGS_COLUMNS)
-    ws.freeze_panes = "A2"
-    _auto_size_columns(ws)
+    master_columns = [
+        "Abstract ID", "Title (short)", "Corresponding Author", "Overall Risk", "Why Flagged (plain English)",
+        "High-Confidence Flags", "Corroborating Flags", *(label for _, _, label in TRIAGE_CHECKS),
+        "Operational Issues", "Finding Count", "Review Required", "High Risk Rank", "Medium Risk Rank", "Low Risk Rank",
+    ]
+    ws = workbook.create_sheet("All Abstracts")
+    style_table(ws, master_rows, master_columns)
+    for row_index in range(2, ws.max_row + 1):
+        risk_cell = ws.cell(row_index, 4)
+        risk_cell.fill = PatternFill("solid", fgColor={"High": "F4CCCC", "Medium": "FCE4D6", "Low": "E2F0D9", "None": "E2F0D9"}.get(str(risk_cell.value), "FFFFFF"))
 
-    # Template_Pairs - editor-facing pair evidence, generated from the same
-    # canonical pair computation as the JSON "template_pairs" array.
-    ws = workbook.create_sheet("Template_Pairs")
-    _write_table(ws, pair_rows, pair_columns, start_row=1)
-    if "editor_label" in pair_columns:
-        _add_editor_label_validation(ws, pair_columns)
-    ws.freeze_panes = "A2"
-    _auto_size_columns(ws)
+    detail_columns = ["Abstract ID", "Title (short)", "Corresponding Author"]
+    for _, _, label in TRIAGE_CHECKS:
+        detail_columns.extend((f"{label} - Flag", f"{label} - Evidence"))
+    detail_columns.extend(("Operational Issues - Flag", "Operational Issues - Evidence"))
+    ws = workbook.create_sheet("Check Detail")
+    style_table(ws, check_rows, detail_columns, detail=True)
 
-    # Template Clusters
-    ws = workbook.create_sheet("Template Clusters")
-    _write_table(ws, cluster_rows, cluster_columns, start_row=1)
-    ws.freeze_panes = "A2"
-    _auto_size_columns(ws)
-
-    # Pattern Dictionary
-    ws = workbook.create_sheet("Pattern Dictionary")
-    _write_table(ws, dictionary_rows, DICTIONARY_COLUMNS, start_row=1)
-    ws.freeze_panes = "A2"
-    _auto_size_columns(ws)
-
-    # Parse Warnings
-    ws = workbook.create_sheet("Parse Warnings")
-    _write_table(ws, parse_warning_rows, WARNING_COLUMNS, start_row=1)
-    ws.freeze_panes = "A2"
-    _auto_size_columns(ws)
-
-    # Operational_Issues - checks that could not complete, kept separate from
-    # integrity findings so "no issue found" is never confused with "not checked".
-    ws = workbook.create_sheet("Operational_Issues")
-    _write_table(ws, operational_issue_rows, OPERATIONAL_ISSUE_COLUMNS, start_row=1)
-    ws.freeze_panes = "A2"
-    _auto_size_columns(ws)
-
-    # Run_Metadata - human-readable version of the JSON run block.
-    ws = workbook.create_sheet("Run_Metadata")
-    _write_key_value_block(ws, run_metadata_rows, start_row=1)
-    _auto_size_columns(ws)
+    ws = workbook.create_sheet("How This Works")
+    ws.sheet_view.showGridLines = False
+    instructions = [
+        "Editor Triage Workbook — How This Works",
+        "",
+        "Start with Dashboard, then use the High and Moderate Risk queues. All Abstracts is the complete authoritative list.",
+        "1. Risk and review values come from the pipeline decision engine; this workbook does not recalculate them.",
+        "2. Check Detail contains the submitted evidence and validation state behind each check.",
+        "3. 'Review' means an inactive candidate requires judgement; it is not confirmed risk evidence.",
+        "4. Operational issues mean a check did not complete; they are not scientific findings.",
+        "5. The companion content_integrity_results.json remains the complete machine-readable report.",
+        "",
+        "Run metadata",
+    ]
+    for row_index, value in enumerate(instructions, 1):
+        ws.merge_cells(start_row=row_index, start_column=1, end_row=row_index, end_column=6)
+        cell = ws.cell(row_index, 1, value=value)
+        cell.font = Font(name="Arial", size=14 if row_index == 1 else 10, bold=row_index in {1, 10}, color="1F4E78")
+        cell.alignment = Alignment(vertical="top", wrap_text=True)
+        ws.row_dimensions[row_index].height = 28
+    metadata_start = len(instructions) + 1
+    for offset, (key, value) in enumerate(run_metadata_rows):
+        row_index = metadata_start + offset
+        ws.cell(row_index, 1, key).font = Font(name="Arial", size=10, bold=True)
+        ws.cell(row_index, 2, _stringify(value)).font = Font(name="Arial", size=10)
+    ws.column_dimensions["A"].width = 42
+    ws.column_dimensions["B"].width = 90
 
     workbook.save(resolved)
     return resolved
-

@@ -20,14 +20,15 @@ class ServerTests(unittest.TestCase):
                 input_dir = Path(command[command.index("--input-dir") + 1])
                 pipeline_output = Path(command[command.index("--output-dir") + 1])
                 self.assertEqual([path.name for path in input_dir.glob("*.xml")], ["input.xml"])
+                self.assertEqual(pipeline_output, output)
                 pipeline_output.mkdir()
                 (pipeline_output / "content_integrity_results.json").write_text(json.dumps(expected), encoding="utf-8")
-                (pipeline_output / "content_integrity_screening_poc.xlsx").write_bytes(b"workbook-bytes")
+                (pipeline_output / "Editor_Triage_Workbook.xlsx").write_bytes(b"workbook-bytes")
                 return subprocess.CompletedProcess(command, 0)
 
             self.assertEqual(run_pipeline(source, output, runner), expected)
             self.assertEqual(json.loads((output / "content_integrity_results.json").read_text()), expected)
-            self.assertEqual((output / "content_integrity_screening_poc.xlsx").read_bytes(), b"workbook-bytes")
+            self.assertEqual((output / "Editor_Triage_Workbook.xlsx").read_bytes(), b"workbook-bytes")
 
 
 if __name__ == "__main__":
