@@ -10,6 +10,7 @@ from typing import Any
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 
+from .aggregation.risk_engine import severity_rank
 from .utils import ensure_parent_dir, normalize_whitespace, to_pipe_string
 
 
@@ -170,6 +171,16 @@ def _build_tortured_evidence(findings: Iterable[dict[str, Any]], *, include_vali
         return base
 
     return _join_lines(_line(finding) for finding in findings)
+
+
+def _risk_priority_key(row: dict[str, Any]) -> tuple[int, int, str]:
+    """Worst-first ordering shared by the frontend JSON and the xlsx workbook, so both
+    surfaces rank abstracts by actual risk signal instead of file-discovery order."""
+    return (
+        -severity_rank(str(row.get("highest_severity", "None"))),
+        -int(row.get("total_finding_count", 0) or 0),
+        str(row.get("record_id", "")),
+    )
 
 
 def _build_llm_evidence(findings: list[dict[str, Any]]) -> str:
@@ -359,7 +370,7 @@ def build_content_integrity_frontend_json(
         )
 
     abstracts: list[dict[str, Any]] = []
-    for record in sorted(records, key=lambda record: str(record.record_id)):
+    for record in sorted(records, key=lambda record: _risk_priority_key(result_lookup[str(record.record_id)])):
         record_id = str(record.record_id)
         tortured_findings = [
             finding for finding in findings_by_record.get(record_id, []) if finding.detector_type == "tortured_phrase"
@@ -392,6 +403,7 @@ def build_content_integrity_frontend_json(
         flagged_design = result["design_contradiction_flag"] == "Yes"
         flagged_trial = result["unverifiable_trial_flag"] == "Yes"
         flagged_templating = result["template_flag"] == "Yes"
+        flagged_authorship = result["authorship_flag"] == "Yes"
         flagged_checks: list[str] = []
         if flagged_tortured:
             flagged_checks.append("tortured_phrases")
@@ -405,6 +417,8 @@ def build_content_integrity_frontend_json(
             flagged_checks.append("unverifiable_trial")
         if flagged_templating:
             flagged_checks.append("Templating (Cross-Author)")
+        if flagged_authorship:
+            flagged_checks.append("authorship_risk")
 
         overall_risk = str(result["overall_content_risk"])
         review_required = result["review_required"] == "Yes"
@@ -607,6 +621,13 @@ def build_content_integrity_frontend_json(
                         }
                         for pair in ordered_template_pairs
                     ],
+                },
+                "authorship_risk": {
+                    "label": "Authorship Risk",
+                    "flagged": flagged_authorship,
+                    "review_priority": result["authorship_review_priority"],
+                    "reasons": _split_values(str(result.get("authorship_reasons", ""))),
+                    "evidence": str(result.get("authorship_evidence", "")),
                 },
             },
         }
@@ -902,6 +923,16 @@ def build_integrated_content_integrity_json(canonical_report: dict[str, Any]) ->
                 "No unverifiable clinical-trial reference was detected.",
                 evidence_role="CORROBORATING",
             ),
+            {
+                "check_name": "authorship_risk",
+                "check_description": "Flags authorship-network risk signals (submission volume, author count deviation, affiliation relevance, author network, retraction history).",
+                "result": {
+                    "level": _integration_level(checks["authorship_risk"]["review_priority"]),
+                    "supporting_data": [{"reason": reason} for reason in checks["authorship_risk"]["reasons"]],
+                    "comment": checks["authorship_risk"]["evidence"] or "No authorship risk signal was detected.",
+                },
+                "evidence_role": "CORROBORATING",
+            },
         ]
         template_supporting_data = [*pair_data, {
             "evidence_scope": "RECORD",
@@ -939,6 +970,7 @@ def build_integrated_content_integrity_json(canonical_report: dict[str, Any]) ->
             "numerical_contradiction": "Numerical Contradiction",
             "design_contradiction": "Design Contradiction",
             "unverifiable_clinical_trial": "Unverifiable Clinical Trial",
+            "authorship_risk": "Authorship Risk",
         }
         triggered_checks.extend(
             supporting_labels[check["check_name"]]
@@ -1014,14 +1046,14 @@ def write_workbook(
     pair_rows: list[dict[str, Any]],
     operational_issue_rows: list[dict[str, Any]],
     run_metadata_rows: list[tuple[str, Any]],
-    authorship_json_path: str | Path | None = None,
+    authorship_checks_by_key: dict[str, dict[str, dict[str, str]]] | None = None,
 ) -> Path:
     """Write the compact editor-triage workbook; JSON retains the diagnostic detail."""
     resolved = ensure_parent_dir(path)
     workbook = Workbook()
     dashboard = workbook.active
     dashboard.title = "Dashboard"
-    authorship_checks_by_key = _load_authorship_checks(authorship_json_path)
+    authorship_checks_by_key = authorship_checks_by_key or {}
 
     findings_by_record: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for finding in findings_rows:
@@ -1090,10 +1122,7 @@ def write_workbook(
         for _, flag, label in TRIAGE_CHECKS:
             if values.get(label) != "N":
                 reasons.append(label)
-        for check_name, label in AUTHORSHIP_CHECKS:
-            level = authorship_value(row, check_name)
-            if level in {"MEDIUM", "HIGH"}:
-                reasons.append(label)
+        reasons.extend(_split_values(str(row.get("authorship_reasons", ""))))
         if reasons:
             return ", ".join(reasons)
         if any(issues_by_record.get(str(row["record_id"]), [])) or issues_by_record.get("", []):
@@ -1102,7 +1131,7 @@ def write_workbook(
 
     master_rows: list[dict[str, Any]] = []
     check_rows: list[dict[str, Any]] = []
-    for row in abstract_summary_rows:
+    for row in sorted(abstract_summary_rows, key=_risk_priority_key):
         record_id = str(row["record_id"])
         values = {label: check_value(row, detector, flag) for detector, flag, label in TRIAGE_CHECKS}
         record_issues = [*issues_by_record.get("", []), *issues_by_record.get(record_id, [])]

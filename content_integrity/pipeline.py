@@ -58,8 +58,11 @@ from .template_clustering import (
 )
 from .template_features import build_template_features
 from .reporting import (
+    AUTHORSHIP_CHECKS,
     build_content_integrity_frontend_json,
     build_integrated_content_integrity_json,
+    _load_authorship_checks,
+    _normalized_doi,
     write_json,
     write_workbook,
 )
@@ -78,6 +81,34 @@ def _normalized_validation_status(finding: Finding) -> str:
 
 def _is_risk_eligible_finding(finding: Finding) -> bool:
     return finding.active and finding.check_type not in RISK_INELIGIBLE_CHECK_TYPES
+
+
+def _authorship_signal(
+    record: ParsedRecord, authorship_checks_by_key: dict[str, dict[str, dict[str, str]]]
+) -> tuple[str, list[str], list[str]]:
+    """Reduce a record's authorship checks (final_json.json) to a risk severity plus the
+    triggered check labels/evidence, using the same LOW=baseline convention as the xlsx
+    'Why Flagged' text: only MEDIUM/HIGH levels are an actual signal."""
+    checks = (
+        authorship_checks_by_key.get(_normalized_doi(record.doi))
+        or authorship_checks_by_key.get(record.record_id.lower())
+        or {}
+    )
+    reasons: list[str] = []
+    evidence: list[str] = []
+    severity = "none"
+    for check_name, label in AUTHORSHIP_CHECKS:
+        level = str(checks.get(check_name, {}).get("level", "")).upper()
+        if level not in {"MEDIUM", "HIGH"}:
+            continue
+        reasons.append(label)
+        comment = checks.get(check_name, {}).get("comment", "")
+        evidence.append(f"{label}: {comment}" if comment else label)
+        if level == "HIGH":
+            severity = "high"
+        elif severity != "high":
+            severity = "medium"
+    return severity, reasons, evidence
 
 
 @dataclass(slots=True)
@@ -326,8 +357,10 @@ def _aggregate_findings(
     *,
     enriched_pair_rows: list[dict[str, object]] | None = None,
     enriched_abstract_rows: list[dict[str, object]] | None = None,
+    authorship_checks_by_key: dict[str, dict[str, dict[str, str]]] | None = None,
 ) -> list[dict[str, Any]]:
     llm_rules = llm_rules or built_in_llm_rules()
+    authorship_checks_by_key = authorship_checks_by_key or {}
     finding_map: dict[str, list[Finding]] = defaultdict(list)
     for finding in findings:
         finding_map[finding.record_id].append(finding)
@@ -430,24 +463,32 @@ def _aggregate_findings(
             for finding in record_findings
             if finding.detector_type != "llm_response_trace" and _is_risk_eligible_finding(finding)
         ]
+        authorship_severity, authorship_reasons, authorship_evidence = _authorship_signal(
+            record, authorship_checks_by_key
+        )
+        authorship_flag = authorship_severity != "none"
         detector_types = {finding.detector_type for finding in risk_eligible_non_llm_findings}
         if llm_risk_priority != "None":
             detector_types.add("llm_response_trace")
         if template_flag:
             detector_types.add("template")
+        if authorship_flag:
+            detector_types.add("authorship")
         highest_severity = "none"
         for finding in risk_eligible_non_llm_findings:
             if severity_rank(finding.severity) > severity_rank(highest_severity):
                 highest_severity = finding.severity
         if severity_rank(llm_risk_priority) > severity_rank(highest_severity):
             highest_severity = llm_risk_priority.lower()
-        if strongest_risk_pair:
-            if severity_rank(strongest_risk_pair.severity) > severity_rank(highest_severity):
-                highest_severity = strongest_risk_pair.severity
+        if template_flag and severity_rank(template_severity) > severity_rank(highest_severity):
+            highest_severity = template_severity
+        if authorship_flag and severity_rank(authorship_severity) > severity_rank(highest_severity):
+            highest_severity = authorship_severity
         risk_finding_count = (
             len(risk_eligible_non_llm_findings)
             + (1 if llm_risk_priority != "None" else 0)
             + (1 if template_flag else 0)
+            + (1 if authorship_flag else 0)
         )
         overall_risk = _risk_from_signals(
             highest_signal_severity=highest_severity,
@@ -491,6 +532,10 @@ def _aggregate_findings(
                 "numerical_contradiction_flag": "Yes" if any(finding.active for finding in numerical_findings) else "No",
                 "design_contradiction_flag": "Yes" if any(finding.active for finding in design_findings) else "No",
                 "unverifiable_trial_flag": "Yes" if any(finding.active for finding in trial_findings) else "No",
+                "authorship_flag": "Yes" if authorship_flag else "No",
+                "authorship_review_priority": authorship_severity.title() if authorship_flag else "None",
+                "authorship_reasons": to_pipe_string(authorship_reasons),
+                "authorship_evidence": to_pipe_string(authorship_evidence),
                 "template_cluster_flag": "Yes" if cluster_flag else "No",
                 "template_flag": "Yes" if template_flag else "No",
                 "related_or_companion_flag": "Yes" if related_pairs else "No",
@@ -989,6 +1034,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     )
     reviewer_pair_rows = directional_finding_rows(enriched_pair_rows)
     field_inventory_rows, root_summary_rows = _inventory_rows(records)
+    authorship_checks_by_key = _load_authorship_checks(config.authorship_json_path)
     abstract_summary_rows = _aggregate_findings(
         records,
         findings,
@@ -997,6 +1043,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         llm_rules,
         enriched_pair_rows=enriched_pair_rows,
         enriched_abstract_rows=enriched_abstract_rows,
+        authorship_checks_by_key=authorship_checks_by_key,
     )
     operational_issues.extend(
         _collect_operational_issues(records, findings, trial_results, semantic_stats, nonsense_stats)
@@ -1138,7 +1185,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         pair_rows=reviewer_pair_rows,
         operational_issue_rows=[issue.to_dict() for issue in reporting_operational_issues],
         run_metadata_rows=run_metadata_rows,
-        authorship_json_path=config.authorship_json_path,
+        authorship_checks_by_key=authorship_checks_by_key,
     )
     return PipelineResult(
         xml_files=xml_files,

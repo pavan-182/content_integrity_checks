@@ -12,7 +12,7 @@ from openpyxl import load_workbook
 from content_integrity.detectors import built_in_llm_rules, build_tortured_rule_index, detect_llm_trace, detect_tortured_phrases, load_tortured_rules
 from content_integrity.models import Finding, ParsedRecord
 from content_integrity.pipeline import _aggregate_findings, run_default_pipeline
-from content_integrity.reporting import _normalized_doi, build_content_integrity_frontend_json
+from content_integrity.reporting import _normalized_doi, _risk_priority_key, build_content_integrity_frontend_json
 from content_integrity.template_matching_common import _candidate_pairs, _content_class, _similarity, build_normalized_text, build_skeleton_text
 from content_integrity.validators import ContextValidator
 from content_integrity.validators.context_validator import _parse_validator_payload
@@ -515,7 +515,7 @@ class PipelineTests(unittest.TestCase):
             )["result"]["supporting_data"])
             self.assertEqual(
                 set(_record_supporting_checks(_submission(report, "TPL-A"))),
-                {"numerical_contradiction", "design_contradiction", "unverifiable_clinical_trial"},
+                {"numerical_contradiction", "design_contradiction", "unverifiable_clinical_trial", "authorship_risk"},
             )
 
             workbook = load_workbook(result.output_paths["workbook"], read_only=True, data_only=True)
@@ -719,6 +719,85 @@ class PipelineTests(unittest.TestCase):
                 self.assertEqual("Yes" if summary["review_required"] else "No", excel["Review Required"])
                 design = _record_supporting_checks(abstract)["design_contradiction"]
                 self.assertEqual(bool(design["result"]["supporting_data"]), excel["Design Contradiction"] == "Y")
+
+    def test_related_duplicate_pair_promotes_highest_severity(self) -> None:
+        # Regression: a possible_related_duplicate pair (exact reuse that related-study
+        # context does not excuse) is only visible via the enriched pair pipeline, and
+        # highest_severity/overall_content_risk must reflect it, not just possible_template_reuse.
+        records = [ParsedRecord(source_file="sample.xml", record_id="A", title="A title"), ParsedRecord(source_file="sample.xml", record_id="B", title="B title")]
+        enriched_abstract_rows = [
+            {"record_id": "A", "family_id": "", "family_size": 0},
+            {"record_id": "B", "family_id": "", "family_size": 0},
+        ]
+        enriched_pair_rows = [
+            {
+                "pair_id": "PAIR-A--B",
+                "left_record_id": "A",
+                "right_record_id": "B",
+                "left_title": "A title",
+                "right_title": "B title",
+                "review_priority": "High",
+                "editorial_score": 0.9,
+                "pair_class": "possible_related_duplicate",
+                "primary_evidence": "exact_results_section",
+                "supporting_evidence": "",
+                "direct_evidence": "",
+                "strongest_section": "results",
+                "masked_body_similarity": 0.0,
+                "original_body_similarity": 0.0,
+                "strongest_masked_section_similarity": 0.0,
+                "likely_substitutions": "",
+                "context_interpretation": "likely_companion_analysis",
+            }
+        ]
+        summary = _aggregate_findings(
+            records, [], [], [],
+            enriched_pair_rows=enriched_pair_rows,
+            enriched_abstract_rows=enriched_abstract_rows,
+        )
+        summaries = {row["record_id"]: row for row in summary}
+        self.assertEqual(summaries["A"]["template_review_priority"], "High")
+        self.assertEqual(summaries["A"]["highest_severity"], "High")
+        self.assertEqual(summaries["A"]["overall_content_risk"], "High")
+
+    def test_risk_priority_key_orders_worst_first(self) -> None:
+        rows = [
+            {"record_id": "LOW", "highest_severity": "Low", "total_finding_count": 1},
+            {"record_id": "HIGH", "highest_severity": "High", "total_finding_count": 1},
+            {"record_id": "MED-MANY", "highest_severity": "Medium", "total_finding_count": 5},
+            {"record_id": "MED-FEW", "highest_severity": "Medium", "total_finding_count": 1},
+            {"record_id": "NONE", "highest_severity": "None", "total_finding_count": 0},
+        ]
+        ordered = [row["record_id"] for row in sorted(rows, key=_risk_priority_key)]
+        self.assertEqual(ordered, ["HIGH", "MED-MANY", "MED-FEW", "LOW", "NONE"])
+
+    def test_authorship_high_risk_check_promotes_overall_risk(self) -> None:
+        # A HIGH-level authorship signal (final_json.json) with no detector findings or
+        # template pairs must still surface as real risk, since it's the only signal.
+        record = ParsedRecord(source_file="a.xml", record_id="A", doi="10.1/a")
+        authorship_checks_by_key = {
+            "10.1/a": {
+                "author_network": {"level": "HIGH", "comment": "Shared network with 3 retracted papers."},
+                "submission_volume": {"level": "LOW", "comment": ""},
+            }
+        }
+        summary = _aggregate_findings(
+            [record], [], [], [], authorship_checks_by_key=authorship_checks_by_key
+        )[0]
+        self.assertEqual(summary["authorship_flag"], "Yes")
+        self.assertEqual(summary["authorship_review_priority"], "High")
+        self.assertEqual(summary["authorship_reasons"], "Author Network")
+        self.assertEqual(summary["highest_severity"], "High")
+        self.assertEqual(summary["overall_content_risk"], "High")
+
+    def test_authorship_low_only_checks_do_not_flag_risk(self) -> None:
+        record = ParsedRecord(source_file="a.xml", record_id="A", doi="10.1/a")
+        authorship_checks_by_key = {"10.1/a": {"submission_volume": {"level": "LOW", "comment": ""}}}
+        summary = _aggregate_findings(
+            [record], [], [], [], authorship_checks_by_key=authorship_checks_by_key
+        )[0]
+        self.assertEqual(summary["authorship_flag"], "No")
+        self.assertEqual(summary["overall_content_risk"], "None")
 
     def test_template_candidate_without_reviewer_finding_does_not_flag_templating(self) -> None:
         records = [ParsedRecord(source_file="sample.xml", record_id="A", title="A title"), ParsedRecord(source_file="sample.xml", record_id="B", title="B title")]
