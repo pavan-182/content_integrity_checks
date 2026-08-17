@@ -1077,3 +1077,5 @@ Once those conditions hold, I would stop strengthening the core repository and m
 For testing use /home/pavankrishna/Projets/ASCO/synthetic_asco_retractionwatch_validation.xml
 
 and use 10 records inside any xml file in this path home/pavankrishna/Projets/ASCO/real_asco_files
+
+

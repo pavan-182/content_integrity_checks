@@ -680,6 +680,13 @@ def _template_sub_checks(pair: dict[str, Any]) -> list[dict[str, Any]]:
     def result(level: str, data: list[dict[str, Any]], comment: str) -> dict[str, Any]:
         return {"level": level, "supporting_data": data, "comment": comment}
 
+    original_body_pct = float(pair.get("original_body_similarity") or 0.0)
+    masked_body_pct = float(pair.get("masked_body_similarity") or 0.0)
+    masked_title_pct = float(pair.get("masked_title_similarity") or 0.0)
+    original_title_pct = float(pair.get("original_title_similarity") or 0.0)
+    section_pct = float(pair.get("strongest_section_similarity") or 0.0)
+    section_name = str(pair.get("strongest_section") or "").strip()
+
     return [
         {
             "check_name": "exact_text_reuse",
@@ -692,8 +699,8 @@ def _template_sub_checks(pair: dict[str, Any]) -> list[dict[str, Any]]:
                     "original_body_similarity": pair.get("original_body_similarity", 0.0),
                     "evidence": pair.get("evidence", ""),
                 }] if exact_signals else [],
-                "Direct text-reuse evidence contributed to this pair."
-                if exact_signals else "No direct text-reuse evidence contributed to this pair.",
+                f"{original_body_pct:.0%} of the original abstract text is shared word-for-word between the two submissions."
+                if exact_signals else "No shared original text between the two abstracts.",
             ),
         },
         {
@@ -707,8 +714,9 @@ def _template_sub_checks(pair: dict[str, Any]) -> list[dict[str, Any]]:
                     "original_body_similarity": pair.get("original_body_similarity", 0.0),
                     "likely_substitutions": pair.get("likely_substitutions", []),
                 }] if entity_triggered else [],
-                "Entity-normalized reuse evidence contributed to this pair."
-                if entity_triggered else "No entity-normalized reuse evidence contributed to this pair.",
+                f"{masked_body_pct:.0%} shared writing structure once biomedical entities are normalized out, "
+                f"with {original_body_pct:.0%} shared original text."
+                if entity_triggered else "No shared writing structure detected after entity normalization.",
             ),
         },
         {
@@ -721,8 +729,8 @@ def _template_sub_checks(pair: dict[str, Any]) -> list[dict[str, Any]]:
                     "masked_title_similarity": pair.get("masked_title_similarity", 0.0),
                     "original_title_similarity": pair.get("original_title_similarity", 0.0),
                 }] if title_triggered else [],
-                "Title-template evidence supported this pair."
-                if title_triggered else "No title-template evidence supported this pair.",
+                f"{masked_title_pct:.0%} shared title structure, with {original_title_pct:.0%} shared original title text."
+                if title_triggered else "No shared title structure detected.",
             ),
         },
         {
@@ -736,8 +744,8 @@ def _template_sub_checks(pair: dict[str, Any]) -> list[dict[str, Any]]:
                     "strongest_section_similarity": pair.get("strongest_section_similarity", 0.0),
                     "supporting_evidence": pair.get("supporting_evidence", []),
                 }] if section_triggered else [],
-                "Section-level similarity supported this pair."
-                if section_triggered else "No section-level similarity supported this pair.",
+                f"{section_name or 'Strongest'} section shares {section_pct:.0%} structural similarity between the abstracts."
+                if section_triggered else "No section reached a meaningful structural similarity.",
             ),
         },
     ]
@@ -961,11 +969,6 @@ def write_workbook(
         record_id = str(row["record_id"])
         values = {label: check_value(row, detector, flag) for detector, flag, label in TRIAGE_CHECKS}
         record_issues = [*issues_by_record.get("", []), *issues_by_record.get(record_id, [])]
-        active_checks = sum(value == "Y" for value in values.values())
-        high_confidence = sum(
-            bool(item.get("active")) and str(item.get("severity", "")).lower() == "high"
-            for item in findings_by_record.get(record_id, [])
-        ) + int(values["Templating (Cross-Author)"] == "Y" and row.get("template_review_priority") == "High")
         why = row.get("review_reason") or "No active integrity findings."
         if record_issues and not row.get("review_reason"):
             why = "Processing issue requires attention."
@@ -975,8 +978,6 @@ def write_workbook(
             "Corresponding Author": row.get("primary_author") or str(row.get("authors", "")).split(" | ")[0],
             "Overall Risk": row.get("overall_content_risk", "None"),
             "Why Flagged (plain English)": why,
-            "High-Confidence Flags": high_confidence,
-            "Corroborating Flags": max(active_checks - high_confidence, 0),
             **values,
             "Operational Issues": "Y" if record_issues else "N",
             "Finding Count": row.get("active_finding_count", 0),
@@ -1063,7 +1064,7 @@ def write_workbook(
     for column in "BCDEFGH":
         dashboard.column_dimensions[column].width = 14
 
-    queue_columns = ["Rank", "Abstract ID", "Title (short)", "Corresponding Author", "Why Flagged (plain English)", "High-Confidence Flags", "Corroborating Flags"]
+    queue_columns = ["Rank", "Abstract ID", "Title (short)", "Corresponding Author", "Why Flagged (plain English)"]
     for sheet_name, key in (("High Risk Queue", "High"), ("Moderate Risk Queue", "Medium"), ("Low Risk Queue", "Low")):
         rows = [{"Rank": index, **row} for index, row in enumerate(risk_groups[key], 1)]
         ws = workbook.create_sheet(sheet_name)
@@ -1071,7 +1072,7 @@ def write_workbook(
 
     master_columns = [
         "Abstract ID", "Title (short)", "Corresponding Author", "Overall Risk", "Why Flagged (plain English)",
-        "High-Confidence Flags", "Corroborating Flags", *(label for _, _, label in TRIAGE_CHECKS),
+        *(label for _, _, label in TRIAGE_CHECKS),
         "Operational Issues", "Finding Count", "Review Required", "High Risk Rank", "Medium Risk Rank", "Low Risk Rank",
     ]
     ws = workbook.create_sheet("All Abstracts")

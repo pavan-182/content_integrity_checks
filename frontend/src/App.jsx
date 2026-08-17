@@ -247,43 +247,50 @@ function Detail({ abstract, onBack }) {
   );
 }
 
+function isClear(result, hasSupporting = false) {
+  return !result.operational_failure && !result.flagged && !result.review_candidate && !hasSupporting;
+}
+
 function Finding({ definition, result }) {
   if (definition.id === "templating") {
+    const hasPairs = (result.evidence_pairs || []).length > 0;
+    const hasSupporting = (result.supporting_checks || []).some((check) => check.result?.supporting_data?.length);
+    const clear = isClear(result, hasSupporting);
     return (
       <article className="finding">
         <div className="finding-top"><strong>{definition.label}</strong><CheckStatus definition={definition} result={result} /></div>
-        <p><strong>Reason:</strong> {result.reason || "—"}</p>
-        <div className="template-pairs">
-          {(result.evidence_pairs || []).map((pair) => (
-            <details className="template-pair" key={pair.pair_id} open>
-              <summary>{pair.submitted_abstract_id} ↔ {pair.matched_abstract_id} · {pair.section || "Abstract"}</summary>
-              <div className="template-pair-meta"><span>{pair.reason}</span><span>{pair.same_author_group ? "Same author group" : "Different author group"}</span></div>
-              <div className="template-evidence-grid">
-                <div><strong>{pair.submitted_abstract_id}</strong><p>{pair.submitted_evidence || "No matched text available."}</p></div>
-                <div><strong>{pair.matched_abstract_id}</strong><p>{pair.matched_evidence || "No matched text available."}</p></div>
-              </div>
+        {!clear && <p><strong>Evidence:</strong> {result.evidence || "None"}</p>}
+        {!clear && <p><strong>Reason:</strong> {result.reason || "—"}</p>}
+        {(hasPairs || hasSupporting) && (
+          <div className="template-pairs">
+            {result.evidence_pairs.map((pair) => (
+              <details className="template-pair" key={pair.pair_id} open>
+                <summary>{pair.submitted_abstract_id} ↔ {pair.matched_abstract_id} · {pair.section || "Abstract"}</summary>
+                <div className="template-pair-meta"><span>{pair.reason}</span><span>{pair.same_author_group ? "Same author group" : "Different author group"}</span></div>
+                <div className="template-evidence-grid">
+                  <div><strong>{pair.submitted_abstract_id}</strong><p>{pair.submitted_evidence || "No matched text available."}</p></div>
+                  <div><strong>{pair.matched_abstract_id}</strong><p>{pair.matched_evidence || "No matched text available."}</p></div>
+                </div>
+                <div className="nested-checks">
+                  {(pair.sub_checks || []).map((check) => <NestedCheck key={check.check_name} check={check} />)}
+                </div>
+              </details>
+            ))}
+            {hasSupporting && (
               <div className="nested-checks">
-                {(pair.sub_checks || []).map((check) => <NestedCheck key={check.check_name} check={check} />)}
+                <strong>Record-level supporting checks</strong>
+                {result.supporting_checks.map((check) => <NestedCheck key={check.check_name} check={check} />)}
               </div>
-            </details>
-          ))}
-          {!result.evidence_pairs?.length && <p><strong>Evidence:</strong> {result.evidence || "None"}</p>}
-          <div className="nested-checks">
-            <strong>Record-level supporting checks</strong>
-            {(result.supporting_checks || []).map((check) => <NestedCheck key={check.check_name} check={check} />)}
+            )}
           </div>
-          {result.template_family?.family_id && (
-            <p><strong>Template family:</strong> {result.template_family.family_id} · {result.template_family.family_size} submissions</p>
-          )}
-        </div>
+        )}
       </article>
     );
   }
   return (
     <article className="finding">
       <div className="finding-top"><strong>{definition.label}</strong><CheckStatus definition={definition} result={result} /></div>
-      <p><strong>Evidence:</strong> {result.evidence || "None"}</p>
-      {result.reason && <p><strong>Reason:</strong> {result.reason}</p>}
+      {!isClear(result) && <p><strong>Evidence:</strong> {result.evidence || "None"}</p>}
     </article>
   );
 }

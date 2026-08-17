@@ -35,7 +35,6 @@ export function normalizeReport(report) {
     const scopes = template.supporting_data || [];
     const pairScopes = scopes.filter((item) => item.evidence_scope === "PAIR");
     const recordScope = scopes.find((item) => item.evidence_scope === "RECORD") || {};
-    const familyScope = scopes.find((item) => item.evidence_scope === "FAMILY") || {};
 
     return {
       abstract_id: submission.abstract_id,
@@ -69,7 +68,6 @@ export function normalizeReport(report) {
             same_author_group: false,
           })),
           supporting_checks: recordScope.supporting_checks || [],
-          template_family: familyScope,
         },
       },
     };
@@ -137,7 +135,6 @@ function normalizeFindingCheck(result = missingResult("Check result missing from
     operational_failure: result.level === "UNKNOWN",
     match_count: findings.filter((finding) => finding.active !== false).length,
     evidence: result.comment || "",
-    reason: result.comment || "",
     findings,
   };
 }
