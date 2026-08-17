@@ -91,7 +91,7 @@ test("preserves authoritative risk and treats a missing check as unknown", () =>
 
   assert.equal(report.abstracts[0].overall_risk, "None");
   assert.equal(report.abstracts[0].checks.tortured_phrases.flagged, false);
-  assert.equal(report.abstracts[0].checks.templating.operational_failure, true);
+  assert.equal("operational_failure" in report.abstracts[0].checks.templating, false);
 });
 
 test("normalizes DOI-keyed template sub-checks and record support", () => {
