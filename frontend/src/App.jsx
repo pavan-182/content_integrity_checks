@@ -65,7 +65,7 @@ function SubmissionTable({ items, onOpen, evidenceCheck, showCheckFlags = false 
       <table>
         <thead>
           <tr>
-            <th>Priority</th><th>Submission</th><th>Corresponding author</th>
+            <th>Priority</th><th>Submission</th><th>Abstract ID</th>
             <th>{evidenceCheck ? "Evidence" : "Why flagged"}</th>
             {evidenceCheck === "templating" && <th>Reason</th>}
             {showCheckFlags && checks.map((check) => <th key={check.id}>{check.label}</th>)}
@@ -76,8 +76,8 @@ function SubmissionTable({ items, onOpen, evidenceCheck, showCheckFlags = false 
           {items.map((item) => (
             <tr key={item.abstract_id}>
               <td><RiskBadge risk={item.overall_risk} /></td>
-              <td className="title-cell"><strong>{item.title}</strong><span className="secondary">{item.abstract_id}</span></td>
-              <td>{item.corresponding_author}</td>
+              <td className="title-cell"><strong>{item.title}</strong><span className="secondary">{item.doi}</span></td>
+              <td>{item.abstract_id}</td>
               <td>{evidenceCheck === "templating"
                 ? `${item.checks.templating.evidence_pairs?.length || item.checks.templating.match_count || 0} matched pair(s) — open for evidence`
                 : evidenceCheck ? item.checks[evidenceCheck].evidence : item.why_flagged}</td>
@@ -101,8 +101,9 @@ function TableCard({ title, children, actions }) {
   );
 }
 
-function Overview({ report, onNavigate, onOpen }) {
+function Overview({ report, authorship, onNavigate, onOpen }) {
   const { summary, abstracts } = report;
+  const authorAbstracts = authorship.abstracts;
   const flagged = abstracts.filter((item) => item.review_required);
 
   return (
@@ -114,20 +115,36 @@ function Overview({ report, onNavigate, onOpen }) {
         <Metric label="High content risk" value={summary.high_risk} help="Assigned by pipeline aggregation" />
         <Metric label="Cleared automatically" value={summary.cleared_without_manual_review} help="Review not required" />
       </div>
-      <section className="section-card checks-summary">
-        <div className="section-title">
-          <div><h2>Content integrity</h2><div className="domain-label">{number.format(flagged.length)} submissions have a content finding</div></div>
-          <button className="link-btn" onClick={() => onNavigate("content")}>View checks →</button>
-        </div>
-        <div className="simple-list">
-          {checks.map((check) => (
-            <div className="simple-row" key={check.id}>
-              <div>{check.label}</div>
-              <strong>{number.format(abstracts.filter((item) => item.checks[check.id].flagged).length)}</strong>
-            </div>
-          ))}
-        </div>
-      </section>
+      <div className="checks-summary-row">
+        <section className="section-card checks-summary">
+          <div className="section-title">
+            <div><h2>Content integrity</h2><div className="domain-label">{number.format(flagged.length)} submissions have a content finding</div></div>
+            <button className="link-btn" onClick={() => onNavigate("content")}>View checks →</button>
+          </div>
+          <div className="simple-list">
+            {checks.map((check) => (
+              <div className="simple-row" key={check.id}>
+                <div>{check.label}</div>
+                <strong>{number.format(abstracts.filter((item) => item.checks[check.id].flagged).length)}</strong>
+              </div>
+            ))}
+          </div>
+        </section>
+        <section className="section-card checks-summary">
+          <div className="section-title">
+            <div><h2>Authorship integrity</h2><div className="domain-label">{number.format(authorAffectedCount(authorAbstracts))} submissions have an authorship finding</div></div>
+            <button className="link-btn" onClick={() => onNavigate("authors")}>View checks →</button>
+          </div>
+          <div className="simple-list">
+            {authorChecks.map((check) => (
+              <div className="simple-row" key={check.id}>
+                <div>{check.label}</div>
+                <strong>{number.format(authorAbstracts.filter((item) => item.checks[check.id].flagged).length)}</strong>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
       <TableCard title="Review next" actions={<button className="link-btn" onClick={() => onNavigate("queue")}>View full queue →</button>}>
         <SubmissionTable items={flagged.slice(0, 5)} onOpen={onOpen} />
       </TableCard>
@@ -268,6 +285,7 @@ function Evals({ report }) {
               <thead>
                 <tr>
                   <th>Submission</th>
+                  <th>Abstract ID</th>
                   <th>Check</th>
                   <th>Matched text</th>
                   <th>Validation</th>
@@ -278,7 +296,8 @@ function Evals({ report }) {
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.finding_id || `${row.abstract_id}-${row.check_id}-${row.rule_id}-${row.matched_phrase}`}>
-                    <td className="title-cell"><strong>{row.title}</strong><span className="secondary">{row.abstract_id}</span></td>
+                    <td className="title-cell"><strong>{row.title}</strong><span className="secondary">{row.doi}</span></td>
+                    <td>{row.abstract_id}</td>
                     <td>{row.check_label}</td>
                     <td>{row.matched_phrase || row.evidence_snippet}</td>
                     <td>{row.validation_status || "not_validated"}</td>
@@ -565,7 +584,7 @@ export default function App({ report }) {
           </div>
         </header>
         <div className="page">
-          {page === "overview" && <Overview report={mergedReports.content} onNavigate={navigate} onOpen={open} />}
+          {page === "overview" && <Overview report={mergedReports.content} authorship={mergedReports.authorship} onNavigate={navigate} onOpen={open} />}
           {page === "queue" && <ReviewQueue abstracts={mergedReports.content.abstracts} onOpen={open} />}
           {page === "all" && <AllSubmissions abstracts={mergedReports.content.abstracts} onOpen={open} />}
           {page === "content" && <ContentChecks abstracts={mergedReports.content.abstracts} onOpen={(id) => open(id, "content")} />}

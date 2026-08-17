@@ -55,6 +55,7 @@ test("extracts validator judgments for the evals tab", () => {
     {
       finding_id: "",
       abstract_id: "A-1",
+      doi: "",
       title: "Example",
       check_id: "tortured_phrases",
       check_label: "Tortured Phrases",

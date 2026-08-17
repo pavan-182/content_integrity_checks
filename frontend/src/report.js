@@ -38,6 +38,7 @@ export function normalizeReport(report) {
 
     return {
       abstract_id: submission.abstract_id,
+      doi: recordKey,
       title: submission.title,
       corresponding_author: submission.corresponding_author || "Not provided",
       overall_risk: titleRisk(summaryData.overall_content_risk || summary?.level),
@@ -149,6 +150,7 @@ export function validationRows(report) {
         .map((finding) => ({
           finding_id: finding.finding_id || "",
           abstract_id: abstract.abstract_id,
+          doi: abstract.doi || "",
           title: abstract.title,
           check_id: check.id,
           check_label: check.label,
