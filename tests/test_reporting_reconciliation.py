@@ -118,6 +118,43 @@ class ReportingReconciliationTests(unittest.TestCase):
         self.assertEqual({row["Abstract ID"] for row in queued["High"]}, {row["Abstract ID"] for row in master if row["Overall Risk"] == "High"})
         self.assertEqual({row["Abstract ID"] for row in queued["Medium"]}, {row["Abstract ID"] for row in master if row["Overall Risk"] == "Medium"})
 
+    def test_authorship_checks_come_from_frontend_json(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            input_dir = root / "xmls"
+            input_dir.mkdir()
+            _write(
+                input_dir,
+                "authorship.xml",
+                """
+                <article article-type="Original Research"><front>
+                  <journal-meta><journal-title-group><journal-title>Test Journal</journal-title></journal-title-group></journal-meta>
+                  <article-meta>
+                    <article-id pub-id-type="doi">10.1002/cam4.2839</article-id>
+                    <article-id pub-id-type="manuscript">AUTH-1</article-id>
+                    <article-title>Authorship</article-title>
+                    <abstract><p>A plain abstract body.</p></abstract>
+                    <history><date date-type="accepted"><year>2026</year></date></history>
+                  </article-meta>
+                </front></article>
+                """,
+            )
+            dictionary = _write(root, "dict.csv", "Fingerprint - Tortured Phrase,Expected Text,Nb Retrieved Papers\n")
+            result = run_default_pipeline(input_dir, dictionary, root / "output")
+            workbook = load_workbook(result.output_paths["workbook"], read_only=True, data_only=True)
+            try:
+                master = _rows(workbook["All Abstracts"])[0]
+                detail = _rows(workbook["Check Detail"])[0]
+                self.assertEqual(
+                    master["Why Flagged (plain English)"],
+                    "Submission Volume, Affiliation Relevance, Author Network, Retraction History",
+                )
+                self.assertEqual(master["Submission Volume"], "HIGH")
+                self.assertEqual(detail["Submission Volume - Level"], "HIGH")
+                self.assertIn("submitted 7 times", detail["Submission Volume - Evidence"])
+            finally:
+                workbook.close()
+
 
 class RejectedFindingReconciliationTests(unittest.TestCase):
     def test_rejected_finding_is_inactive_in_json_and_unflagged_in_workbook(self) -> None:

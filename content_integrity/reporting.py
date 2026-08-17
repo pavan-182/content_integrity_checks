@@ -58,6 +58,14 @@ TRIAGE_CHECKS = [
     ("template", "template_flag", "Templating (Cross-Author)"),
 ]
 
+AUTHORSHIP_CHECKS = [
+    ("submission_volume", "Submission Volume"),
+    ("author_count_deviation", "Author Count Deviation"),
+    ("affiliance_relevance", "Affiliation Relevance"),
+    ("author_network", "Author Network"),
+    ("retraction_history", "Retraction History"),
+]
+
 
 def _stringify(value: Any) -> str:
     if value is None:
@@ -148,12 +156,20 @@ def _split_semicolon_values(value: str) -> list[str]:
     return [item.strip() for item in str(value).split(";") if item.strip()]
 
 
-def _build_tortured_evidence(findings: list[dict[str, Any]]) -> str:
-    return _join_lines(
-        f"{finding.get('matched_phrase', '')} → {finding['expected_term']}"
-        if finding.get("expected_term") else str(finding.get("matched_phrase", ""))
-        for finding in findings
-    )
+def _build_tortured_evidence(findings: Iterable[dict[str, Any]], *, include_validation_status: bool = False) -> str:
+    """Shared by the frontend JSON and the xlsx workbook so both surfaces show the
+    same 'matched phrase → expected term' evidence for tortured-phrase findings."""
+
+    def _line(finding: dict[str, Any]) -> str:
+        base = (
+            f"{finding.get('matched_text', '')} → {finding['expected_term']}"
+            if finding.get("expected_term") else str(finding.get("matched_text", ""))
+        )
+        if include_validation_status and finding.get("validation_status"):
+            return f"{base} [{finding['validation_status']}]"
+        return base
+
+    return _join_lines(_line(finding) for finding in findings)
 
 
 def _build_llm_evidence(findings: list[dict[str, Any]]) -> str:
@@ -171,25 +187,81 @@ def _build_templating_evidence(findings: list[dict[str, Any]]) -> str:
     return str(findings[0].get("matching_text_evidence") or "")
 
 
-def _build_templating_reason(findings: list[dict[str, Any]]) -> str:
-    if not findings:
+_EXACT_TEXT_SIGNALS = {
+    "exact_original_body",
+    "exact_results_section",
+    "substantial_shared_original_block",
+    "distinctive_shared_text",
+    "multiple_distinctive_sentences",
+    "rare_exact_phrase",
+    "substantial_shared_text",
+    "partial_or_reordered_reuse",
+}
+
+
+def _as_value_set(value: Any) -> set[str]:
+    if isinstance(value, (list, tuple, set)):
+        return set(value)
+    return set(_split_values(str(value or "")))
+
+
+def _pair_matched_id(record_id: str, pair: dict[str, Any]) -> str:
+    return str(pair["right_record_id"] if str(pair["left_record_id"]) == record_id else pair["left_record_id"])
+
+
+def _pair_section_similarity(pair: dict[str, Any]) -> float:
+    # Raw enriched-pair rows carry `strongest_masked_section_similarity`; the frontend-normalized
+    # finding shape renames it to `strongest_section_similarity`. Support both here.
+    value = pair.get("strongest_section_similarity", pair.get("strongest_masked_section_similarity", 0.0))
+    return float(value or 0.0)
+
+
+def _template_match_signals(pair: dict[str, Any]) -> dict[str, Any]:
+    """Which template-reuse basis this pair was actually matched on, so reasoning text can name it."""
+    direct = set(_split_values(str(pair.get("direct_evidence", ""))))
+    detectors = _as_value_set(pair.get("detector_evidence"))
+    primary = set(_split_values(str(pair.get("primary_evidence", ""))))
+    routes = _as_value_set(pair.get("retrieval_routes"))
+    combined = direct | detectors | primary
+    return {
+        "exact_signals": sorted(combined & _EXACT_TEXT_SIGNALS),
+        "exact_text": bool(combined & _EXACT_TEXT_SIGNALS),
+        "entity_structure": "entity_normalized_template" in combined,
+        "title_structure": "title_template" in routes or "masked_title_template_with_original_support" in (direct | primary),
+        "section_structure": bool(pair.get("strongest_section")) and _pair_section_similarity(pair) > 0,
+    }
+
+
+def _build_templating_reason(pair: dict[str, Any], matched_abstract_id: str, same_author_group: bool) -> str:
+    matched = str(matched_abstract_id or "")
+    if not matched:
         return ""
-    finding = findings[0]
-    matched = finding.get("matched_abstract_id") or ""
-    similarity = float(finding.get("strongest_section_similarity") or 0.0)
-    section = str(finding.get("strongest_section") or "text").lower()
-    author_group = "same author group" if finding.get("same_author_group") else "different author group"
-    if matched and similarity:
-        reason = f"{similarity:.0%} sentence-structure overlap with {matched}, {author_group}."
-    elif matched:
-        reason = f"Sentence-structure overlap with {matched}, {author_group}."
-    else:
-        reason = "Strong template reuse detected."
-    return reason
+    author_group = "same author group" if same_author_group else "different author group"
+    signals = _template_match_signals(pair)
+    # Report the % reading that actually matches what triggered the pair: word-for-word text
+    # share for exact reuse, structural share for entity/title/section-normalized matches.
+    if signals["exact_text"]:
+        text_pct = float(pair.get("original_body_similarity") or 0.0)
+        return f"{text_pct:.0%} shared text with {matched}, {author_group}."
+    if signals["entity_structure"]:
+        structure_pct = float(pair.get("masked_body_similarity") or 0.0)
+        text_pct = float(pair.get("original_body_similarity") or 0.0)
+        return (
+            f"{structure_pct:.0%} shared structure with {matched} once biomedical entities are normalized "
+            f"({text_pct:.0%} shared original text), {author_group}."
+        )
+    if signals["title_structure"]:
+        title_pct = float(pair.get("masked_title_similarity") or 0.0)
+        return f"{title_pct:.0%} shared title structure with {matched}, {author_group}."
+    if signals["section_structure"]:
+        section_pct = _pair_section_similarity(pair)
+        section = str(pair.get("strongest_section") or "text").lower()
+        return f"{section_pct:.0%} shared structure in the {section} section with {matched}, {author_group}."
+    return f"Strong template reuse detected with {matched}, {author_group}."
 
 
 def _template_evidence_pair(record_id: str, pair: dict[str, Any], record_lookup: dict[str, Any]) -> dict[str, Any]:
-    matched_id = str(pair["right_record_id"] if str(pair["left_record_id"]) == record_id else pair["left_record_id"])
+    matched_id = _pair_matched_id(record_id, pair)
     left_id, right_id = str(pair["left_record_id"]), str(pair["right_record_id"])
     left_text = str(pair.get("left_matched_text") or "")
     right_text = str(pair.get("right_matched_text") or "")
@@ -202,12 +274,7 @@ def _template_evidence_pair(record_id: str, pair: dict[str, Any], record_lookup:
     if record_id == right_id:
         left_text, right_text = right_text, left_text
     same_authors = _same_author_group(record_lookup[record_id], record_lookup[matched_id])
-    reason = _build_templating_reason([{
-        "matched_abstract_id": matched_id,
-        "strongest_section": pair.get("strongest_section", ""),
-        "strongest_section_similarity": pair.get("strongest_masked_section_similarity", 0.0),
-        "same_author_group": same_authors,
-    }])
+    reason = _build_templating_reason(pair, matched_id, same_authors)
     return {
         "pair_id": pair["pair_id"],
         "submitted_abstract_id": record_id,
@@ -345,6 +412,12 @@ def build_content_integrity_frontend_json(
         template_family_id = abstract_template_meta.get("family_id", "")
         template_family_size = abstract_template_meta.get("family_size", 0) or 0
         ordered_template_pairs = sorted(template_pairs, key=lambda pair: _pair_sort_key(pair, record_id))
+        top_template_pair = ordered_template_pairs[0] if ordered_template_pairs else None
+        top_template_matched_id = _pair_matched_id(record_id, top_template_pair) if top_template_pair else ""
+        top_template_same_author_group = (
+            _same_author_group(record_lookup[record_id], record_lookup[top_template_matched_id])
+            if top_template_pair else False
+        )
 
         abstract_findings: dict[str, Any] = {
             "abstract_id": record_id,
@@ -371,7 +444,7 @@ def build_content_integrity_frontend_json(
                     "evidence": _build_tortured_evidence([
                         {
                             "finding_id": finding.finding_id,
-                            "matched_phrase": finding.matched_text,
+                            "matched_text": finding.matched_text,
                             "expected_term": finding.expected_term,
                             "evidence_snippet": finding.evidence_snippet,
                             "section": finding.section_or_field,
@@ -485,15 +558,10 @@ def build_content_integrity_frontend_json(
                         }
                         for pair in ordered_template_pairs
                     ]),
-                    "reason": _build_templating_reason([
-                        {
-                            "matched_abstract_id": pair["right_record_id"] if str(pair["left_record_id"]) == record_id else pair["left_record_id"],
-                            "strongest_section": pair.get("strongest_section", ""),
-                            "strongest_section_similarity": pair.get("strongest_masked_section_similarity", 0.0),
-                            "same_author_group": _same_author_group(record_lookup[record_id], record_lookup[str(pair["right_record_id"] if str(pair["left_record_id"]) == record_id else pair["left_record_id"])]),
-                        }
-                        for pair in ordered_template_pairs
-                    ]),
+                    "reason": (
+                        _build_templating_reason(top_template_pair, top_template_matched_id, top_template_same_author_group)
+                        if top_template_pair else ""
+                    ),
                     "evidence_pairs": [
                         _template_evidence_pair(record_id, pair, record_lookup)
                         for pair in ordered_template_pairs
@@ -517,12 +585,12 @@ def build_content_integrity_frontend_json(
                             "detector_evidence": _split_values(str(pair.get("detector_evidence", ""))),
                             "retrieval_routes": _split_values(str(pair.get("retrieval_routes", ""))),
                             "evidence": pair.get("matching_text_evidence", ""),
-                            "reason": _build_templating_reason([{
-                                "matched_abstract_id": pair["right_record_id"] if str(pair["left_record_id"]) == record_id else pair["left_record_id"],
-                                "strongest_section": pair.get("strongest_section", ""),
-                                "strongest_section_similarity": pair.get("strongest_masked_section_similarity", 0.0),
-                                "same_author_group": _same_author_group(record_lookup[record_id], record_lookup[str(pair["right_record_id"] if str(pair["left_record_id"]) == record_id else pair["left_record_id"])]),
-                            }]),
+                            "reason": _build_templating_reason(
+                                pair,
+                                _pair_matched_id(record_id, pair),
+                                _same_author_group(record_lookup[record_id], record_lookup[_pair_matched_id(record_id, pair)]),
+                            ),
+                            "same_author_group": _same_author_group(record_lookup[record_id], record_lookup[_pair_matched_id(record_id, pair)]),
                             "strongest_section": pair.get("strongest_section", ""),
                             "masked_title_similarity": pair.get("masked_title_similarity", 0.0),
                             "original_title_similarity": pair.get("original_title_similarity", 0.0),
@@ -624,6 +692,37 @@ def _normalized_doi(value: Any) -> str:
     return doi
 
 
+def _load_authorship_checks(path: str | Path | None) -> dict[str, dict[str, dict[str, str]]]:
+    resolved = Path(path) if path else None
+    if not resolved or not resolved.exists():
+        return {}
+    with resolved.open(encoding="utf-8") as handle:
+        report = json.load(handle)
+    if not isinstance(report, dict):
+        return {}
+    lookup: dict[str, dict[str, dict[str, str]]] = {}
+    for doi, submission in report.items():
+        if not isinstance(submission, dict):
+            continue
+        checks = {
+            str(check.get("check_name", "")): {
+                "level": str(check.get("result", {}).get("level", "")),
+                "comment": str(check.get("result", {}).get("comment", "")),
+            }
+            for check in submission.get("checks", [])
+            if isinstance(check, dict) and str(check.get("check_name", "")) in {name for name, _ in AUTHORSHIP_CHECKS}
+        }
+        if not checks:
+            continue
+        key = _normalized_doi(doi)
+        if key:
+            lookup[key] = checks
+        abstract_id = str(submission.get("abstract_id", "")).strip()
+        if abstract_id:
+            lookup[abstract_id.lower()] = checks
+    return lookup
+
+
 def _finding_level(findings: list[dict[str, Any]], *, failed: bool = False) -> str:
     active = [finding for finding in findings if finding.get("active", True)]
     if not active:
@@ -659,23 +758,11 @@ def _integration_check(
 
 def _template_sub_checks(pair: dict[str, Any]) -> list[dict[str, Any]]:
     priority = _integration_level(pair.get("review_priority"))
-    direct = set(_split_values(str(pair.get("direct_evidence", ""))))
-    detectors = set(pair.get("detector_evidence") or [])
-    primary = set(_split_values(str(pair.get("primary_evidence", ""))))
-    routes = set(pair.get("retrieval_routes") or [])
-    exact_signals = sorted((direct | detectors | primary) & {
-        "exact_original_body",
-        "exact_results_section",
-        "substantial_shared_original_block",
-        "distinctive_shared_text",
-        "multiple_distinctive_sentences",
-        "rare_exact_phrase",
-        "substantial_shared_text",
-        "partial_or_reordered_reuse",
-    })
-    entity_triggered = "entity_normalized_template" in direct | detectors | primary
-    title_triggered = "title_template" in routes or "masked_title_template_with_original_support" in direct | primary
-    section_triggered = bool(pair.get("strongest_section")) and float(pair.get("strongest_section_similarity") or 0.0) > 0
+    signals = _template_match_signals(pair)
+    exact_signals = signals["exact_signals"]
+    entity_triggered = signals["entity_structure"]
+    title_triggered = signals["title_structure"]
+    section_triggered = signals["section_structure"]
 
     def result(level: str, data: list[dict[str, Any]], comment: str) -> dict[str, Any]:
         return {"level": level, "supporting_data": data, "comment": comment}
@@ -684,7 +771,7 @@ def _template_sub_checks(pair: dict[str, Any]) -> list[dict[str, Any]]:
     masked_body_pct = float(pair.get("masked_body_similarity") or 0.0)
     masked_title_pct = float(pair.get("masked_title_similarity") or 0.0)
     original_title_pct = float(pair.get("original_title_similarity") or 0.0)
-    section_pct = float(pair.get("strongest_section_similarity") or 0.0)
+    section_pct = _pair_section_similarity(pair)
     section_name = str(pair.get("strongest_section") or "").strip()
 
     return [
@@ -778,6 +865,8 @@ def build_integrated_content_integrity_json(canonical_report: dict[str, Any]) ->
                 "classification": pair.get("pair_class", ""),
                 "review_priority": _integration_level(pair.get("review_priority")),
                 "editorial_score": pair.get("editorial_score", 0.0),
+                "reason": pair.get("reason", ""),
+                "same_author_group": bool(pair.get("same_author_group")),
                 "sub_checks": _template_sub_checks(pair),
                 "context": {
                     "shared_trial_ids": pair.get("shared_trial_ids", []),
@@ -925,12 +1014,14 @@ def write_workbook(
     pair_rows: list[dict[str, Any]],
     operational_issue_rows: list[dict[str, Any]],
     run_metadata_rows: list[tuple[str, Any]],
+    authorship_json_path: str | Path | None = None,
 ) -> Path:
     """Write the compact editor-triage workbook; JSON retains the diagnostic detail."""
     resolved = ensure_parent_dir(path)
     workbook = Workbook()
     dashboard = workbook.active
     dashboard.title = "Dashboard"
+    authorship_checks_by_key = _load_authorship_checks(authorship_json_path)
 
     findings_by_record: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for finding in findings_rows:
@@ -949,6 +1040,11 @@ def write_workbook(
                 f"{pair.get('primary_evidence') or pair.get('matching_text_evidence') or pair.get('priority_reason', '')}"
                 for pair in pairs_by_record.get(record_id, [])
             )
+        if detector == "tortured_phrase":
+            return _build_tortured_evidence(
+                (item for item in findings_by_record.get(record_id, []) if item.get("detector_type") == detector),
+                include_validation_status=True,
+            )
         return _join_lines(
             f"{item.get('evidence_snippet', '')} [{item.get('validation_status')}]"
             if item.get("validation_status") else str(item.get("evidence_snippet", ""))
@@ -963,15 +1059,54 @@ def write_workbook(
             return "Review"
         return "N"
 
+    def authorship_value(row: dict[str, Any], check_name: str) -> str:
+        keys = (
+            _normalized_doi(row.get("doi")),
+            str(row.get("record_id", "")).lower(),
+        )
+        for key in keys:
+            if not key:
+                continue
+            check = authorship_checks_by_key.get(key, {}).get(check_name)
+            if check:
+                return check.get("level", "")
+        return ""
+
+    def authorship_evidence(row: dict[str, Any], check_name: str) -> str:
+        keys = (
+            _normalized_doi(row.get("doi")),
+            str(row.get("record_id", "")).lower(),
+        )
+        for key in keys:
+            if not key:
+                continue
+            check = authorship_checks_by_key.get(key, {}).get(check_name)
+            if check:
+                return check.get("comment", "")
+        return ""
+
+    def why_flagged_text(row: dict[str, Any], values: dict[str, str]) -> str:
+        reasons: list[str] = []
+        for _, flag, label in TRIAGE_CHECKS:
+            if values.get(label) != "N":
+                reasons.append(label)
+        for check_name, label in AUTHORSHIP_CHECKS:
+            level = authorship_value(row, check_name)
+            if level in {"MEDIUM", "HIGH"}:
+                reasons.append(label)
+        if reasons:
+            return ", ".join(reasons)
+        if any(issues_by_record.get(str(row["record_id"]), [])) or issues_by_record.get("", []):
+            return "Operational Issues"
+        return "No active integrity findings."
+
     master_rows: list[dict[str, Any]] = []
     check_rows: list[dict[str, Any]] = []
     for row in abstract_summary_rows:
         record_id = str(row["record_id"])
         values = {label: check_value(row, detector, flag) for detector, flag, label in TRIAGE_CHECKS}
         record_issues = [*issues_by_record.get("", []), *issues_by_record.get(record_id, [])]
-        why = row.get("review_reason") or "No active integrity findings."
-        if record_issues and not row.get("review_reason"):
-            why = "Processing issue requires attention."
+        why = why_flagged_text(row, values)
         master = {
             "Abstract ID": record_id,
             "Title (short)": str(row.get("title", ""))[:120],
@@ -979,6 +1114,7 @@ def write_workbook(
             "Overall Risk": row.get("overall_content_risk", "None"),
             "Why Flagged (plain English)": why,
             **values,
+            **{label: authorship_value(row, check_name) for check_name, label in AUTHORSHIP_CHECKS},
             "Operational Issues": "Y" if record_issues else "N",
             "Finding Count": row.get("active_finding_count", 0),
             "Review Required": row.get("review_required", "No"),
@@ -992,6 +1128,9 @@ def write_workbook(
         for detector, _, label in TRIAGE_CHECKS:
             detail[f"{label} - Flag"] = values[label]
             detail[f"{label} - Evidence"] = evidence(record_id, detector)
+        for check_name, label in AUTHORSHIP_CHECKS:
+            detail[f"{label} - Level"] = authorship_value(row, check_name)
+            detail[f"{label} - Evidence"] = authorship_evidence(row, check_name)
         detail["Operational Issues - Flag"] = master["Operational Issues"]
         detail["Operational Issues - Evidence"] = _join_lines(
             f"{item.get('component', '')}: {item.get('message', '')}" for item in record_issues
@@ -1073,6 +1212,7 @@ def write_workbook(
     master_columns = [
         "Abstract ID", "Title (short)", "Corresponding Author", "Overall Risk", "Why Flagged (plain English)",
         *(label for _, _, label in TRIAGE_CHECKS),
+        *(label for _, label in AUTHORSHIP_CHECKS),
         "Operational Issues", "Finding Count", "Review Required", "High Risk Rank", "Medium Risk Rank", "Low Risk Rank",
     ]
     ws = workbook.create_sheet("All Abstracts")
@@ -1084,6 +1224,8 @@ def write_workbook(
     detail_columns = ["Abstract ID", "Title (short)", "Corresponding Author"]
     for _, _, label in TRIAGE_CHECKS:
         detail_columns.extend((f"{label} - Flag", f"{label} - Evidence"))
+    for _, label in AUTHORSHIP_CHECKS:
+        detail_columns.extend((f"{label} - Level", f"{label} - Evidence"))
     detail_columns.extend(("Operational Issues - Flag", "Operational Issues - Evidence"))
     ws = workbook.create_sheet("Check Detail")
     style_table(ws, check_rows, detail_columns, detail=True)
@@ -1097,8 +1239,9 @@ def write_workbook(
         "1. Risk and review values come from the pipeline decision engine; this workbook does not recalculate them.",
         "2. Check Detail contains the submitted evidence and validation state behind each check.",
         "3. 'Review' means an inactive candidate requires judgement; it is not confirmed risk evidence.",
-        "4. Operational issues mean a check did not complete; they are not scientific findings.",
-        "5. The companion content_integrity_results.json remains the complete machine-readable report.",
+        "4. Authorship checks come from final_json.json; their displayed value is result.level and their evidence is the check comment.",
+        "5. Operational issues mean a check did not complete; they are not scientific findings.",
+        "6. The companion content_integrity_results.json remains the complete machine-readable report.",
         "",
         "Run metadata",
     ]

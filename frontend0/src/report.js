@@ -54,6 +54,7 @@ export function normalizeReport(report) {
         templating: {
           flagged: pairScopes.length > 0,
           review_candidate: false,
+          operational_failure: template.level === "UNKNOWN",
           match_count: pairScopes.length,
           evidence: pairScopes.map((pair) => `${pair.submitted_evidence} || ${pair.matched_evidence}`).filter(Boolean).join(" | "),
           reason: template.comment || "",
@@ -63,6 +64,8 @@ export function normalizeReport(report) {
             submitted_abstract_id: submission.abstract_id,
             section: subCheckData(pair, "section_similarity")?.strongest_section || "",
             similarity: subCheckData(pair, "section_similarity")?.strongest_section_similarity || 0,
+            reason: template.comment || "",
+            same_author_group: false,
           })),
           supporting_checks: recordScope.supporting_checks || [],
         },
@@ -99,6 +102,7 @@ function normalizeLegacyReport(report) {
           abstract.checks?.[check.id] || {
             flagged: false,
             review_candidate: false,
+            operational_failure: true,
             match_count: 0,
             evidence: "",
             reason: "Check result missing from the pipeline report.",
@@ -128,9 +132,9 @@ function normalizeFindingCheck(result = missingResult("Check result missing from
   return {
     flagged: isFlagged(result),
     review_candidate: findings.some((finding) => finding.review_candidate),
+    operational_failure: result.level === "UNKNOWN",
     match_count: findings.filter((finding) => finding.active !== false).length,
     evidence: result.comment || "",
-    reason: result.comment || "",
     findings,
   };
 }

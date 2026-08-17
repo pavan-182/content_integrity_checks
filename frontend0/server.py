@@ -16,7 +16,6 @@ DIST = Path(__file__).resolve().parent / "dist"
 INPUT = Path(os.environ.get("ASCO_PIPELINE_INPUT", ROOT / "synthetic_asco_retractionwatch_validation.xml")).resolve()
 OUTPUT = ROOT / "outputs/frontend_run"
 REPORT = OUTPUT / "content_integrity_results.json"
-AUTHORSHIP_REPORT = OUTPUT / "final_json.json"
 LOCK = threading.Lock()
 sys.path.insert(0, str(ROOT))
 
@@ -24,7 +23,7 @@ sys.path.insert(0, str(ROOT))
 def run_pipeline(input_path: Path = INPUT, output_dir: Path = OUTPUT, runner=subprocess.run) -> dict:
     if not input_path.exists():
         raise FileNotFoundError(f"Pipeline input does not exist: {input_path}")
-    print("came")
+
     with tempfile.TemporaryDirectory(prefix="asco-frontend-") as temporary:
         temporary = Path(temporary)
         input_dir = input_path
@@ -62,12 +61,6 @@ class Handler(SimpleHTTPRequestHandler):
                 self._json(404, {"error": "No pipeline report has been generated yet."})
                 return
             self._json(200, {"report": json.loads(REPORT.read_text(encoding="utf-8"))})
-            return
-        if self.path == "/api/authorship-report":
-            if not AUTHORSHIP_REPORT.exists():
-                self._json(404, {"error": "No authorship report has been generated yet."})
-                return
-            self._json(200, {"report": json.loads(AUTHORSHIP_REPORT.read_text(encoding="utf-8"))})
             return
         super().do_GET()
 

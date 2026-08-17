@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "python3 dev.py",
-    "api": "python3 server.py",
-    "start": "npm run build && python3 server.py",
+    "dev": "python dev.py",
+    "api": "python server.py",
+    "start": "npm run build && python server.py",
     "build": "vite build",
     "test": "node --test && python3 -m unittest server_test.py"
   },

@@ -85,6 +85,7 @@ class PipelineConfig:
     input_dir: Path
     output_dir: Path
     tortured_dictionary_path: Path
+    authorship_json_path: Path = Path("outputs/frontend_run/final_json.json")
     dictionary_version: str = "wiley_tortured_seed_v1"
     validate_llm: bool = False
     detect_llm_semantic: bool = False
@@ -1137,6 +1138,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         pair_rows=reviewer_pair_rows,
         operational_issue_rows=[issue.to_dict() for issue in reporting_operational_issues],
         run_metadata_rows=run_metadata_rows,
+        authorship_json_path=config.authorship_json_path,
     )
     return PipelineResult(
         xml_files=xml_files,
@@ -1160,6 +1162,7 @@ def run_default_pipeline(
     input_dir: str | Path = "WILEY_LIVE_PREFLIGHT_metadata_files",
     tortured_dictionary_path: str | Path = "🤷_tortured.csv",
     output_dir: str | Path = "outputs",
+    authorship_json_path: str | Path = "outputs/frontend_run/final_json.json",
     validate_llm: bool = False,
     detect_llm_semantic: bool = False,
     detect_nonsense_candidates: bool = False,
@@ -1170,6 +1173,7 @@ def run_default_pipeline(
         input_dir=Path(input_dir),
         output_dir=Path(output_dir),
         tortured_dictionary_path=Path(tortured_dictionary_path),
+        authorship_json_path=Path(authorship_json_path),
         validate_llm=validate_llm,
         detect_llm_semantic=detect_llm_semantic,
         detect_nonsense_candidates=detect_nonsense_candidates,
@@ -1186,6 +1190,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--input-dir", default="WILEY_LIVE_PREFLIGHT_metadata_files", help="Folder containing Wiley XML files.")
     parser.add_argument("--tortured-dictionary", default="🤷_tortured.csv", help="Tortured phrase dictionary CSV.")
     parser.add_argument("--output-dir", default="outputs", help="Directory for generated reports.")
+    parser.add_argument(
+        "--authorship-json",
+        default="outputs/frontend_run/final_json.json",
+        help="Frontend authorship JSON used for workbook projection.",
+    )
     parser.add_argument(
         "--detect-llm-semantic",
         action="store_true",
@@ -1218,6 +1227,7 @@ def main(argv: list[str] | None = None) -> int:
         input_dir=args.input_dir,
         tortured_dictionary_path=args.tortured_dictionary,
         output_dir=args.output_dir,
+        authorship_json_path=args.authorship_json,
         validate_llm=args.validate_llm,
         detect_llm_semantic=args.detect_llm_semantic,
         detect_nonsense_candidates=args.detect_nonsense_candidates,
