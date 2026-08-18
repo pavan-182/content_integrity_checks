@@ -522,8 +522,8 @@ class PipelineTests(unittest.TestCase):
             worksheet = workbook["Check Detail"]
             headers = [cell.value for cell in worksheet[1]]
             details = [dict(zip(headers, row)) for row in worksheet.iter_rows(min_row=2, values_only=True)]
-            self.assertEqual({row["Templating (Cross-Author) - Flag"] for row in details}, {"Y"})
-            self.assertTrue(all("PAIR-TPL-A--TPL-B" in row["Templating (Cross-Author) - Evidence"] for row in details))
+            self.assertEqual({row["Templating - Flag"] for row in details}, {"Y"})
+            self.assertTrue(all("PAIR-TPL-A--TPL-B" in row["Templating - Evidence"] for row in details))
             summaries = {row["record_id"]: row for row in result.abstract_summary_rows}
             self.assertEqual({row["template_flag"] for row in summaries.values()}, {"Yes"})
             self.assertEqual(
@@ -786,7 +786,7 @@ class PipelineTests(unittest.TestCase):
         )[0]
         self.assertEqual(summary["authorship_flag"], "Yes")
         self.assertEqual(summary["authorship_review_priority"], "High")
-        self.assertEqual(summary["authorship_reasons"], "Author Network")
+        self.assertEqual(summary["authorship_reasons"], "Networks of authors submitting multiple abstracts together")
         self.assertEqual(summary["highest_severity"], "High")
         self.assertEqual(summary["overall_content_risk"], "High")
 
@@ -1246,7 +1246,7 @@ class PipelineTests(unittest.TestCase):
             workbook = load_workbook(result.output_paths["workbook"], read_only=True)
             ws = workbook["Check Detail"]
             headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
-            self.assertIn("Tortured Phrases - Evidence", headers)
+            self.assertIn("Nonsense and tortured phrases - Evidence", headers)
             summary_headers = [cell.value for cell in next(workbook["All Abstracts"].iter_rows(max_row=1))]
             self.assertIn("Overall Risk", summary_headers)
             self.assertIn("tortured_rejected_count", result.abstract_summary_rows[0])

@@ -100,10 +100,10 @@ class ReportingReconciliationTests(unittest.TestCase):
 
     def test_check_detail_contains_finding_pair_and_operational_evidence(self) -> None:
         detail = {row["Abstract ID"]: row for row in _rows(self.workbook["Check Detail"])}
-        self.assertEqual(detail["TP-1"]["Tortured Phrases - Flag"], "Y")
-        self.assertIn("nervous network", detail["TP-1"]["Tortured Phrases - Evidence"])
-        self.assertEqual(detail["TPL-A"]["Templating (Cross-Author) - Flag"], "Y")
-        self.assertIn("TPL-B", detail["TPL-A"]["Templating (Cross-Author) - Evidence"])
+        self.assertEqual(detail["TP-1"]["Nonsense and tortured phrases - Flag"], "Y")
+        self.assertIn("nervous network", detail["TP-1"]["Nonsense and tortured phrases - Evidence"])
+        self.assertEqual(detail["TPL-A"]["Templating - Flag"], "Y")
+        self.assertIn("TPL-B", detail["TPL-A"]["Templating - Evidence"])
         self.assertTrue(all(row["Operational Issues - Flag"] == "Y" for row in detail.values()))
         self.assertTrue(all("numerical_contradiction" in row["Operational Issues - Evidence"] for row in detail.values()))
 
@@ -147,11 +147,11 @@ class ReportingReconciliationTests(unittest.TestCase):
                 detail = _rows(workbook["Check Detail"])[0]
                 self.assertEqual(
                     master["Why Flagged (plain English)"],
-                    "Submission Volume, Affiliation Relevance, Author Network, Retraction History",
+                    "Authors with ≥10 submissions in provided batch, Affiliation relevance, Networks of authors submitting multiple abstracts together, Prior retractions",
                 )
-                self.assertEqual(master["Submission Volume"], "HIGH")
-                self.assertEqual(detail["Submission Volume - Level"], "HIGH")
-                self.assertIn("submitted 7 times", detail["Submission Volume - Evidence"])
+                self.assertEqual(master["Authors with ≥10 submissions in provided batch"], "HIGH")
+                self.assertEqual(detail["Authors with ≥10 submissions in provided batch - Level"], "HIGH")
+                self.assertIn("submitted 7 times", detail["Authors with ≥10 submissions in provided batch - Evidence"])
             finally:
                 workbook.close()
 
@@ -178,8 +178,8 @@ class RejectedFindingReconciliationTests(unittest.TestCase):
             try:
                 detail = _rows(workbook["Check Detail"])[0]
                 master = _rows(workbook["All Abstracts"])[0]
-                self.assertEqual(detail["Tortured Phrases - Flag"], "N")
-                self.assertIn("[rejected]", detail["Tortured Phrases - Evidence"])
+                self.assertEqual(detail["Nonsense and tortured phrases - Flag"], "N")
+                self.assertIn("[rejected]", detail["Nonsense and tortured phrases - Evidence"])
                 self.assertEqual(master["Overall Risk"], "None")
             finally:
                 workbook.close()

@@ -1,27 +1,27 @@
 export const authorChecks = [
   {
     id: "submission_volume",
-    label: "Submission Volume",
+    label: "Authors with ≥10 submissions in provided batch",
     description: "Authors who appear on more submissions in this cycle than the configured threshold.",
   },
   {
     id: "author_count_deviation",
-    label: "Author Count Deviation",
+    label: "Number of authors",
     description: "Submissions whose author count is significantly above or below the dataset average.",
   },
   {
     id: "affiliance_relevance",
-    label: "Affiliation Relevance",
+    label: "Affiliation relevance",
     description: "Affiliations that could not be verified or belong to institutions with notable retraction rates.",
   },
   {
     id: "author_network",
-    label: "Author Network",
+    label: "Networks of authors submitting multiple abstracts together",
     description: "Author groups that have repeatedly co-authored together across multiple submissions.",
   },
   {
     id: "retraction_history",
-    label: "Retraction History",
+    label: "Prior retractions",
     description: "Authors with prior appearances in the Retraction Watch database.",
   },
 ];

@@ -58,7 +58,7 @@ test("extracts validator judgments for the evals tab", () => {
       doi: "",
       title: "Example",
       check_id: "tortured_phrases",
-      check_label: "Tortured Phrases",
+      check_label: "Nonsense and tortured phrases",
       matched_phrase: "nervous network",
       expected_term: "",
       evidence_snippet: "nervous network in the background section",

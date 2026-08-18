@@ -1,0 +1,3248 @@
+{
+  "10.2147/cmar.s276290": {
+    "title": "LINC00504 Promotes the Malignant Biological Behavior of Breast Cancer Cells by Upregulating HMGB3 via Decoying MicroRNA-876-3p",
+    "abstract_id": "SYNIC0013",
+    "checks": [
+      {
+        "check_name": "content_integrity_summary",
+        "check_description": "Authoritative aggregate result for all content-integrity checks.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "overall_content_risk": "HIGH",
+              "review_required": true,
+              "flagged_checks": [
+                "Tortured Phrase",
+                "Template Detection",
+                "Authorship Risk"
+              ],
+              "finding_ids": [
+                "FND-00008",
+                "FND-00009",
+                "FND-00010",
+                "FND-00011"
+              ],
+              "template_pair_ids": [
+                "PAIR-SYNIC0012--SYNIC0013"
+              ],
+              "operational_issues": []
+            }
+          ],
+          "comment": "Tortured Phrase, Template Detection, Authorship Risk"
+        }
+      },
+      {
+        "check_name": "tortured_phrases",
+        "check_description": "Detects known tortured or nonsensical scientific phrases.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "finding_id": "FND-00008",
+              "matched_phrase": "bosom",
+              "expected_term": "breast",
+              "evidence_snippet": "tory role in a variety of human cancers. In this study, LINC00504 expression in bosom peril tissues and cell lines was detected. Studies were also conducted to deter",
+              "section": "Background",
+              "severity": "medium",
+              "confidence": 0.87,
+              "validation_status": "not_validated",
+              "validation_reason": "",
+              "validated_by": "",
+              "rule_id": "TP-2BF12EE1BA35",
+              "active": true,
+              "review_candidate": false
+            },
+            {
+              "finding_id": "FND-00009",
+              "matched_phrase": "bosom",
+              "expected_term": "breast",
+              "evidence_snippet": "RT-qPCR was used to detect the expression of lncRNA LINC00504 and miR-876-3p in bosom peril tissues and cell lines. CCK-8, colony formation, and transwell assays wer",
+              "section": "Background",
+              "severity": "medium",
+              "confidence": 0.87,
+              "validation_status": "not_validated",
+              "validation_reason": "",
+              "validated_by": "",
+              "rule_id": "TP-2BF12EE1BA35",
+              "active": true,
+              "review_candidate": false
+            },
+            {
+              "finding_id": "FND-00010",
+              "matched_phrase": "bosom peril",
+              "expected_term": "breast cancer",
+              "evidence_snippet": "tory role in a variety of human cancers. In this study, LINC00504 expression in bosom peril tissues and cell lines was detected. Studies were also conducted to determine t",
+              "section": "Background",
+              "severity": "high",
+              "confidence": 0.98,
+              "validation_status": "not_validated",
+              "validation_reason": "",
+              "validated_by": "",
+              "rule_id": "TP-E130276E27ED",
+              "active": true,
+              "review_candidate": false
+            },
+            {
+              "finding_id": "FND-00011",
+              "matched_phrase": "bosom peril",
+              "expected_term": "breast cancer",
+              "evidence_snippet": "RT-qPCR was used to detect the expression of lncRNA LINC00504 and miR-876-3p in bosom peril tissues and cell lines. CCK-8, colony formation, and transwell assays were used",
+              "section": "Background",
+              "severity": "high",
+              "confidence": 0.98,
+              "validation_status": "not_validated",
+              "validation_reason": "",
+              "validated_by": "",
+              "rule_id": "TP-E130276E27ED",
+              "active": true,
+              "review_candidate": false
+            }
+          ],
+          "comment": "bosom → breast | bosom → breast | bosom peril → breast cancer | bosom peril → breast cancer"
+        }
+      },
+      {
+        "check_name": "llm_response_trace",
+        "check_description": "Detects residual language associated with an LLM or conversational assistant response.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active LLM response trace was detected."
+        }
+      },
+      {
+        "check_name": "template_detection",
+        "check_description": "Detects suspicious text or writing-template reuse across submissions.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "evidence_scope": "PAIR",
+              "pair_id": "PAIR-SYNIC0012--SYNIC0013",
+              "matched_abstract_id": "SYNIC0012",
+              "matched_title": "The lncRNA LINC01194/miR-486-5p Axis Facilitates Malignancy in Non-Small Cell Lung Cancer via Regulating CDK4",
+              "classification": "possible_template_reuse",
+              "review_priority": "HIGH",
+              "editorial_score": 0.85,
+              "reason": "23% shared text with SYNIC0012, different author group.",
+              "same_author_group": false,
+              "sub_checks": [
+                {
+                  "check_name": "exact_text_reuse",
+                  "check_description": "Detects distinctive original text shared by two submissions.",
+                  "evidence_role": "PRIMARY",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "signals": [
+                          "distinctive_shared_text",
+                          "rare_exact_phrase"
+                        ],
+                        "original_body_similarity": 0.22628951747088186,
+                        "evidence": "SYNIC0012: RT-qPCR was used to detect the expression of lncRNA LINC01194 and miR-486-5p in NSCLC tissues and cell lines. || SYNIC0013: RT-qPCR was used to detect the expression of lncRNA LINC00504 and miR-876-3p in bosom peril tissues and cell lines."
+                      }
+                    ],
+                    "comment": "23% of the original abstract text is shared word-for-word between the two submissions."
+                  }
+                },
+                {
+                  "check_name": "entity_normalized_template",
+                  "check_description": "Detects a shared writing skeleton after biomedical entities are normalized.",
+                  "evidence_role": "PRIMARY",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "masked_body_similarity": 0.24955436720142601,
+                        "original_body_similarity": 0.22628951747088186,
+                        "likely_substitutions": [
+                          "gene: CDK4 -> HMGB3",
+                          "mirna: miR-486-5p -> microRNA-876-3p",
+                          "lncrna: LINC01194 -> LINC00504",
+                          "disease: Non-Small Cell Lung Cancer -> breast cancer"
+                        ]
+                      }
+                    ],
+                    "comment": "25% shared writing structure once biomedical entities are normalized out, with 23% shared original text."
+                  }
+                },
+                {
+                  "check_name": "title_template",
+                  "check_description": "Detects structurally similar titles after entity normalization.",
+                  "evidence_role": "SUPPORTING",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No shared title structure detected."
+                  }
+                },
+                {
+                  "check_name": "section_similarity",
+                  "check_description": "Compares corresponding sections of the two abstracts.",
+                  "evidence_role": "SUPPORTING",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "strongest_section": "Background",
+                        "strongest_section_similarity": 0.21705426356589147,
+                        "supporting_evidence": []
+                      }
+                    ],
+                    "comment": "Background section shares 22% structural similarity between the abstracts."
+                  }
+                }
+              ],
+              "context": {
+                "shared_trial_ids": [],
+                "shared_databases": [],
+                "shared_populations": [],
+                "shared_endpoints": [],
+                "explicit_companion_wording": false,
+                "interpretation": "no_structured_context"
+              },
+              "submitted_evidence": "RT-qPCR was used to detect the expression of lncRNA LINC00504 and miR-876-3p in bosom peril tissues and cell lines.",
+              "matched_evidence": "RT-qPCR was used to detect the expression of lncRNA LINC01194 and miR-486-5p in NSCLC tissues and cell lines."
+            },
+            {
+              "evidence_scope": "RECORD",
+              "supporting_checks": [
+                {
+                  "check_name": "numerical_contradiction",
+                  "check_description": "Detects inconsistent percentages, counts, ranges, or other numerical claims.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active numerical contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "design_contradiction",
+                  "check_description": "Detects mutually inconsistent study-design statements.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active study-design contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "unverifiable_clinical_trial",
+                  "check_description": "Checks whether stated clinical-trial identifiers are valid and verifiable.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No unverifiable clinical-trial reference was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "authorship_risk",
+                  "check_description": "Flags authorship-network risk signals (submission volume, author count deviation, affiliation relevance, author network, retraction history).",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "reason": "Retraction History"
+                      }
+                    ],
+                    "comment": "Retraction History: One or more authors on this paper name-match an author in the Retraction Watch database."
+                  },
+                  "evidence_role": "CORROBORATING"
+                }
+              ]
+            }
+          ],
+          "comment": "23% shared text with SYNIC0012, different author group."
+        }
+      }
+    ]
+  },
+  "10.2147/cmar.s267665": {
+    "title": "Long Intergenic Non-Coding RNA LINC00922 Aggravates the Malignant Phenotype of Breast Cancer by Regulating the microRNA-424-5p/BDNF Axis",
+    "abstract_id": "SYNIC0016",
+    "checks": [
+      {
+        "check_name": "content_integrity_summary",
+        "check_description": "Authoritative aggregate result for all content-integrity checks.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "overall_content_risk": "HIGH",
+              "review_required": true,
+              "flagged_checks": [
+                "Tortured Phrase",
+                "Numerical Contradiction",
+                "Authorship Risk"
+              ],
+              "finding_ids": [
+                "FND-00016",
+                "FND-00017",
+                "NUM-00001"
+              ],
+              "template_pair_ids": [],
+              "operational_issues": []
+            }
+          ],
+          "comment": "Tortured Phrase, Numerical Contradiction, Authorship Risk"
+        }
+      },
+      {
+        "check_name": "tortured_phrases",
+        "check_description": "Detects known tortured or nonsensical scientific phrases.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "finding_id": "FND-00016",
+              "matched_phrase": "bosom",
+              "expected_term": "breast",
+              "evidence_snippet": "ion of lung cancer. In this study, we aimed to quantify LINC00922 expression in bosom peril and determine its influence on the malignant behavior of breast cancer ce",
+              "section": "Background",
+              "severity": "medium",
+              "confidence": 0.87,
+              "validation_status": "not_validated",
+              "validation_reason": "",
+              "validated_by": "",
+              "rule_id": "TP-2BF12EE1BA35",
+              "active": true,
+              "review_candidate": false
+            },
+            {
+              "finding_id": "FND-00017",
+              "matched_phrase": "bosom peril",
+              "expected_term": "breast cancer",
+              "evidence_snippet": "ion of lung cancer. In this study, we aimed to quantify LINC00922 expression in bosom peril and determine its influence on the malignant behavior of breast cancer cells in",
+              "section": "Background",
+              "severity": "high",
+              "confidence": 0.98,
+              "validation_status": "not_validated",
+              "validation_reason": "",
+              "validated_by": "",
+              "rule_id": "TP-E130276E27ED",
+              "active": true,
+              "review_candidate": false
+            }
+          ],
+          "comment": "bosom → breast | bosom peril → breast cancer"
+        }
+      },
+      {
+        "check_name": "llm_response_trace",
+        "check_description": "Detects residual language associated with an LLM or conversational assistant response.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active LLM response trace was detected."
+        }
+      },
+      {
+        "check_name": "template_detection",
+        "check_description": "Detects suspicious text or writing-template reuse across submissions.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [
+            {
+              "evidence_scope": "RECORD",
+              "supporting_checks": [
+                {
+                  "check_name": "numerical_contradiction",
+                  "check_description": "Detects inconsistent percentages, counts, ranges, or other numerical claims.",
+                  "result": {
+                    "level": "MEDIUM",
+                    "supporting_data": [
+                      {
+                        "finding_id": "NUM-00001",
+                        "record_id": "SYNIC0016",
+                        "source_file": "synthetic_asco_retractionwatch_validation.xml#SYNIC0016",
+                        "detector_type": "numerical_contradiction",
+                        "category": "numerical_contradiction",
+                        "matched_text": "median=18; range=24–36",
+                        "evidence_snippet": "The reported median 18 lies outside the explicit range 24–36 month.",
+                        "section_or_field": "Conclusions",
+                        "severity": "medium",
+                        "confidence": "very_high",
+                        "rule_id": "numerical_contradiction:median_outside_range",
+                        "check_type": "median_outside_range",
+                        "expected_term": "",
+                        "validation_status": "",
+                        "validation_reason": "",
+                        "validated_by": "",
+                        "review_status": "candidate",
+                        "detected": true,
+                        "active": true,
+                        "review_candidate": false
+                      }
+                    ],
+                    "comment": "The reported median 18 lies outside the explicit range 24–36 month."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "design_contradiction",
+                  "check_description": "Detects mutually inconsistent study-design statements.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active study-design contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "unverifiable_clinical_trial",
+                  "check_description": "Checks whether stated clinical-trial identifiers are valid and verifiable.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No unverifiable clinical-trial reference was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "authorship_risk",
+                  "check_description": "Flags authorship-network risk signals (submission volume, author count deviation, affiliation relevance, author network, retraction history).",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "reason": "Retraction History"
+                      }
+                    ],
+                    "comment": "Retraction History: One or more authors on this paper name-match an author in the Retraction Watch database."
+                  },
+                  "evidence_role": "CORROBORATING"
+                }
+              ]
+            }
+          ],
+          "comment": "No accepted template pair was detected."
+        }
+      }
+    ]
+  },
+  "10.18632/oncotarget.9480": {
+    "title": "MicroRNA-138 acts as a tumor suppressor in non small cell lung cancer via targeting YAP1",
+    "abstract_id": "SYNIC0006",
+    "checks": [
+      {
+        "check_name": "content_integrity_summary",
+        "check_description": "Authoritative aggregate result for all content-integrity checks.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "overall_content_risk": "HIGH",
+              "review_required": true,
+              "flagged_checks": [
+                "Template Detection",
+                "Design Contradiction",
+                "Authorship Risk"
+              ],
+              "finding_ids": [
+                "DSN-00001"
+              ],
+              "template_pair_ids": [
+                "PAIR-SYNIC0006--SYNIC0008"
+              ],
+              "operational_issues": []
+            }
+          ],
+          "comment": "Template Detection, Design Contradiction, Authorship Risk"
+        }
+      },
+      {
+        "check_name": "tortured_phrases",
+        "check_description": "Detects known tortured or nonsensical scientific phrases.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active tortured phrase was detected."
+        }
+      },
+      {
+        "check_name": "llm_response_trace",
+        "check_description": "Detects residual language associated with an LLM or conversational assistant response.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active LLM response trace was detected."
+        }
+      },
+      {
+        "check_name": "template_detection",
+        "check_description": "Detects suspicious text or writing-template reuse across submissions.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "evidence_scope": "PAIR",
+              "pair_id": "PAIR-SYNIC0006--SYNIC0008",
+              "matched_abstract_id": "SYNIC0008",
+              "matched_title": "MiR-138-5p Inhibits the Proliferation of Gastric Cancer Cells by Targeting DEK",
+              "classification": "possible_template_reuse",
+              "review_priority": "HIGH",
+              "editorial_score": 0.85,
+              "reason": "21% shared text with SYNIC0008, different author group.",
+              "same_author_group": false,
+              "sub_checks": [
+                {
+                  "check_name": "exact_text_reuse",
+                  "check_description": "Detects distinctive original text shared by two submissions.",
+                  "evidence_role": "PRIMARY",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "signals": [
+                          "distinctive_shared_text",
+                          "rare_exact_phrase"
+                        ],
+                        "original_body_similarity": 0.20670391061452514,
+                        "evidence": "SYNIC0006: MicroRNA (miR)-138 was found to have suppressive effects on the growth and metastasis of different human cancers. || SYNIC0008: MicroRNA-mediated regulation was found to have suppressive effects on the growth and metastasis of different human cancers"
+                      }
+                    ],
+                    "comment": "21% of the original abstract text is shared word-for-word between the two submissions."
+                  }
+                },
+                {
+                  "check_name": "entity_normalized_template",
+                  "check_description": "Detects a shared writing skeleton after biomedical entities are normalized.",
+                  "evidence_role": "PRIMARY",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "masked_body_similarity": 0.20583717357910905,
+                        "original_body_similarity": 0.20670391061452514,
+                        "likely_substitutions": [
+                          "mirna: MicroRNA-138 -> miR-138-5p",
+                          "disease: non-small cell lung cancer -> gastric cancer"
+                        ]
+                      }
+                    ],
+                    "comment": "21% shared writing structure once biomedical entities are normalized out, with 21% shared original text."
+                  }
+                },
+                {
+                  "check_name": "title_template",
+                  "check_description": "Detects structurally similar titles after entity normalization.",
+                  "evidence_role": "SUPPORTING",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No shared title structure detected."
+                  }
+                },
+                {
+                  "check_name": "section_similarity",
+                  "check_description": "Compares corresponding sections of the two abstracts.",
+                  "evidence_role": "SUPPORTING",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "strongest_section": "Methods",
+                        "strongest_section_similarity": 0.15859030837004406,
+                        "supporting_evidence": []
+                      }
+                    ],
+                    "comment": "Methods section shares 16% structural similarity between the abstracts."
+                  }
+                }
+              ],
+              "context": {
+                "shared_trial_ids": [],
+                "shared_databases": [],
+                "shared_populations": [],
+                "shared_endpoints": [],
+                "explicit_companion_wording": false,
+                "interpretation": "no_structured_context"
+              },
+              "submitted_evidence": "MicroRNA (miR)-138 was found to have suppressive effects on the growth and metastasis of different human cancers.",
+              "matched_evidence": "MicroRNA-mediated regulation was found to have suppressive effects on the growth and metastasis of different human cancers"
+            },
+            {
+              "evidence_scope": "RECORD",
+              "supporting_checks": [
+                {
+                  "check_name": "numerical_contradiction",
+                  "check_description": "Detects inconsistent percentages, counts, ranges, or other numerical claims.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active numerical contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "design_contradiction",
+                  "check_description": "Detects mutually inconsistent study-design statements.",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "finding_id": "DSN-00001",
+                        "record_id": "SYNIC0006",
+                        "source_file": "synthetic_asco_retractionwatch_validation.xml#SYNIC0006",
+                        "detector_type": "design_contradiction",
+                        "category": "design_contradiction",
+                        "matched_text": "prospective vs retrospective",
+                        "evidence_snippet": "The abstract describes time_direction as prospective and time_direction as retrospective.",
+                        "section_or_field": "Background",
+                        "severity": "high",
+                        "confidence": "high",
+                        "rule_id": "design_contradiction:prospective_vs_retrospective",
+                        "check_type": "prospective_vs_retrospective",
+                        "expected_term": "",
+                        "validation_status": "not_run",
+                        "validation_reason": "",
+                        "validated_by": "",
+                        "review_status": "candidate",
+                        "detected": true,
+                        "active": true,
+                        "review_candidate": false
+                      }
+                    ],
+                    "comment": "The abstract describes time_direction as prospective and time_direction as retrospective."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "unverifiable_clinical_trial",
+                  "check_description": "Checks whether stated clinical-trial identifiers are valid and verifiable.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No unverifiable clinical-trial reference was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "authorship_risk",
+                  "check_description": "Flags authorship-network risk signals (submission volume, author count deviation, affiliation relevance, author network, retraction history).",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "reason": "Submission Volume"
+                      },
+                      {
+                        "reason": "Author Count Deviation"
+                      },
+                      {
+                        "reason": "Author Network"
+                      },
+                      {
+                        "reason": "Retraction History"
+                      }
+                    ],
+                    "comment": "Submission Volume: This paper includes an author who has submitted 5 times, above the threshold of 3. Yuan Lin Zheng has appeared in following DOIs: 10.1002/cam4.2839, 10.1002/cam4.3726, 10.1177/1533034618756784, 10.1186/s12935-021-01885-0, 10.2147/CMAR.S253777, 10.2147/CMAR.S273687; Jun Lu has appeared in following DOIs: 10.1002/cam4.2839, 10.1002/cam4.3726, 10.1186/s12935-021-01885-0, 10.18632/oncotarget.21167, 10.2147/CMAR.S253777, 10.2147/OTT.S224521; Dong Mei Wu has appeared in following DOIs: 10.1186/s13046-019-1239-3, 10.18632/oncotarget.22151, 10.2147/CMAR.S253777, 10.2147/CMAR.S273687 | Author Count Deviation: Author count (14) is significantly higher than the dataset average (7). | Author Network: This paper includes authors who have repeatedly co-authored together across multiple papers. Jun Lu, Yuan Lin Zheng have co-authored together in following DOIs: 10.1002/cam4.2839, 10.1002/cam4.3726, 10.1186/s12935-021-01885-0, 10.18632/oncotarget.9480, 10.2147/CMAR.S253777; Dong Mei Wu, Yuan Lin Zheng have co-authored together in following DOIs: 10.18632/oncotarget.9480, 10.2147/CMAR.S253777, 10.2147/CMAR.S273687 | Retraction History: One or more authors on this paper name-match an author in the Retraction Watch database."
+                  },
+                  "evidence_role": "CORROBORATING"
+                }
+              ]
+            },
+            {
+              "evidence_scope": "FAMILY",
+              "family_id": "FAM-0001",
+              "family_size": 3,
+              "representative_abstract_id": "SYNIC0008",
+              "member_abstract_ids": [
+                "SYNIC0006",
+                "SYNIC0007",
+                "SYNIC0008"
+              ]
+            }
+          ],
+          "comment": "21% shared text with SYNIC0008, different author group."
+        }
+      }
+    ]
+  },
+  "10.2147/cmar.s253777": {
+    "title": "MiR-138-5p Inhibits the Proliferation of Gastric Cancer Cells by Targeting DEK",
+    "abstract_id": "SYNIC0008",
+    "checks": [
+      {
+        "check_name": "content_integrity_summary",
+        "check_description": "Authoritative aggregate result for all content-integrity checks.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "overall_content_risk": "HIGH",
+              "review_required": true,
+              "flagged_checks": [
+                "LLM Response Trace",
+                "Template Detection",
+                "Authorship Risk"
+              ],
+              "finding_ids": [
+                "FND-00004"
+              ],
+              "template_pair_ids": [
+                "PAIR-SYNIC0006--SYNIC0008",
+                "PAIR-SYNIC0007--SYNIC0008"
+              ],
+              "operational_issues": []
+            }
+          ],
+          "comment": "LLM Response Trace, Template Detection, Authorship Risk"
+        }
+      },
+      {
+        "check_name": "tortured_phrases",
+        "check_description": "Detects known tortured or nonsensical scientific phrases.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active tortured phrase was detected."
+        }
+      },
+      {
+        "check_name": "llm_response_trace",
+        "check_description": "Detects residual language associated with an LLM or conversational assistant response.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "finding_id": "FND-00004",
+              "check_type": "known_pattern",
+              "category": "response_preamble",
+              "matched_phrase": "here is the revised abstract",
+              "evidence_snippet": "Certainly, here is the revised abstract.",
+              "section": "Background",
+              "severity": "high",
+              "confidence": 0.95,
+              "validation_status": "not_required",
+              "validation_reason": "",
+              "validated_by": "",
+              "rule_id": "LLM-009",
+              "active": true,
+              "review_candidate": false
+            }
+          ],
+          "comment": "Certainly, here is the revised abstract."
+        }
+      },
+      {
+        "check_name": "template_detection",
+        "check_description": "Detects suspicious text or writing-template reuse across submissions.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "evidence_scope": "PAIR",
+              "pair_id": "PAIR-SYNIC0006--SYNIC0008",
+              "matched_abstract_id": "SYNIC0006",
+              "matched_title": "MicroRNA-138 acts as a tumor suppressor in non small cell lung cancer via targeting YAP1",
+              "classification": "possible_template_reuse",
+              "review_priority": "HIGH",
+              "editorial_score": 0.85,
+              "reason": "21% shared text with SYNIC0006, different author group.",
+              "same_author_group": false,
+              "sub_checks": [
+                {
+                  "check_name": "exact_text_reuse",
+                  "check_description": "Detects distinctive original text shared by two submissions.",
+                  "evidence_role": "PRIMARY",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "signals": [
+                          "distinctive_shared_text",
+                          "rare_exact_phrase"
+                        ],
+                        "original_body_similarity": 0.20670391061452514,
+                        "evidence": "SYNIC0006: MicroRNA (miR)-138 was found to have suppressive effects on the growth and metastasis of different human cancers. || SYNIC0008: MicroRNA-mediated regulation was found to have suppressive effects on the growth and metastasis of different human cancers"
+                      }
+                    ],
+                    "comment": "21% of the original abstract text is shared word-for-word between the two submissions."
+                  }
+                },
+                {
+                  "check_name": "entity_normalized_template",
+                  "check_description": "Detects a shared writing skeleton after biomedical entities are normalized.",
+                  "evidence_role": "PRIMARY",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "masked_body_similarity": 0.20583717357910905,
+                        "original_body_similarity": 0.20670391061452514,
+                        "likely_substitutions": [
+                          "mirna: MicroRNA-138 -> miR-138-5p",
+                          "disease: non-small cell lung cancer -> gastric cancer"
+                        ]
+                      }
+                    ],
+                    "comment": "21% shared writing structure once biomedical entities are normalized out, with 21% shared original text."
+                  }
+                },
+                {
+                  "check_name": "title_template",
+                  "check_description": "Detects structurally similar titles after entity normalization.",
+                  "evidence_role": "SUPPORTING",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No shared title structure detected."
+                  }
+                },
+                {
+                  "check_name": "section_similarity",
+                  "check_description": "Compares corresponding sections of the two abstracts.",
+                  "evidence_role": "SUPPORTING",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "strongest_section": "Methods",
+                        "strongest_section_similarity": 0.15859030837004406,
+                        "supporting_evidence": []
+                      }
+                    ],
+                    "comment": "Methods section shares 16% structural similarity between the abstracts."
+                  }
+                }
+              ],
+              "context": {
+                "shared_trial_ids": [],
+                "shared_databases": [],
+                "shared_populations": [],
+                "shared_endpoints": [],
+                "explicit_companion_wording": false,
+                "interpretation": "no_structured_context"
+              },
+              "submitted_evidence": "MicroRNA-mediated regulation was found to have suppressive effects on the growth and metastasis of different human cancers",
+              "matched_evidence": "MicroRNA (miR)-138 was found to have suppressive effects on the growth and metastasis of different human cancers."
+            },
+            {
+              "evidence_scope": "PAIR",
+              "pair_id": "PAIR-SYNIC0007--SYNIC0008",
+              "matched_abstract_id": "SYNIC0007",
+              "matched_title": "Long Noncoding RNA VPS9D1-AS1 Sequesters microRNA-525-5p to Promote the Oncogenicity of Colorectal Cancer Cells by Upregulating HMGA1",
+              "classification": "possible_template_reuse",
+              "review_priority": "HIGH",
+              "editorial_score": 0.85,
+              "reason": "29% shared text with SYNIC0007, different author group.",
+              "same_author_group": false,
+              "sub_checks": [
+                {
+                  "check_name": "exact_text_reuse",
+                  "check_description": "Detects distinctive original text shared by two submissions.",
+                  "evidence_role": "PRIMARY",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "signals": [
+                          "distinctive_shared_text",
+                          "rare_exact_phrase"
+                        ],
+                        "original_body_similarity": 0.2864651773981603,
+                        "evidence": "SYNIC0007: MicroRNA-mediated regulation was found to have suppressive effects on the growth and metastasis of different human cancers In this study, we aimed to investigate the regulatory mechanism of the VPS9D1-AS1/miR-525-5p axis in colorectal cancer (CRC). || SYNIC0008: MicroRNA-mediated regulation was found to have suppressive effects on the growth and metastasis of different human cancers In this study, we aimed to investigate the regulatory mechanism of miR-138-5p in gastric cancer (GC)."
+                      }
+                    ],
+                    "comment": "29% of the original abstract text is shared word-for-word between the two submissions."
+                  }
+                },
+                {
+                  "check_name": "entity_normalized_template",
+                  "check_description": "Detects a shared writing skeleton after biomedical entities are normalized.",
+                  "evidence_role": "PRIMARY",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "masked_body_similarity": 0.29941860465116277,
+                        "original_body_similarity": 0.2864651773981603,
+                        "likely_substitutions": [
+                          "mirna: microRNA-525-5p -> miR-138-5p",
+                          "disease: colorectal cancer -> gastric cancer"
+                        ]
+                      }
+                    ],
+                    "comment": "30% shared writing structure once biomedical entities are normalized out, with 29% shared original text."
+                  }
+                },
+                {
+                  "check_name": "title_template",
+                  "check_description": "Detects structurally similar titles after entity normalization.",
+                  "evidence_role": "SUPPORTING",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "masked_title_similarity": 0.46153846153846156,
+                        "original_title_similarity": 0.36363636363636365
+                      }
+                    ],
+                    "comment": "46% shared title structure, with 36% shared original title text."
+                  }
+                },
+                {
+                  "check_name": "section_similarity",
+                  "check_description": "Compares corresponding sections of the two abstracts.",
+                  "evidence_role": "SUPPORTING",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "strongest_section": "Conclusions",
+                        "strongest_section_similarity": 0.7603305785123967,
+                        "supporting_evidence": []
+                      }
+                    ],
+                    "comment": "Conclusions section shares 76% structural similarity between the abstracts."
+                  }
+                }
+              ],
+              "context": {
+                "shared_trial_ids": [],
+                "shared_databases": [],
+                "shared_populations": [],
+                "shared_endpoints": [],
+                "explicit_companion_wording": false,
+                "interpretation": "no_structured_context"
+              },
+              "submitted_evidence": "MicroRNA-mediated regulation was found to have suppressive effects on the growth and metastasis of different human cancers In this study, we aimed to investigate the regulatory mechanism of miR-138-5p in gastric cancer (GC).",
+              "matched_evidence": "MicroRNA-mediated regulation was found to have suppressive effects on the growth and metastasis of different human cancers In this study, we aimed to investigate the regulatory mechanism of the VPS9D1-AS1/miR-525-5p axis in colorectal cancer (CRC)."
+            },
+            {
+              "evidence_scope": "RECORD",
+              "supporting_checks": [
+                {
+                  "check_name": "numerical_contradiction",
+                  "check_description": "Detects inconsistent percentages, counts, ranges, or other numerical claims.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active numerical contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "design_contradiction",
+                  "check_description": "Detects mutually inconsistent study-design statements.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active study-design contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "unverifiable_clinical_trial",
+                  "check_description": "Checks whether stated clinical-trial identifiers are valid and verifiable.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No unverifiable clinical-trial reference was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "authorship_risk",
+                  "check_description": "Flags authorship-network risk signals (submission volume, author count deviation, affiliation relevance, author network, retraction history).",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "reason": "Submission Volume"
+                      },
+                      {
+                        "reason": "Affiliation Relevance"
+                      },
+                      {
+                        "reason": "Author Network"
+                      },
+                      {
+                        "reason": "Retraction History"
+                      }
+                    ],
+                    "comment": "Submission Volume: This paper includes an author who has submitted 5 times, above the threshold of 3. Yuan Lin Zheng has appeared in following DOIs: 10.1002/cam4.2839, 10.1002/cam4.3726, 10.1177/1533034618756784, 10.1186/s12935-021-01885-0, 10.18632/oncotarget.9480, 10.2147/CMAR.S273687; Jun Lu has appeared in following DOIs: 10.1002/cam4.2839, 10.1002/cam4.3726, 10.1186/s12935-021-01885-0, 10.18632/oncotarget.21167, 10.18632/oncotarget.9480, 10.2147/OTT.S224521; Dong Mei Wu has appeared in following DOIs: 10.1186/s13046-019-1239-3, 10.18632/oncotarget.22151, 10.18632/oncotarget.9480, 10.2147/CMAR.S273687 | Affiliation Relevance: One or more author affiliations could not be verified, or belong to an institution with a notable retraction rate. | Author Network: This paper includes authors who have repeatedly co-authored together across multiple papers. Jun Lu, Yuan Lin Zheng have co-authored together in following DOIs: 10.1002/cam4.2839, 10.1002/cam4.3726, 10.1186/s12935-021-01885-0, 10.18632/oncotarget.9480, 10.2147/CMAR.S253777; Dong Mei Wu, Yuan Lin Zheng have co-authored together in following DOIs: 10.18632/oncotarget.9480, 10.2147/CMAR.S253777, 10.2147/CMAR.S273687 | Retraction History: One or more authors on this paper name-match an author in the Retraction Watch database."
+                  },
+                  "evidence_role": "CORROBORATING"
+                }
+              ]
+            },
+            {
+              "evidence_scope": "FAMILY",
+              "family_id": "FAM-0001",
+              "family_size": 3,
+              "representative_abstract_id": "SYNIC0008",
+              "member_abstract_ids": [
+                "SYNIC0006",
+                "SYNIC0007",
+                "SYNIC0008"
+              ]
+            }
+          ],
+          "comment": "21% shared text with SYNIC0006, different author group."
+        }
+      }
+    ]
+  },
+  "10.1002/cam4.2839": {
+    "title": "Long noncoding RNA CASC9 promotes the proliferation and metastasis of papillary thyroid cancer via sponging miR-488-3p",
+    "abstract_id": "SYNIC0009",
+    "checks": [
+      {
+        "check_name": "content_integrity_summary",
+        "check_description": "Authoritative aggregate result for all content-integrity checks.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "overall_content_risk": "HIGH",
+              "review_required": true,
+              "flagged_checks": [
+                "Template Detection",
+                "Unverifiable Clinical Trial",
+                "Authorship Risk"
+              ],
+              "finding_ids": [
+                "TRV-00001"
+              ],
+              "template_pair_ids": [
+                "PAIR-SYNIC0009--SYNIC0011"
+              ],
+              "operational_issues": []
+            }
+          ],
+          "comment": "Template Detection, Unverifiable Clinical Trial, Authorship Risk"
+        }
+      },
+      {
+        "check_name": "tortured_phrases",
+        "check_description": "Detects known tortured or nonsensical scientific phrases.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active tortured phrase was detected."
+        }
+      },
+      {
+        "check_name": "llm_response_trace",
+        "check_description": "Detects residual language associated with an LLM or conversational assistant response.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active LLM response trace was detected."
+        }
+      },
+      {
+        "check_name": "template_detection",
+        "check_description": "Detects suspicious text or writing-template reuse across submissions.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "evidence_scope": "PAIR",
+              "pair_id": "PAIR-SYNIC0009--SYNIC0011",
+              "matched_abstract_id": "SYNIC0011",
+              "matched_title": "LINC01224 accelerates malignant transformation via MiR-193a-5p/CDK8 axis in gastric cancer",
+              "classification": "possible_template_reuse",
+              "review_priority": "HIGH",
+              "editorial_score": 0.85,
+              "reason": "23% shared text with SYNIC0011, different author group.",
+              "same_author_group": false,
+              "sub_checks": [
+                {
+                  "check_name": "exact_text_reuse",
+                  "check_description": "Detects distinctive original text shared by two submissions.",
+                  "evidence_role": "PRIMARY",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "signals": [
+                          "distinctive_shared_text",
+                          "rare_exact_phrase"
+                        ],
+                        "original_body_similarity": 0.2336283185840708,
+                        "evidence": "SYNIC0009: Higher CASC9 expression was associated with large tumor size, advanced stage, or lymph node metastasis || SYNIC0011: Higher LINC01224 expression was associated with large tumor size, advanced stage, or lymph node metastasis."
+                      }
+                    ],
+                    "comment": "23% of the original abstract text is shared word-for-word between the two submissions."
+                  }
+                },
+                {
+                  "check_name": "entity_normalized_template",
+                  "check_description": "Detects a shared writing skeleton after biomedical entities are normalized.",
+                  "evidence_role": "PRIMARY",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "masked_body_similarity": 0.23255813953488372,
+                        "original_body_similarity": 0.2336283185840708,
+                        "likely_substitutions": [
+                          "gene: ADAM9 -> CDK8",
+                          "mirna: miR-488-3p -> MiR-193a-5p",
+                          "disease: thyroid cancer -> gastric cancer"
+                        ]
+                      }
+                    ],
+                    "comment": "23% shared writing structure once biomedical entities are normalized out, with 23% shared original text."
+                  }
+                },
+                {
+                  "check_name": "title_template",
+                  "check_description": "Detects structurally similar titles after entity normalization.",
+                  "evidence_role": "SUPPORTING",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No shared title structure detected."
+                  }
+                },
+                {
+                  "check_name": "section_similarity",
+                  "check_description": "Compares corresponding sections of the two abstracts.",
+                  "evidence_role": "SUPPORTING",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "strongest_section": "Results",
+                        "strongest_section_similarity": 0.18181818181818182,
+                        "supporting_evidence": []
+                      }
+                    ],
+                    "comment": "Results section shares 18% structural similarity between the abstracts."
+                  }
+                }
+              ],
+              "context": {
+                "shared_trial_ids": [],
+                "shared_databases": [],
+                "shared_populations": [],
+                "shared_endpoints": [],
+                "explicit_companion_wording": false,
+                "interpretation": "no_structured_context"
+              },
+              "submitted_evidence": "Higher CASC9 expression was associated with large tumor size, advanced stage, or lymph node metastasis",
+              "matched_evidence": "Higher LINC01224 expression was associated with large tumor size, advanced stage, or lymph node metastasis."
+            },
+            {
+              "evidence_scope": "RECORD",
+              "supporting_checks": [
+                {
+                  "check_name": "numerical_contradiction",
+                  "check_description": "Detects inconsistent percentages, counts, ranges, or other numerical claims.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active numerical contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "design_contradiction",
+                  "check_description": "Detects mutually inconsistent study-design statements.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active study-design contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "unverifiable_clinical_trial",
+                  "check_description": "Checks whether stated clinical-trial identifiers are valid and verifiable.",
+                  "result": {
+                    "level": "MEDIUM",
+                    "supporting_data": [
+                      {
+                        "finding_id": "TRV-00001",
+                        "record_id": "SYNIC0009",
+                        "source_file": "synthetic_asco_retractionwatch_validation.xml#SYNIC0009",
+                        "detector_type": "unverifiable_clinical_trial",
+                        "category": "unverifiable_clinical_trial",
+                        "matched_text": "NCT12345",
+                        "evidence_snippet": "The abstract reports NCT12345 for ClinicalTrials.gov, which does not match the expected format: NCT followed by exactly eight digits.",
+                        "section_or_field": "Trial Registration",
+                        "severity": "medium",
+                        "confidence": "very_high",
+                        "rule_id": "unverifiable_clinical_trial:invalid_trial_id_format",
+                        "check_type": "invalid_trial_id_format",
+                        "expected_term": "",
+                        "validation_status": "",
+                        "validation_reason": "",
+                        "validated_by": "",
+                        "review_status": "candidate",
+                        "detected": true,
+                        "active": true,
+                        "review_candidate": false
+                      }
+                    ],
+                    "comment": "The abstract reports NCT12345 for ClinicalTrials.gov, which does not match the expected format: NCT followed by exactly eight digits."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "authorship_risk",
+                  "check_description": "Flags authorship-network risk signals (submission volume, author count deviation, affiliation relevance, author network, retraction history).",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "reason": "Submission Volume"
+                      },
+                      {
+                        "reason": "Affiliation Relevance"
+                      },
+                      {
+                        "reason": "Author Network"
+                      },
+                      {
+                        "reason": "Retraction History"
+                      }
+                    ],
+                    "comment": "Submission Volume: This paper includes an author who has submitted 7 times, above the threshold of 3. Yuan Lin Zheng has appeared in following DOIs: 10.1002/cam4.3726, 10.1177/1533034618756784, 10.1186/s12935-021-01885-0, 10.18632/oncotarget.9480, 10.2147/CMAR.S253777, 10.2147/CMAR.S273687; Jun Lu has appeared in following DOIs: 10.1002/cam4.3726, 10.1186/s12935-021-01885-0, 10.18632/oncotarget.21167, 10.18632/oncotarget.9480, 10.2147/CMAR.S253777, 10.2147/OTT.S224521 | Affiliation Relevance: One or more author affiliations could not be verified, or belong to an institution with a notable retraction rate. | Author Network: This paper includes authors who have repeatedly co-authored together across multiple papers. Jun Lu, Yuan Lin Zheng have co-authored together in following DOIs: 10.1002/cam4.2839, 10.1002/cam4.3726, 10.1186/s12935-021-01885-0, 10.18632/oncotarget.9480, 10.2147/CMAR.S253777 | Retraction History: One or more authors on this paper name-match an author in the Retraction Watch database."
+                  },
+                  "evidence_role": "CORROBORATING"
+                }
+              ]
+            },
+            {
+              "evidence_scope": "FAMILY",
+              "family_id": "FAM-0002",
+              "family_size": 3,
+              "representative_abstract_id": "SYNIC0011",
+              "member_abstract_ids": [
+                "SYNIC0009",
+                "SYNIC0010",
+                "SYNIC0011"
+              ]
+            }
+          ],
+          "comment": "23% shared text with SYNIC0011, different author group."
+        }
+      }
+    ]
+  },
+  "10.2147/ott.s224521": {
+    "title": "Long Noncoding RNA NEAT1 Promotes Cell Proliferation and Invasion and Suppresses Apoptosis in Hepatocellular Carcinoma by Regulating miRNA-22-3p/akt2 in vitro and in vivo",
+    "abstract_id": "SYNIC0010",
+    "checks": [
+      {
+        "check_name": "content_integrity_summary",
+        "check_description": "Authoritative aggregate result for all content-integrity checks.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "overall_content_risk": "HIGH",
+              "review_required": true,
+              "flagged_checks": [
+                "Template Detection",
+                "Design Contradiction",
+                "Authorship Risk"
+              ],
+              "finding_ids": [
+                "DSN-00002"
+              ],
+              "template_pair_ids": [
+                "PAIR-SYNIC0010--SYNIC0011"
+              ],
+              "operational_issues": []
+            }
+          ],
+          "comment": "Template Detection, Design Contradiction, Authorship Risk"
+        }
+      },
+      {
+        "check_name": "tortured_phrases",
+        "check_description": "Detects known tortured or nonsensical scientific phrases.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active tortured phrase was detected."
+        }
+      },
+      {
+        "check_name": "llm_response_trace",
+        "check_description": "Detects residual language associated with an LLM or conversational assistant response.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active LLM response trace was detected."
+        }
+      },
+      {
+        "check_name": "template_detection",
+        "check_description": "Detects suspicious text or writing-template reuse across submissions.",
+        "result": {
+          "level": "MEDIUM",
+          "supporting_data": [
+            {
+              "evidence_scope": "PAIR",
+              "pair_id": "PAIR-SYNIC0010--SYNIC0011",
+              "matched_abstract_id": "SYNIC0011",
+              "matched_title": "LINC01224 accelerates malignant transformation via MiR-193a-5p/CDK8 axis in gastric cancer",
+              "classification": "possible_template_reuse",
+              "review_priority": "MEDIUM",
+              "editorial_score": 0.75,
+              "reason": "27% shared structure with SYNIC0011 once biomedical entities are normalized (24% shared original text), different author group.",
+              "same_author_group": false,
+              "sub_checks": [
+                {
+                  "check_name": "exact_text_reuse",
+                  "check_description": "Detects distinctive original text shared by two submissions.",
+                  "evidence_role": "PRIMARY",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No shared original text between the two abstracts."
+                  }
+                },
+                {
+                  "check_name": "entity_normalized_template",
+                  "check_description": "Detects a shared writing skeleton after biomedical entities are normalized.",
+                  "evidence_role": "PRIMARY",
+                  "result": {
+                    "level": "MEDIUM",
+                    "supporting_data": [
+                      {
+                        "masked_body_similarity": 0.2680722891566265,
+                        "original_body_similarity": 0.24,
+                        "likely_substitutions": [
+                          "gene: AKT2 -> CDK8",
+                          "lncrna: NEAT1 -> LINC01224",
+                          "disease: Hepatocellular carcinoma -> gastric cancer"
+                        ]
+                      }
+                    ],
+                    "comment": "27% shared writing structure once biomedical entities are normalized out, with 24% shared original text."
+                  }
+                },
+                {
+                  "check_name": "title_template",
+                  "check_description": "Detects structurally similar titles after entity normalization.",
+                  "evidence_role": "SUPPORTING",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No shared title structure detected."
+                  }
+                },
+                {
+                  "check_name": "section_similarity",
+                  "check_description": "Compares corresponding sections of the two abstracts.",
+                  "evidence_role": "SUPPORTING",
+                  "result": {
+                    "level": "MEDIUM",
+                    "supporting_data": [
+                      {
+                        "strongest_section": "Conclusions",
+                        "strongest_section_similarity": 0.6666666666666666,
+                        "supporting_evidence": []
+                      }
+                    ],
+                    "comment": "Conclusions section shares 67% structural similarity between the abstracts."
+                  }
+                }
+              ],
+              "context": {
+                "shared_trial_ids": [],
+                "shared_databases": [],
+                "shared_populations": [],
+                "shared_endpoints": [],
+                "explicit_companion_wording": false,
+                "interpretation": "no_structured_context"
+              },
+              "submitted_evidence": "We found that NEAT1 expression was increased in human HCC tissues and cells. Higher NEAT1 expression was associated with large tumor size, advanced stage, or lymph node metastasis. In this double-blind study, investigators evaluated the same cohort. Downregulation of NEAT1 significantly reduced the proliferative, migrative, and invasive abilities of HCC cells and suppressed tumorigenesis in vivo.",
+              "matched_evidence": "Higher LINC01224 expression was associated with large tumor size, advanced stage, or lymph node metastasis. Downregulation of LINC01224 significantly reduced the proliferative, migrative, and invasive abilities of GC cells and suppressed tumorigenesis in vivo. Among 30 evaluable specimens, 18 were positive (75%)."
+            },
+            {
+              "evidence_scope": "RECORD",
+              "supporting_checks": [
+                {
+                  "check_name": "numerical_contradiction",
+                  "check_description": "Detects inconsistent percentages, counts, ranges, or other numerical claims.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active numerical contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "design_contradiction",
+                  "check_description": "Detects mutually inconsistent study-design statements.",
+                  "result": {
+                    "level": "MEDIUM",
+                    "supporting_data": [
+                      {
+                        "finding_id": "DSN-00002",
+                        "record_id": "SYNIC0010",
+                        "source_file": "synthetic_asco_retractionwatch_validation.xml#SYNIC0010",
+                        "detector_type": "design_contradiction",
+                        "category": "design_contradiction",
+                        "matched_text": "open_label vs double_blind",
+                        "evidence_snippet": "The abstract describes masking as open_label and masking as double_blind.",
+                        "section_or_field": "Background",
+                        "severity": "medium",
+                        "confidence": "high",
+                        "rule_id": "design_contradiction:open_label_vs_blinded",
+                        "check_type": "open_label_vs_blinded",
+                        "expected_term": "",
+                        "validation_status": "not_run",
+                        "validation_reason": "",
+                        "validated_by": "",
+                        "review_status": "candidate",
+                        "detected": true,
+                        "active": true,
+                        "review_candidate": false
+                      }
+                    ],
+                    "comment": "The abstract describes masking as open_label and masking as double_blind."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "unverifiable_clinical_trial",
+                  "check_description": "Checks whether stated clinical-trial identifiers are valid and verifiable.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No unverifiable clinical-trial reference was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "authorship_risk",
+                  "check_description": "Flags authorship-network risk signals (submission volume, author count deviation, affiliation relevance, author network, retraction history).",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "reason": "Submission Volume"
+                      },
+                      {
+                        "reason": "Affiliation Relevance"
+                      },
+                      {
+                        "reason": "Retraction History"
+                      }
+                    ],
+                    "comment": "Submission Volume: This paper includes an author who has submitted 7 times, above the threshold of 3. Jun Lu has appeared in following DOIs: 10.1002/cam4.2839, 10.1002/cam4.3726, 10.1186/s12935-021-01885-0, 10.18632/oncotarget.21167, 10.18632/oncotarget.9480, 10.2147/CMAR.S253777 | Affiliation Relevance: One or more author affiliations could not be verified, or belong to an institution with a notable retraction rate. | Retraction History: One or more authors on this paper name-match an author in the Retraction Watch database."
+                  },
+                  "evidence_role": "CORROBORATING"
+                }
+              ]
+            },
+            {
+              "evidence_scope": "FAMILY",
+              "family_id": "FAM-0002",
+              "family_size": 3,
+              "representative_abstract_id": "SYNIC0011",
+              "member_abstract_ids": [
+                "SYNIC0009",
+                "SYNIC0010",
+                "SYNIC0011"
+              ]
+            }
+          ],
+          "comment": "27% shared structure with SYNIC0011 once biomedical entities are normalized (24% shared original text), different author group."
+        }
+      }
+    ]
+  },
+  "10.2147/ott.s235037": {
+    "title": "The lncRNA LINC01194/miR-486-5p Axis Facilitates Malignancy in Non-Small Cell Lung Cancer via Regulating CDK4",
+    "abstract_id": "SYNIC0012",
+    "checks": [
+      {
+        "check_name": "content_integrity_summary",
+        "check_description": "Authoritative aggregate result for all content-integrity checks.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "overall_content_risk": "HIGH",
+              "review_required": true,
+              "flagged_checks": [
+                "LLM Response Trace",
+                "Template Detection",
+                "Authorship Risk"
+              ],
+              "finding_ids": [
+                "FND-00007"
+              ],
+              "template_pair_ids": [
+                "PAIR-SYNIC0012--SYNIC0013"
+              ],
+              "operational_issues": []
+            }
+          ],
+          "comment": "LLM Response Trace, Template Detection, Authorship Risk"
+        }
+      },
+      {
+        "check_name": "tortured_phrases",
+        "check_description": "Detects known tortured or nonsensical scientific phrases.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active tortured phrase was detected."
+        }
+      },
+      {
+        "check_name": "llm_response_trace",
+        "check_description": "Detects residual language associated with an LLM or conversational assistant response.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "finding_id": "FND-00007",
+              "check_type": "known_pattern",
+              "category": "interface_residue",
+              "matched_phrase": "Regenerate response",
+              "evidence_snippet": "Conclusions:LncRNA LINC01194 promoted the progression of NSCLC by modulating the miR-486-5p/CDK4 axis. Regenerate response",
+              "section": "Conclusions",
+              "severity": "high",
+              "confidence": 0.98,
+              "validation_status": "not_required",
+              "validation_reason": "",
+              "validated_by": "",
+              "rule_id": "LLM-022",
+              "active": true,
+              "review_candidate": false
+            }
+          ],
+          "comment": "Conclusions:LncRNA LINC01194 promoted the progression of NSCLC by modulating the miR-486-5p/CDK4 axis. Regenerate response"
+        }
+      },
+      {
+        "check_name": "template_detection",
+        "check_description": "Detects suspicious text or writing-template reuse across submissions.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "evidence_scope": "PAIR",
+              "pair_id": "PAIR-SYNIC0012--SYNIC0013",
+              "matched_abstract_id": "SYNIC0013",
+              "matched_title": "LINC00504 Promotes the Malignant Biological Behavior of Breast Cancer Cells by Upregulating HMGB3 via Decoying MicroRNA-876-3p",
+              "classification": "possible_template_reuse",
+              "review_priority": "HIGH",
+              "editorial_score": 0.85,
+              "reason": "23% shared text with SYNIC0013, different author group.",
+              "same_author_group": false,
+              "sub_checks": [
+                {
+                  "check_name": "exact_text_reuse",
+                  "check_description": "Detects distinctive original text shared by two submissions.",
+                  "evidence_role": "PRIMARY",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "signals": [
+                          "distinctive_shared_text",
+                          "rare_exact_phrase"
+                        ],
+                        "original_body_similarity": 0.22628951747088186,
+                        "evidence": "SYNIC0012: RT-qPCR was used to detect the expression of lncRNA LINC01194 and miR-486-5p in NSCLC tissues and cell lines. || SYNIC0013: RT-qPCR was used to detect the expression of lncRNA LINC00504 and miR-876-3p in bosom peril tissues and cell lines."
+                      }
+                    ],
+                    "comment": "23% of the original abstract text is shared word-for-word between the two submissions."
+                  }
+                },
+                {
+                  "check_name": "entity_normalized_template",
+                  "check_description": "Detects a shared writing skeleton after biomedical entities are normalized.",
+                  "evidence_role": "PRIMARY",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "masked_body_similarity": 0.24955436720142601,
+                        "original_body_similarity": 0.22628951747088186,
+                        "likely_substitutions": [
+                          "gene: CDK4 -> HMGB3",
+                          "mirna: miR-486-5p -> microRNA-876-3p",
+                          "lncrna: LINC01194 -> LINC00504",
+                          "disease: Non-Small Cell Lung Cancer -> breast cancer"
+                        ]
+                      }
+                    ],
+                    "comment": "25% shared writing structure once biomedical entities are normalized out, with 23% shared original text."
+                  }
+                },
+                {
+                  "check_name": "title_template",
+                  "check_description": "Detects structurally similar titles after entity normalization.",
+                  "evidence_role": "SUPPORTING",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No shared title structure detected."
+                  }
+                },
+                {
+                  "check_name": "section_similarity",
+                  "check_description": "Compares corresponding sections of the two abstracts.",
+                  "evidence_role": "SUPPORTING",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "strongest_section": "Background",
+                        "strongest_section_similarity": 0.21705426356589147,
+                        "supporting_evidence": []
+                      }
+                    ],
+                    "comment": "Background section shares 22% structural similarity between the abstracts."
+                  }
+                }
+              ],
+              "context": {
+                "shared_trial_ids": [],
+                "shared_databases": [],
+                "shared_populations": [],
+                "shared_endpoints": [],
+                "explicit_companion_wording": false,
+                "interpretation": "no_structured_context"
+              },
+              "submitted_evidence": "RT-qPCR was used to detect the expression of lncRNA LINC01194 and miR-486-5p in NSCLC tissues and cell lines.",
+              "matched_evidence": "RT-qPCR was used to detect the expression of lncRNA LINC00504 and miR-876-3p in bosom peril tissues and cell lines."
+            },
+            {
+              "evidence_scope": "RECORD",
+              "supporting_checks": [
+                {
+                  "check_name": "numerical_contradiction",
+                  "check_description": "Detects inconsistent percentages, counts, ranges, or other numerical claims.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active numerical contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "design_contradiction",
+                  "check_description": "Detects mutually inconsistent study-design statements.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active study-design contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "unverifiable_clinical_trial",
+                  "check_description": "Checks whether stated clinical-trial identifiers are valid and verifiable.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No unverifiable clinical-trial reference was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "authorship_risk",
+                  "check_description": "Flags authorship-network risk signals (submission volume, author count deviation, affiliation relevance, author network, retraction history).",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "reason": "Retraction History"
+                      }
+                    ],
+                    "comment": "Retraction History: One or more authors on this paper name-match an author in the Retraction Watch database."
+                  },
+                  "evidence_role": "CORROBORATING"
+                }
+              ]
+            }
+          ],
+          "comment": "23% shared text with SYNIC0013, different author group."
+        }
+      }
+    ]
+  },
+  "10.2147/ott.s180850": {
+    "title": "Circular RNA PVT1 Promotes the Invasion and Epithelial-Mesenchymal Transition of Breast Cancer Cells through Serving as a Competing Endogenous RNA for miR-204-5p",
+    "abstract_id": "SYNIC0014",
+    "checks": [
+      {
+        "check_name": "content_integrity_summary",
+        "check_description": "Authoritative aggregate result for all content-integrity checks.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "overall_content_risk": "HIGH",
+              "review_required": true,
+              "flagged_checks": [
+                "Tortured Phrase",
+                "Unverifiable Clinical Trial",
+                "Authorship Risk"
+              ],
+              "finding_ids": [
+                "FND-00012",
+                "TRV-00002"
+              ],
+              "template_pair_ids": [],
+              "operational_issues": []
+            }
+          ],
+          "comment": "Tortured Phrase, Unverifiable Clinical Trial, Authorship Risk"
+        }
+      },
+      {
+        "check_name": "tortured_phrases",
+        "check_description": "Detects known tortured or nonsensical scientific phrases.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "finding_id": "FND-00012",
+              "matched_phrase": "bosom peril",
+              "expected_term": "breast cancer",
+              "evidence_snippet": "ncies. The objective of this study was to identify the functions of circRNAs in bosom peril (BCa). BCa and adjacent non-cancerous tissues were collected from 99 patients.",
+              "section": "Background",
+              "severity": "high",
+              "confidence": 0.98,
+              "validation_status": "not_validated",
+              "validation_reason": "",
+              "validated_by": "",
+              "rule_id": "TP-E130276E27ED",
+              "active": true,
+              "review_candidate": false
+            }
+          ],
+          "comment": "bosom peril → breast cancer"
+        }
+      },
+      {
+        "check_name": "llm_response_trace",
+        "check_description": "Detects residual language associated with an LLM or conversational assistant response.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active LLM response trace was detected."
+        }
+      },
+      {
+        "check_name": "template_detection",
+        "check_description": "Detects suspicious text or writing-template reuse across submissions.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [
+            {
+              "evidence_scope": "RECORD",
+              "supporting_checks": [
+                {
+                  "check_name": "numerical_contradiction",
+                  "check_description": "Detects inconsistent percentages, counts, ranges, or other numerical claims.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active numerical contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "design_contradiction",
+                  "check_description": "Detects mutually inconsistent study-design statements.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active study-design contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "unverifiable_clinical_trial",
+                  "check_description": "Checks whether stated clinical-trial identifiers are valid and verifiable.",
+                  "result": {
+                    "level": "MEDIUM",
+                    "supporting_data": [
+                      {
+                        "finding_id": "TRV-00002",
+                        "record_id": "SYNIC0014",
+                        "source_file": "synthetic_asco_retractionwatch_validation.xml#SYNIC0014",
+                        "detector_type": "unverifiable_clinical_trial",
+                        "category": "unverifiable_clinical_trial",
+                        "matched_text": "NCTXXXXXXXX",
+                        "evidence_snippet": "The abstract contains the placeholder registration reference \"NCTXXXXXXXX\".",
+                        "section_or_field": "Trial Registration",
+                        "severity": "medium",
+                        "confidence": "very_high",
+                        "rule_id": "unverifiable_clinical_trial:placeholder_trial_id",
+                        "check_type": "placeholder_trial_id",
+                        "expected_term": "",
+                        "validation_status": "",
+                        "validation_reason": "",
+                        "validated_by": "",
+                        "review_status": "candidate",
+                        "detected": true,
+                        "active": true,
+                        "review_candidate": false
+                      }
+                    ],
+                    "comment": "The abstract contains the placeholder registration reference \"NCTXXXXXXXX\"."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "authorship_risk",
+                  "check_description": "Flags authorship-network risk signals (submission volume, author count deviation, affiliation relevance, author network, retraction history).",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "reason": "Author Count Deviation"
+                      },
+                      {
+                        "reason": "Affiliation Relevance"
+                      },
+                      {
+                        "reason": "Retraction History"
+                      }
+                    ],
+                    "comment": "Author Count Deviation: Author count (1) is significantly lower than the dataset average (7). | Affiliation Relevance: One or more author affiliations could not be verified, or belong to an institution with a notable retraction rate. | Retraction History: One or more authors on this paper name-match an author in the Retraction Watch database."
+                  },
+                  "evidence_role": "CORROBORATING"
+                }
+              ]
+            }
+          ],
+          "comment": "No accepted template pair was detected."
+        }
+      }
+    ]
+  },
+  "10.18632/oncotarget.21167": {
+    "title": "MicroRNA-182 downregulates Wnt/β-catenin signaling, inhibits proliferation, and promotes apoptosis in human osteosarcoma cells by targeting HOXA9",
+    "abstract_id": "SYNIC0004",
+    "checks": [
+      {
+        "check_name": "content_integrity_summary",
+        "check_description": "Authoritative aggregate result for all content-integrity checks.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "overall_content_risk": "HIGH",
+              "review_required": true,
+              "flagged_checks": [
+                "LLM Response Trace",
+                "Authorship Risk"
+              ],
+              "finding_ids": [
+                "FND-00001",
+                "FND-00002"
+              ],
+              "template_pair_ids": [],
+              "operational_issues": []
+            }
+          ],
+          "comment": "LLM Response Trace, Authorship Risk"
+        }
+      },
+      {
+        "check_name": "tortured_phrases",
+        "check_description": "Detects known tortured or nonsensical scientific phrases.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active tortured phrase was detected."
+        }
+      },
+      {
+        "check_name": "llm_response_trace",
+        "check_description": "Detects residual language associated with an LLM or conversational assistant response.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "finding_id": "FND-00001",
+              "check_type": "known_pattern",
+              "category": "ai_self_identification",
+              "matched_phrase": "As an AI language model",
+              "evidence_snippet": "As an AI language model, I cannot provide medical advice.",
+              "section": "Conclusions",
+              "severity": "high",
+              "confidence": 0.99,
+              "validation_status": "not_required",
+              "validation_reason": "",
+              "validated_by": "",
+              "rule_id": "LLM-001",
+              "active": true,
+              "review_candidate": false
+            },
+            {
+              "finding_id": "FND-00002",
+              "check_type": "known_pattern",
+              "category": "capability_disclaimer",
+              "matched_phrase": "I cannot provide medical advice",
+              "evidence_snippet": "As an AI language model, I cannot provide medical advice.",
+              "section": "Conclusions",
+              "severity": "medium",
+              "confidence": 0.88,
+              "validation_status": "pending",
+              "validation_reason": "",
+              "validated_by": "",
+              "rule_id": "LLM-007",
+              "active": false,
+              "review_candidate": true
+            }
+          ],
+          "comment": "As an AI language model, I cannot provide medical advice."
+        }
+      },
+      {
+        "check_name": "template_detection",
+        "check_description": "Detects suspicious text or writing-template reuse across submissions.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [
+            {
+              "evidence_scope": "RECORD",
+              "supporting_checks": [
+                {
+                  "check_name": "numerical_contradiction",
+                  "check_description": "Detects inconsistent percentages, counts, ranges, or other numerical claims.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active numerical contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "design_contradiction",
+                  "check_description": "Detects mutually inconsistent study-design statements.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active study-design contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "unverifiable_clinical_trial",
+                  "check_description": "Checks whether stated clinical-trial identifiers are valid and verifiable.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No unverifiable clinical-trial reference was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "authorship_risk",
+                  "check_description": "Flags authorship-network risk signals (submission volume, author count deviation, affiliation relevance, author network, retraction history).",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "reason": "Submission Volume"
+                      },
+                      {
+                        "reason": "Retraction History"
+                      }
+                    ],
+                    "comment": "Submission Volume: This paper includes an author who has submitted 7 times, above the threshold of 3. Jun Lu has appeared in following DOIs: 10.1002/cam4.2839, 10.1002/cam4.3726, 10.1186/s12935-021-01885-0, 10.18632/oncotarget.9480, 10.2147/CMAR.S253777, 10.2147/OTT.S224521 | Retraction History: One or more authors on this paper name-match an author in the Retraction Watch database."
+                  },
+                  "evidence_role": "CORROBORATING"
+                }
+              ]
+            }
+          ],
+          "comment": "No accepted template pair was detected."
+        }
+      }
+    ]
+  },
+  "10.2147/cmar.s273687": {
+    "title": "Long Noncoding RNA VPS9D1-AS1 Sequesters microRNA-525-5p to Promote the Oncogenicity of Colorectal Cancer Cells by Upregulating HMGA1",
+    "abstract_id": "SYNIC0007",
+    "checks": [
+      {
+        "check_name": "content_integrity_summary",
+        "check_description": "Authoritative aggregate result for all content-integrity checks.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "overall_content_risk": "HIGH",
+              "review_required": true,
+              "flagged_checks": [
+                "Template Detection",
+                "Authorship Risk"
+              ],
+              "finding_ids": [],
+              "template_pair_ids": [
+                "PAIR-SYNIC0007--SYNIC0008"
+              ],
+              "operational_issues": []
+            }
+          ],
+          "comment": "Template Detection, Authorship Risk"
+        }
+      },
+      {
+        "check_name": "tortured_phrases",
+        "check_description": "Detects known tortured or nonsensical scientific phrases.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active tortured phrase was detected."
+        }
+      },
+      {
+        "check_name": "llm_response_trace",
+        "check_description": "Detects residual language associated with an LLM or conversational assistant response.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active LLM response trace was detected."
+        }
+      },
+      {
+        "check_name": "template_detection",
+        "check_description": "Detects suspicious text or writing-template reuse across submissions.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "evidence_scope": "PAIR",
+              "pair_id": "PAIR-SYNIC0007--SYNIC0008",
+              "matched_abstract_id": "SYNIC0008",
+              "matched_title": "MiR-138-5p Inhibits the Proliferation of Gastric Cancer Cells by Targeting DEK",
+              "classification": "possible_template_reuse",
+              "review_priority": "HIGH",
+              "editorial_score": 0.85,
+              "reason": "29% shared text with SYNIC0008, different author group.",
+              "same_author_group": false,
+              "sub_checks": [
+                {
+                  "check_name": "exact_text_reuse",
+                  "check_description": "Detects distinctive original text shared by two submissions.",
+                  "evidence_role": "PRIMARY",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "signals": [
+                          "distinctive_shared_text",
+                          "rare_exact_phrase"
+                        ],
+                        "original_body_similarity": 0.2864651773981603,
+                        "evidence": "SYNIC0007: MicroRNA-mediated regulation was found to have suppressive effects on the growth and metastasis of different human cancers In this study, we aimed to investigate the regulatory mechanism of the VPS9D1-AS1/miR-525-5p axis in colorectal cancer (CRC). || SYNIC0008: MicroRNA-mediated regulation was found to have suppressive effects on the growth and metastasis of different human cancers In this study, we aimed to investigate the regulatory mechanism of miR-138-5p in gastric cancer (GC)."
+                      }
+                    ],
+                    "comment": "29% of the original abstract text is shared word-for-word between the two submissions."
+                  }
+                },
+                {
+                  "check_name": "entity_normalized_template",
+                  "check_description": "Detects a shared writing skeleton after biomedical entities are normalized.",
+                  "evidence_role": "PRIMARY",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "masked_body_similarity": 0.29941860465116277,
+                        "original_body_similarity": 0.2864651773981603,
+                        "likely_substitutions": [
+                          "mirna: microRNA-525-5p -> miR-138-5p",
+                          "disease: colorectal cancer -> gastric cancer"
+                        ]
+                      }
+                    ],
+                    "comment": "30% shared writing structure once biomedical entities are normalized out, with 29% shared original text."
+                  }
+                },
+                {
+                  "check_name": "title_template",
+                  "check_description": "Detects structurally similar titles after entity normalization.",
+                  "evidence_role": "SUPPORTING",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "masked_title_similarity": 0.46153846153846156,
+                        "original_title_similarity": 0.36363636363636365
+                      }
+                    ],
+                    "comment": "46% shared title structure, with 36% shared original title text."
+                  }
+                },
+                {
+                  "check_name": "section_similarity",
+                  "check_description": "Compares corresponding sections of the two abstracts.",
+                  "evidence_role": "SUPPORTING",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "strongest_section": "Conclusions",
+                        "strongest_section_similarity": 0.7603305785123967,
+                        "supporting_evidence": []
+                      }
+                    ],
+                    "comment": "Conclusions section shares 76% structural similarity between the abstracts."
+                  }
+                }
+              ],
+              "context": {
+                "shared_trial_ids": [],
+                "shared_databases": [],
+                "shared_populations": [],
+                "shared_endpoints": [],
+                "explicit_companion_wording": false,
+                "interpretation": "no_structured_context"
+              },
+              "submitted_evidence": "MicroRNA-mediated regulation was found to have suppressive effects on the growth and metastasis of different human cancers In this study, we aimed to investigate the regulatory mechanism of the VPS9D1-AS1/miR-525-5p axis in colorectal cancer (CRC).",
+              "matched_evidence": "MicroRNA-mediated regulation was found to have suppressive effects on the growth and metastasis of different human cancers In this study, we aimed to investigate the regulatory mechanism of miR-138-5p in gastric cancer (GC)."
+            },
+            {
+              "evidence_scope": "RECORD",
+              "supporting_checks": [
+                {
+                  "check_name": "numerical_contradiction",
+                  "check_description": "Detects inconsistent percentages, counts, ranges, or other numerical claims.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active numerical contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "design_contradiction",
+                  "check_description": "Detects mutually inconsistent study-design statements.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active study-design contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "unverifiable_clinical_trial",
+                  "check_description": "Checks whether stated clinical-trial identifiers are valid and verifiable.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No unverifiable clinical-trial reference was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "authorship_risk",
+                  "check_description": "Flags authorship-network risk signals (submission volume, author count deviation, affiliation relevance, author network, retraction history).",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "reason": "Submission Volume"
+                      },
+                      {
+                        "reason": "Affiliation Relevance"
+                      },
+                      {
+                        "reason": "Author Network"
+                      },
+                      {
+                        "reason": "Retraction History"
+                      }
+                    ],
+                    "comment": "Submission Volume: This paper includes an author who has submitted 5 times, above the threshold of 3. Yuan Lin Zheng has appeared in following DOIs: 10.1002/cam4.2839, 10.1002/cam4.3726, 10.1177/1533034618756784, 10.1186/s12935-021-01885-0, 10.18632/oncotarget.9480, 10.2147/CMAR.S253777; Dong Mei Wu has appeared in following DOIs: 10.1186/s13046-019-1239-3, 10.18632/oncotarget.22151, 10.18632/oncotarget.9480, 10.2147/CMAR.S253777 | Affiliation Relevance: One or more author affiliations could not be verified, or belong to an institution with a notable retraction rate. | Author Network: This paper includes authors who have repeatedly co-authored together across multiple papers. Dong Mei Wu, Yuan Lin Zheng have co-authored together in following DOIs: 10.18632/oncotarget.9480, 10.2147/CMAR.S253777, 10.2147/CMAR.S273687 | Retraction History: One or more authors on this paper name-match an author in the Retraction Watch database."
+                  },
+                  "evidence_role": "CORROBORATING"
+                }
+              ]
+            },
+            {
+              "evidence_scope": "FAMILY",
+              "family_id": "FAM-0001",
+              "family_size": 3,
+              "representative_abstract_id": "SYNIC0008",
+              "member_abstract_ids": [
+                "SYNIC0006",
+                "SYNIC0007",
+                "SYNIC0008"
+              ]
+            }
+          ],
+          "comment": "29% shared text with SYNIC0008, different author group."
+        }
+      }
+    ]
+  },
+  "10.1002/cam4.3726": {
+    "title": "LINC01224 accelerates malignant transformation via MiR-193a-5p/CDK8 axis in gastric cancer",
+    "abstract_id": "SYNIC0011",
+    "checks": [
+      {
+        "check_name": "content_integrity_summary",
+        "check_description": "Authoritative aggregate result for all content-integrity checks.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "overall_content_risk": "HIGH",
+              "review_required": true,
+              "flagged_checks": [
+                "Template Detection",
+                "Authorship Risk"
+              ],
+              "finding_ids": [],
+              "template_pair_ids": [
+                "PAIR-SYNIC0009--SYNIC0011",
+                "PAIR-SYNIC0010--SYNIC0011"
+              ],
+              "operational_issues": []
+            }
+          ],
+          "comment": "Template Detection, Authorship Risk"
+        }
+      },
+      {
+        "check_name": "tortured_phrases",
+        "check_description": "Detects known tortured or nonsensical scientific phrases.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active tortured phrase was detected."
+        }
+      },
+      {
+        "check_name": "llm_response_trace",
+        "check_description": "Detects residual language associated with an LLM or conversational assistant response.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active LLM response trace was detected."
+        }
+      },
+      {
+        "check_name": "template_detection",
+        "check_description": "Detects suspicious text or writing-template reuse across submissions.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "evidence_scope": "PAIR",
+              "pair_id": "PAIR-SYNIC0009--SYNIC0011",
+              "matched_abstract_id": "SYNIC0009",
+              "matched_title": "Long noncoding RNA CASC9 promotes the proliferation and metastasis of papillary thyroid cancer via sponging miR-488-3p",
+              "classification": "possible_template_reuse",
+              "review_priority": "HIGH",
+              "editorial_score": 0.85,
+              "reason": "23% shared text with SYNIC0009, different author group.",
+              "same_author_group": false,
+              "sub_checks": [
+                {
+                  "check_name": "exact_text_reuse",
+                  "check_description": "Detects distinctive original text shared by two submissions.",
+                  "evidence_role": "PRIMARY",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "signals": [
+                          "distinctive_shared_text",
+                          "rare_exact_phrase"
+                        ],
+                        "original_body_similarity": 0.2336283185840708,
+                        "evidence": "SYNIC0009: Higher CASC9 expression was associated with large tumor size, advanced stage, or lymph node metastasis || SYNIC0011: Higher LINC01224 expression was associated with large tumor size, advanced stage, or lymph node metastasis."
+                      }
+                    ],
+                    "comment": "23% of the original abstract text is shared word-for-word between the two submissions."
+                  }
+                },
+                {
+                  "check_name": "entity_normalized_template",
+                  "check_description": "Detects a shared writing skeleton after biomedical entities are normalized.",
+                  "evidence_role": "PRIMARY",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "masked_body_similarity": 0.23255813953488372,
+                        "original_body_similarity": 0.2336283185840708,
+                        "likely_substitutions": [
+                          "gene: ADAM9 -> CDK8",
+                          "mirna: miR-488-3p -> MiR-193a-5p",
+                          "disease: thyroid cancer -> gastric cancer"
+                        ]
+                      }
+                    ],
+                    "comment": "23% shared writing structure once biomedical entities are normalized out, with 23% shared original text."
+                  }
+                },
+                {
+                  "check_name": "title_template",
+                  "check_description": "Detects structurally similar titles after entity normalization.",
+                  "evidence_role": "SUPPORTING",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No shared title structure detected."
+                  }
+                },
+                {
+                  "check_name": "section_similarity",
+                  "check_description": "Compares corresponding sections of the two abstracts.",
+                  "evidence_role": "SUPPORTING",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "strongest_section": "Results",
+                        "strongest_section_similarity": 0.18181818181818182,
+                        "supporting_evidence": []
+                      }
+                    ],
+                    "comment": "Results section shares 18% structural similarity between the abstracts."
+                  }
+                }
+              ],
+              "context": {
+                "shared_trial_ids": [],
+                "shared_databases": [],
+                "shared_populations": [],
+                "shared_endpoints": [],
+                "explicit_companion_wording": false,
+                "interpretation": "no_structured_context"
+              },
+              "submitted_evidence": "Higher LINC01224 expression was associated with large tumor size, advanced stage, or lymph node metastasis.",
+              "matched_evidence": "Higher CASC9 expression was associated with large tumor size, advanced stage, or lymph node metastasis"
+            },
+            {
+              "evidence_scope": "PAIR",
+              "pair_id": "PAIR-SYNIC0010--SYNIC0011",
+              "matched_abstract_id": "SYNIC0010",
+              "matched_title": "Long Noncoding RNA NEAT1 Promotes Cell Proliferation and Invasion and Suppresses Apoptosis in Hepatocellular Carcinoma by Regulating miRNA-22-3p/akt2 in vitro and in vivo",
+              "classification": "possible_template_reuse",
+              "review_priority": "MEDIUM",
+              "editorial_score": 0.75,
+              "reason": "27% shared structure with SYNIC0010 once biomedical entities are normalized (24% shared original text), different author group.",
+              "same_author_group": false,
+              "sub_checks": [
+                {
+                  "check_name": "exact_text_reuse",
+                  "check_description": "Detects distinctive original text shared by two submissions.",
+                  "evidence_role": "PRIMARY",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No shared original text between the two abstracts."
+                  }
+                },
+                {
+                  "check_name": "entity_normalized_template",
+                  "check_description": "Detects a shared writing skeleton after biomedical entities are normalized.",
+                  "evidence_role": "PRIMARY",
+                  "result": {
+                    "level": "MEDIUM",
+                    "supporting_data": [
+                      {
+                        "masked_body_similarity": 0.2680722891566265,
+                        "original_body_similarity": 0.24,
+                        "likely_substitutions": [
+                          "gene: AKT2 -> CDK8",
+                          "lncrna: NEAT1 -> LINC01224",
+                          "disease: Hepatocellular carcinoma -> gastric cancer"
+                        ]
+                      }
+                    ],
+                    "comment": "27% shared writing structure once biomedical entities are normalized out, with 24% shared original text."
+                  }
+                },
+                {
+                  "check_name": "title_template",
+                  "check_description": "Detects structurally similar titles after entity normalization.",
+                  "evidence_role": "SUPPORTING",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No shared title structure detected."
+                  }
+                },
+                {
+                  "check_name": "section_similarity",
+                  "check_description": "Compares corresponding sections of the two abstracts.",
+                  "evidence_role": "SUPPORTING",
+                  "result": {
+                    "level": "MEDIUM",
+                    "supporting_data": [
+                      {
+                        "strongest_section": "Conclusions",
+                        "strongest_section_similarity": 0.6666666666666666,
+                        "supporting_evidence": []
+                      }
+                    ],
+                    "comment": "Conclusions section shares 67% structural similarity between the abstracts."
+                  }
+                }
+              ],
+              "context": {
+                "shared_trial_ids": [],
+                "shared_databases": [],
+                "shared_populations": [],
+                "shared_endpoints": [],
+                "explicit_companion_wording": false,
+                "interpretation": "no_structured_context"
+              },
+              "submitted_evidence": "Higher LINC01224 expression was associated with large tumor size, advanced stage, or lymph node metastasis. Downregulation of LINC01224 significantly reduced the proliferative, migrative, and invasive abilities of GC cells and suppressed tumorigenesis in vivo. Among 30 evaluable specimens, 18 were positive (75%).",
+              "matched_evidence": "We found that NEAT1 expression was increased in human HCC tissues and cells. Higher NEAT1 expression was associated with large tumor size, advanced stage, or lymph node metastasis. In this double-blind study, investigators evaluated the same cohort. Downregulation of NEAT1 significantly reduced the proliferative, migrative, and invasive abilities of HCC cells and suppressed tumorigenesis in vivo."
+            },
+            {
+              "evidence_scope": "RECORD",
+              "supporting_checks": [
+                {
+                  "check_name": "numerical_contradiction",
+                  "check_description": "Detects inconsistent percentages, counts, ranges, or other numerical claims.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active numerical contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "design_contradiction",
+                  "check_description": "Detects mutually inconsistent study-design statements.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active study-design contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "unverifiable_clinical_trial",
+                  "check_description": "Checks whether stated clinical-trial identifiers are valid and verifiable.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No unverifiable clinical-trial reference was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "authorship_risk",
+                  "check_description": "Flags authorship-network risk signals (submission volume, author count deviation, affiliation relevance, author network, retraction history).",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "reason": "Submission Volume"
+                      },
+                      {
+                        "reason": "Affiliation Relevance"
+                      },
+                      {
+                        "reason": "Author Network"
+                      },
+                      {
+                        "reason": "Retraction History"
+                      }
+                    ],
+                    "comment": "Submission Volume: This paper includes an author who has submitted 7 times, above the threshold of 3. Yuan Lin Zheng has appeared in following DOIs: 10.1002/cam4.2839, 10.1177/1533034618756784, 10.1186/s12935-021-01885-0, 10.18632/oncotarget.9480, 10.2147/CMAR.S253777, 10.2147/CMAR.S273687; Jun Lu has appeared in following DOIs: 10.1002/cam4.2839, 10.1186/s12935-021-01885-0, 10.18632/oncotarget.21167, 10.18632/oncotarget.9480, 10.2147/CMAR.S253777, 10.2147/OTT.S224521 | Affiliation Relevance: One or more author affiliations could not be verified, or belong to an institution with a notable retraction rate. | Author Network: This paper includes authors who have repeatedly co-authored together across multiple papers. Jun Lu, Yuan Lin Zheng have co-authored together in following DOIs: 10.1002/cam4.2839, 10.1002/cam4.3726, 10.1186/s12935-021-01885-0, 10.18632/oncotarget.9480, 10.2147/CMAR.S253777 | Retraction History: One or more authors on this paper name-match an author in the Retraction Watch database."
+                  },
+                  "evidence_role": "CORROBORATING"
+                }
+              ]
+            },
+            {
+              "evidence_scope": "FAMILY",
+              "family_id": "FAM-0002",
+              "family_size": 3,
+              "representative_abstract_id": "SYNIC0011",
+              "member_abstract_ids": [
+                "SYNIC0009",
+                "SYNIC0010",
+                "SYNIC0011"
+              ]
+            }
+          ],
+          "comment": "23% shared text with SYNIC0009, different author group."
+        }
+      }
+    ]
+  },
+  "10.1177/1533034618756784": {
+    "title": "Mechanism of MicroRNA-708 Targeting BAMBI in Cell Proliferation, Migration, and Apoptosis in Mice With Melanoma via the Wnt and TGF-β Signaling Pathways",
+    "abstract_id": "SYNIC0001",
+    "checks": [
+      {
+        "check_name": "content_integrity_summary",
+        "check_description": "Authoritative aggregate result for all content-integrity checks.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "overall_content_risk": "HIGH",
+              "review_required": true,
+              "flagged_checks": [
+                "Authorship Risk"
+              ],
+              "finding_ids": [],
+              "template_pair_ids": [],
+              "operational_issues": []
+            }
+          ],
+          "comment": "Authorship Risk"
+        }
+      },
+      {
+        "check_name": "tortured_phrases",
+        "check_description": "Detects known tortured or nonsensical scientific phrases.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active tortured phrase was detected."
+        }
+      },
+      {
+        "check_name": "llm_response_trace",
+        "check_description": "Detects residual language associated with an LLM or conversational assistant response.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active LLM response trace was detected."
+        }
+      },
+      {
+        "check_name": "template_detection",
+        "check_description": "Detects suspicious text or writing-template reuse across submissions.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [
+            {
+              "evidence_scope": "RECORD",
+              "supporting_checks": [
+                {
+                  "check_name": "numerical_contradiction",
+                  "check_description": "Detects inconsistent percentages, counts, ranges, or other numerical claims.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active numerical contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "design_contradiction",
+                  "check_description": "Detects mutually inconsistent study-design statements.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active study-design contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "unverifiable_clinical_trial",
+                  "check_description": "Checks whether stated clinical-trial identifiers are valid and verifiable.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No unverifiable clinical-trial reference was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "authorship_risk",
+                  "check_description": "Flags authorship-network risk signals (submission volume, author count deviation, affiliation relevance, author network, retraction history).",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "reason": "Submission Volume"
+                      },
+                      {
+                        "reason": "Retraction History"
+                      }
+                    ],
+                    "comment": "Submission Volume: This paper includes an author who has submitted 7 times, above the threshold of 3. Yuan Lin Zheng has appeared in following DOIs: 10.1002/cam4.2839, 10.1002/cam4.3726, 10.1186/s12935-021-01885-0, 10.18632/oncotarget.9480, 10.2147/CMAR.S253777, 10.2147/CMAR.S273687 | Retraction History: One or more authors on this paper name-match an author in the Retraction Watch database."
+                  },
+                  "evidence_role": "CORROBORATING"
+                }
+              ]
+            }
+          ],
+          "comment": "No accepted template pair was detected."
+        }
+      }
+    ]
+  },
+  "10.1186/s12935-021-01885-0": {
+    "title": "Targeting a novel LncRNA SNHG15/miR-451/c-Myc signaling cascade is effective to hamper the pathogenesis of breast cancer (BC) in vitro and in vivo",
+    "abstract_id": "SYNIC0002",
+    "checks": [
+      {
+        "check_name": "content_integrity_summary",
+        "check_description": "Authoritative aggregate result for all content-integrity checks.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "overall_content_risk": "HIGH",
+              "review_required": true,
+              "flagged_checks": [
+                "Authorship Risk"
+              ],
+              "finding_ids": [],
+              "template_pair_ids": [],
+              "operational_issues": []
+            }
+          ],
+          "comment": "Authorship Risk"
+        }
+      },
+      {
+        "check_name": "tortured_phrases",
+        "check_description": "Detects known tortured or nonsensical scientific phrases.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active tortured phrase was detected."
+        }
+      },
+      {
+        "check_name": "llm_response_trace",
+        "check_description": "Detects residual language associated with an LLM or conversational assistant response.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active LLM response trace was detected."
+        }
+      },
+      {
+        "check_name": "template_detection",
+        "check_description": "Detects suspicious text or writing-template reuse across submissions.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [
+            {
+              "evidence_scope": "RECORD",
+              "supporting_checks": [
+                {
+                  "check_name": "numerical_contradiction",
+                  "check_description": "Detects inconsistent percentages, counts, ranges, or other numerical claims.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active numerical contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "design_contradiction",
+                  "check_description": "Detects mutually inconsistent study-design statements.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active study-design contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "unverifiable_clinical_trial",
+                  "check_description": "Checks whether stated clinical-trial identifiers are valid and verifiable.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No unverifiable clinical-trial reference was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "authorship_risk",
+                  "check_description": "Flags authorship-network risk signals (submission volume, author count deviation, affiliation relevance, author network, retraction history).",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "reason": "Submission Volume"
+                      },
+                      {
+                        "reason": "Author Network"
+                      },
+                      {
+                        "reason": "Retraction History"
+                      }
+                    ],
+                    "comment": "Submission Volume: This paper includes an author who has submitted 7 times, above the threshold of 3. Yuan Lin Zheng has appeared in following DOIs: 10.1002/cam4.2839, 10.1002/cam4.3726, 10.1177/1533034618756784, 10.18632/oncotarget.9480, 10.2147/CMAR.S253777, 10.2147/CMAR.S273687; Jun Lu has appeared in following DOIs: 10.1002/cam4.2839, 10.1002/cam4.3726, 10.18632/oncotarget.21167, 10.18632/oncotarget.9480, 10.2147/CMAR.S253777, 10.2147/OTT.S224521 | Author Network: This paper includes authors who have repeatedly co-authored together across multiple papers. Jun Lu, Yuan Lin Zheng have co-authored together in following DOIs: 10.1002/cam4.2839, 10.1002/cam4.3726, 10.1186/s12935-021-01885-0, 10.18632/oncotarget.9480, 10.2147/CMAR.S253777 | Retraction History: One or more authors on this paper name-match an author in the Retraction Watch database."
+                  },
+                  "evidence_role": "CORROBORATING"
+                }
+              ]
+            }
+          ],
+          "comment": "No accepted template pair was detected."
+        }
+      }
+    ]
+  },
+  "10.18632/oncotarget.22151": {
+    "title": "MicroRNA-433 inhibits oral squamous cell carcinoma cells by targeting FAK",
+    "abstract_id": "SYNIC0003",
+    "checks": [
+      {
+        "check_name": "content_integrity_summary",
+        "check_description": "Authoritative aggregate result for all content-integrity checks.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "overall_content_risk": "HIGH",
+              "review_required": true,
+              "flagged_checks": [
+                "Authorship Risk"
+              ],
+              "finding_ids": [],
+              "template_pair_ids": [],
+              "operational_issues": []
+            }
+          ],
+          "comment": "Authorship Risk"
+        }
+      },
+      {
+        "check_name": "tortured_phrases",
+        "check_description": "Detects known tortured or nonsensical scientific phrases.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active tortured phrase was detected."
+        }
+      },
+      {
+        "check_name": "llm_response_trace",
+        "check_description": "Detects residual language associated with an LLM or conversational assistant response.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active LLM response trace was detected."
+        }
+      },
+      {
+        "check_name": "template_detection",
+        "check_description": "Detects suspicious text or writing-template reuse across submissions.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [
+            {
+              "evidence_scope": "RECORD",
+              "supporting_checks": [
+                {
+                  "check_name": "numerical_contradiction",
+                  "check_description": "Detects inconsistent percentages, counts, ranges, or other numerical claims.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active numerical contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "design_contradiction",
+                  "check_description": "Detects mutually inconsistent study-design statements.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active study-design contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "unverifiable_clinical_trial",
+                  "check_description": "Checks whether stated clinical-trial identifiers are valid and verifiable.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No unverifiable clinical-trial reference was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "authorship_risk",
+                  "check_description": "Flags authorship-network risk signals (submission volume, author count deviation, affiliation relevance, author network, retraction history).",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "reason": "Submission Volume"
+                      },
+                      {
+                        "reason": "Author Count Deviation"
+                      },
+                      {
+                        "reason": "Retraction History"
+                      }
+                    ],
+                    "comment": "Submission Volume: This paper includes an author who has submitted 5 times, above the threshold of 3. Dong Mei Wu has appeared in following DOIs: 10.1186/s13046-019-1239-3, 10.18632/oncotarget.9480, 10.2147/CMAR.S253777, 10.2147/CMAR.S273687 | Author Count Deviation: Author count (15) is significantly higher than the dataset average (7). | Retraction History: One or more authors on this paper name-match an author in the Retraction Watch database."
+                  },
+                  "evidence_role": "CORROBORATING"
+                }
+              ]
+            }
+          ],
+          "comment": "No accepted template pair was detected."
+        }
+      }
+    ]
+  },
+  "10.1186/s13046-019-1239-3": {
+    "title": "Down-regulated lncRNA DLX6-AS1 inhibits tumorigenesis through STAT3 signaling pathway by suppressing CADM1 promoter methylation in liver cancer stem cells",
+    "abstract_id": "SYNIC0005",
+    "checks": [
+      {
+        "check_name": "content_integrity_summary",
+        "check_description": "Authoritative aggregate result for all content-integrity checks.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "overall_content_risk": "HIGH",
+              "review_required": true,
+              "flagged_checks": [
+                "Authorship Risk"
+              ],
+              "finding_ids": [],
+              "template_pair_ids": [],
+              "operational_issues": []
+            }
+          ],
+          "comment": "Authorship Risk"
+        }
+      },
+      {
+        "check_name": "tortured_phrases",
+        "check_description": "Detects known tortured or nonsensical scientific phrases.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active tortured phrase was detected."
+        }
+      },
+      {
+        "check_name": "llm_response_trace",
+        "check_description": "Detects residual language associated with an LLM or conversational assistant response.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active LLM response trace was detected."
+        }
+      },
+      {
+        "check_name": "template_detection",
+        "check_description": "Detects suspicious text or writing-template reuse across submissions.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [
+            {
+              "evidence_scope": "RECORD",
+              "supporting_checks": [
+                {
+                  "check_name": "numerical_contradiction",
+                  "check_description": "Detects inconsistent percentages, counts, ranges, or other numerical claims.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active numerical contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "design_contradiction",
+                  "check_description": "Detects mutually inconsistent study-design statements.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active study-design contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "unverifiable_clinical_trial",
+                  "check_description": "Checks whether stated clinical-trial identifiers are valid and verifiable.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No unverifiable clinical-trial reference was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "authorship_risk",
+                  "check_description": "Flags authorship-network risk signals (submission volume, author count deviation, affiliation relevance, author network, retraction history).",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "reason": "Submission Volume"
+                      },
+                      {
+                        "reason": "Affiliation Relevance"
+                      },
+                      {
+                        "reason": "Retraction History"
+                      }
+                    ],
+                    "comment": "Submission Volume: This paper includes an author who has submitted 5 times, above the threshold of 3. Dong Mei Wu has appeared in following DOIs: 10.18632/oncotarget.22151, 10.18632/oncotarget.9480, 10.2147/CMAR.S253777, 10.2147/CMAR.S273687 | Affiliation Relevance: One or more author affiliations could not be verified, or belong to an institution with a notable retraction rate. | Retraction History: One or more authors on this paper name-match an author in the Retraction Watch database."
+                  },
+                  "evidence_role": "CORROBORATING"
+                }
+              ]
+            }
+          ],
+          "comment": "No accepted template pair was detected."
+        }
+      }
+    ]
+  },
+  "10.3389/fonc.2020.00441": {
+    "title": "Exosomal MicroRNA-221-3p Confers Adriamycin Resistance in Breast Cancer Cells by Targeting PIK3R1",
+    "abstract_id": "SYNIC0015",
+    "checks": [
+      {
+        "check_name": "content_integrity_summary",
+        "check_description": "Authoritative aggregate result for all content-integrity checks.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "overall_content_risk": "HIGH",
+              "review_required": true,
+              "flagged_checks": [
+                "LLM Response Trace",
+                "Authorship Risk"
+              ],
+              "finding_ids": [
+                "FND-00014"
+              ],
+              "template_pair_ids": [],
+              "operational_issues": []
+            }
+          ],
+          "comment": "LLM Response Trace, Authorship Risk"
+        }
+      },
+      {
+        "check_name": "tortured_phrases",
+        "check_description": "Detects known tortured or nonsensical scientific phrases.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active tortured phrase was detected."
+        }
+      },
+      {
+        "check_name": "llm_response_trace",
+        "check_description": "Detects residual language associated with an LLM or conversational assistant response.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [
+            {
+              "finding_id": "FND-00014",
+              "check_type": "known_pattern",
+              "category": "capability_disclaimer",
+              "matched_phrase": "I do not have access to real-time information",
+              "evidence_snippet": "I do not have access to real-time information.",
+              "section": "Conclusions",
+              "severity": "high",
+              "confidence": 0.95,
+              "validation_status": "pending",
+              "validation_reason": "",
+              "validated_by": "",
+              "rule_id": "LLM-005",
+              "active": false,
+              "review_candidate": true
+            }
+          ],
+          "comment": "I do not have access to real-time information."
+        }
+      },
+      {
+        "check_name": "template_detection",
+        "check_description": "Detects suspicious text or writing-template reuse across submissions.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [
+            {
+              "evidence_scope": "RECORD",
+              "supporting_checks": [
+                {
+                  "check_name": "numerical_contradiction",
+                  "check_description": "Detects inconsistent percentages, counts, ranges, or other numerical claims.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active numerical contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "design_contradiction",
+                  "check_description": "Detects mutually inconsistent study-design statements.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active study-design contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "unverifiable_clinical_trial",
+                  "check_description": "Checks whether stated clinical-trial identifiers are valid and verifiable.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No unverifiable clinical-trial reference was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "authorship_risk",
+                  "check_description": "Flags authorship-network risk signals (submission volume, author count deviation, affiliation relevance, author network, retraction history).",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "reason": "Retraction History"
+                      }
+                    ],
+                    "comment": "Retraction History: One or more authors on this paper name-match an author in the Retraction Watch database."
+                  },
+                  "evidence_role": "CORROBORATING"
+                }
+              ]
+            }
+          ],
+          "comment": "No accepted template pair was detected."
+        }
+      }
+    ]
+  },
+  "10.2147/ott.s183847": {
+    "title": "microRNA-769 is Downregulated in Colorectal Cancer and Inhibits Cancer Progression by Directly Targeting Cyclin-Dependent Kinase 1",
+    "abstract_id": "SYNIC0017",
+    "checks": [
+      {
+        "check_name": "content_integrity_summary",
+        "check_description": "Authoritative aggregate result for all content-integrity checks.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "overall_content_risk": "HIGH",
+              "review_required": true,
+              "flagged_checks": [
+                "Authorship Risk"
+              ],
+              "finding_ids": [],
+              "template_pair_ids": [],
+              "operational_issues": []
+            }
+          ],
+          "comment": "Authorship Risk"
+        }
+      },
+      {
+        "check_name": "tortured_phrases",
+        "check_description": "Detects known tortured or nonsensical scientific phrases.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active tortured phrase was detected."
+        }
+      },
+      {
+        "check_name": "llm_response_trace",
+        "check_description": "Detects residual language associated with an LLM or conversational assistant response.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active LLM response trace was detected."
+        }
+      },
+      {
+        "check_name": "template_detection",
+        "check_description": "Detects suspicious text or writing-template reuse across submissions.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [
+            {
+              "evidence_scope": "RECORD",
+              "supporting_checks": [
+                {
+                  "check_name": "numerical_contradiction",
+                  "check_description": "Detects inconsistent percentages, counts, ranges, or other numerical claims.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active numerical contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "design_contradiction",
+                  "check_description": "Detects mutually inconsistent study-design statements.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active study-design contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "unverifiable_clinical_trial",
+                  "check_description": "Checks whether stated clinical-trial identifiers are valid and verifiable.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No unverifiable clinical-trial reference was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "authorship_risk",
+                  "check_description": "Flags authorship-network risk signals (submission volume, author count deviation, affiliation relevance, author network, retraction history).",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "reason": "Retraction History"
+                      }
+                    ],
+                    "comment": "Retraction History: One or more authors on this paper name-match an author in the Retraction Watch database."
+                  },
+                  "evidence_role": "CORROBORATING"
+                }
+              ]
+            }
+          ],
+          "comment": "No accepted template pair was detected."
+        }
+      }
+    ]
+  },
+  "10.2147/ott.s168807": {
+    "title": "LINC00152 Promotes the Growth and Invasion of Oral Squamous Cell Carcinoma by Regulating miR-139-5p",
+    "abstract_id": "SYNIC0018",
+    "checks": [
+      {
+        "check_name": "content_integrity_summary",
+        "check_description": "Authoritative aggregate result for all content-integrity checks.",
+        "result": {
+          "level": "HIGH",
+          "supporting_data": [
+            {
+              "overall_content_risk": "HIGH",
+              "review_required": true,
+              "flagged_checks": [
+                "Authorship Risk"
+              ],
+              "finding_ids": [],
+              "template_pair_ids": [],
+              "operational_issues": []
+            }
+          ],
+          "comment": "Authorship Risk"
+        }
+      },
+      {
+        "check_name": "tortured_phrases",
+        "check_description": "Detects known tortured or nonsensical scientific phrases.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active tortured phrase was detected."
+        }
+      },
+      {
+        "check_name": "llm_response_trace",
+        "check_description": "Detects residual language associated with an LLM or conversational assistant response.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [],
+          "comment": "No active LLM response trace was detected."
+        }
+      },
+      {
+        "check_name": "template_detection",
+        "check_description": "Detects suspicious text or writing-template reuse across submissions.",
+        "result": {
+          "level": "LOW",
+          "supporting_data": [
+            {
+              "evidence_scope": "RECORD",
+              "supporting_checks": [
+                {
+                  "check_name": "numerical_contradiction",
+                  "check_description": "Detects inconsistent percentages, counts, ranges, or other numerical claims.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active numerical contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "design_contradiction",
+                  "check_description": "Detects mutually inconsistent study-design statements.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No active study-design contradiction was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "unverifiable_clinical_trial",
+                  "check_description": "Checks whether stated clinical-trial identifiers are valid and verifiable.",
+                  "result": {
+                    "level": "LOW",
+                    "supporting_data": [],
+                    "comment": "No unverifiable clinical-trial reference was detected."
+                  },
+                  "evidence_role": "CORROBORATING"
+                },
+                {
+                  "check_name": "authorship_risk",
+                  "check_description": "Flags authorship-network risk signals (submission volume, author count deviation, affiliation relevance, author network, retraction history).",
+                  "result": {
+                    "level": "HIGH",
+                    "supporting_data": [
+                      {
+                        "reason": "Affiliation Relevance"
+                      },
+                      {
+                        "reason": "Retraction History"
+                      }
+                    ],
+                    "comment": "Affiliation Relevance: One or more author affiliations could not be verified, or belong to an institution with a notable retraction rate. | Retraction History: One or more authors on this paper name-match an author in the Retraction Watch database."
+                  },
+                  "evidence_role": "CORROBORATING"
+                }
+              ]
+            }
+          ],
+          "comment": "No accepted template pair was detected."
+        }
+      }
+    ]
+  }
+}

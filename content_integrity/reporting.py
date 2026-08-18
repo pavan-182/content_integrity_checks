@@ -51,20 +51,24 @@ PAIR_COLUMNS = [
 ]
 
 TRIAGE_CHECKS = [
-    ("tortured_phrase", "tortured_phrase_flag", "Tortured Phrases"),
-    ("llm_response_trace", "llm_trace_flag", "LLM Response Trace"),
+    ("tortured_phrase", "tortured_phrase_flag", "Nonsense and tortured phrases"),
+    ("llm_response_trace", "llm_trace_flag", "LLM response trace"),
     ("numerical_contradiction", "numerical_contradiction_flag", "Numerical Contradiction"),
     ("design_contradiction", "design_contradiction_flag", "Design Contradiction"),
     ("unverifiable_clinical_trial", "unverifiable_trial_flag", "Unverifiable Trial"),
-    ("template", "template_flag", "Templating (Cross-Author)"),
+    ("template", "template_flag", "Templating"),
 ]
 
+# Excel "Check Detail" sheet omits these — editors review them elsewhere, not per-abstract.
+_CHECK_DETAIL_EXCLUDED = {"numerical_contradiction", "design_contradiction", "unverifiable_clinical_trial"}
+CHECK_DETAIL_TRIAGE_CHECKS = [check for check in TRIAGE_CHECKS if check[0] not in _CHECK_DETAIL_EXCLUDED]
+
 AUTHORSHIP_CHECKS = [
-    ("submission_volume", "Submission Volume"),
-    ("author_count_deviation", "Author Count Deviation"),
-    ("affiliance_relevance", "Affiliation Relevance"),
-    ("author_network", "Author Network"),
-    ("retraction_history", "Retraction History"),
+    ("submission_volume", "Authors with ≥10 submissions in provided batch"),
+    ("author_count_deviation", "Number of authors"),
+    ("affiliance_relevance", "Affiliation relevance"),
+    ("author_network", "Networks of authors submitting multiple abstracts together"),
+    ("retraction_history", "Prior retractions"),
 ]
 
 
@@ -416,7 +420,7 @@ def build_content_integrity_frontend_json(
         if flagged_trial:
             flagged_checks.append("unverifiable_trial")
         if flagged_templating:
-            flagged_checks.append("Templating (Cross-Author)")
+            flagged_checks.append("Templating")
         if flagged_authorship:
             flagged_checks.append("authorship_risk")
 
@@ -557,7 +561,7 @@ def build_content_integrity_frontend_json(
                     "findings": [finding.to_dict() for finding in trial_findings],
                 },
                 "templating": {
-                    "label": "Templating (Cross-Author)",
+                    "label": "Templating",
                     "flagged": flagged_templating,
                     "match_count": len(ordered_template_pairs),
                     "review_candidate": False,
@@ -961,11 +965,11 @@ def build_integrated_content_integrity_json(canonical_report: dict[str, Any]) ->
         )
         triggered_checks = []
         if checks["tortured_phrases"].get("flagged") or checks["tortured_phrases"].get("review_candidate"):
-            triggered_checks.append("Tortured Phrase")
+            triggered_checks.append("Nonsense and tortured phrases")
         if checks["llm_response_trace"].get("flagged") or checks["llm_response_trace"].get("review_candidate"):
-            triggered_checks.append("LLM Response Trace")
+            triggered_checks.append("LLM response trace")
         if pair_data:
-            triggered_checks.append("Template Detection")
+            triggered_checks.append("Templating")
         supporting_labels = {
             "numerical_contradiction": "Numerical Contradiction",
             "design_contradiction": "Design Contradiction",
@@ -1154,7 +1158,7 @@ def write_workbook(
             "Title (short)": master["Title (short)"],
             "Corresponding Author": master["Corresponding Author"],
         }
-        for detector, _, label in TRIAGE_CHECKS:
+        for detector, _, label in CHECK_DETAIL_TRIAGE_CHECKS:
             detail[f"{label} - Flag"] = values[label]
             detail[f"{label} - Evidence"] = evidence(record_id, detector)
         for check_name, label in AUTHORSHIP_CHECKS:
@@ -1251,7 +1255,7 @@ def write_workbook(
         risk_cell.fill = PatternFill("solid", fgColor={"High": "F4CCCC", "Medium": "FCE4D6", "Low": "E2F0D9", "None": "E2F0D9"}.get(str(risk_cell.value), "FFFFFF"))
 
     detail_columns = ["Abstract ID", "Title (short)", "Corresponding Author"]
-    for _, _, label in TRIAGE_CHECKS:
+    for _, _, label in CHECK_DETAIL_TRIAGE_CHECKS:
         detail_columns.extend((f"{label} - Flag", f"{label} - Evidence"))
     for _, label in AUTHORSHIP_CHECKS:
         detail_columns.extend((f"{label} - Level", f"{label} - Evidence"))

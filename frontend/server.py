@@ -14,6 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DIST = Path(__file__).resolve().parent / "dist"
 INPUT = Path(os.environ.get("ASCO_PIPELINE_INPUT", ROOT / "synthetic_asco_retractionwatch_validation.xml")).resolve()
+PORT = int(os.environ.get("PORT", "8000"))
 OUTPUT = ROOT / "outputs/frontend_run"
 REPORT = OUTPUT / "content_integrity_results.json"
 AUTHORSHIP_REPORT = OUTPUT / "final_json.json"
@@ -24,7 +25,6 @@ sys.path.insert(0, str(ROOT))
 def run_pipeline(input_path: Path = INPUT, output_dir: Path = OUTPUT, runner=subprocess.run) -> dict:
     if not input_path.exists():
         raise FileNotFoundError(f"Pipeline input does not exist: {input_path}")
-    print("came")
     with tempfile.TemporaryDirectory(prefix="asco-frontend-") as temporary:
         temporary = Path(temporary)
         input_dir = input_path
@@ -35,7 +35,7 @@ def run_pipeline(input_path: Path = INPUT, output_dir: Path = OUTPUT, runner=sub
 
         runner(
             [
-                str(ROOT / ".venv/bin/python"),
+                sys.executable,
                 str(ROOT / "scripts/run_pipeline.py"),
                 "--input-dir", str(input_dir),
                 "--tortured-dictionary", str(ROOT / "🤷_tortured.csv"),
@@ -95,5 +95,5 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"Integrity Central: http://localhost:8000 (input: {INPUT})")
-    ThreadingHTTPServer(("127.0.0.1", 8000), Handler).serve_forever()
+    print(f"Integrity Central: http://0.0.0.0:{PORT} (input: {INPUT})")
+    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()

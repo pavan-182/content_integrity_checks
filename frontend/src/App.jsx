@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   authorAffectedCount,
   authorChecks,
@@ -12,8 +12,6 @@ import { checks, normalizeReport, validationRows } from "./report.js";
 
 const pages = [
   ["overview", "▦", "Overview"],
-  ["queue", "☷", "Review Queue"],
-  ["all", "□", "All Submissions"],
   ["content", "◫", "Content Checks"],
   ["authors", "◉", "Author Checks"],
   ["evals", "⚑", "Evals"],
@@ -47,13 +45,19 @@ function AuthorCheckStatus({ result }) {
   return <span className="status-flag">● {result.level} · {count} finding{count === 1 ? "" : "s"}</span>;
 }
 
-function Metric({ label, value, help }) {
+function Metric({ label, value, help, onClick, active }) {
+  const Tag = onClick ? "button" : "article";
   return (
-    <article className="metric-card">
+    <Tag
+      type={onClick ? "button" : undefined}
+      className={`metric-card${onClick ? " metric-card-btn" : ""}${active ? " active" : ""}`}
+      onClick={onClick}
+      aria-pressed={onClick ? active : undefined}
+    >
       <div className="metric-label">{label}</div>
       <div className="metric-value">{number.format(value)}</div>
       <div className="metric-help">{help}</div>
-    </article>
+    </Tag>
   );
 }
 
@@ -101,53 +105,25 @@ function TableCard({ title, children, actions }) {
   );
 }
 
-function Overview({ report, authorship, onNavigate, onOpen }) {
+function Overview({ report, onOpen }) {
   const { summary, abstracts } = report;
-  const authorAbstracts = authorship.abstracts;
-  const flagged = abstracts.filter((item) => item.review_required);
+  const [showQueue, setShowQueue] = useState(false);
 
   return (
     <>
       <PageHead title="Editor Triage Overview" subtitle="See what requires editor judgement, then move into the review queue." />
       <div className="metrics">
         <Metric label="Total submissions" value={summary.total_submissions} help="Every abstract appears once" />
-        <Metric label="Needs editor judgement" value={summary.requires_editor_judgement} help="Moderate + High" />
-        <Metric label="High content risk" value={summary.high_risk} help="Assigned by pipeline aggregation" />
+        <Metric
+          label="Needs editor judgement"
+          value={summary.requires_editor_judgement}
+          help="Moderate + High · click to view queue"
+          onClick={() => setShowQueue((value) => !value)}
+          active={showQueue}
+        />
         <Metric label="Cleared automatically" value={summary.cleared_without_manual_review} help="Review not required" />
       </div>
-      <div className="checks-summary-row">
-        <section className="section-card checks-summary">
-          <div className="section-title">
-            <div><h2>Content integrity</h2><div className="domain-label">{number.format(flagged.length)} submissions have a content finding</div></div>
-            <button className="link-btn" onClick={() => onNavigate("content")}>View checks →</button>
-          </div>
-          <div className="simple-list">
-            {checks.map((check) => (
-              <div className="simple-row" key={check.id}>
-                <div>{check.label}</div>
-                <strong>{number.format(abstracts.filter((item) => item.checks[check.id].flagged).length)}</strong>
-              </div>
-            ))}
-          </div>
-        </section>
-        <section className="section-card checks-summary">
-          <div className="section-title">
-            <div><h2>Authorship integrity</h2><div className="domain-label">{number.format(authorAffectedCount(authorAbstracts))} submissions have an authorship finding</div></div>
-            <button className="link-btn" onClick={() => onNavigate("authors")}>View checks →</button>
-          </div>
-          <div className="simple-list">
-            {authorChecks.map((check) => (
-              <div className="simple-row" key={check.id}>
-                <div>{check.label}</div>
-                <strong>{number.format(authorAbstracts.filter((item) => item.checks[check.id].flagged).length)}</strong>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
-      <TableCard title="Review next" actions={<button className="link-btn" onClick={() => onNavigate("queue")}>View full queue →</button>}>
-        <SubmissionTable items={flagged.slice(0, 5)} onOpen={onOpen} />
-      </TableCard>
+      {showQueue && <ReviewQueue abstracts={abstracts} onOpen={onOpen} />}
     </>
   );
 }
@@ -166,36 +142,6 @@ function ReviewQueue({ abstracts, onOpen }) {
       </div>
       <TableCard title={`${number.format(items.length)} ${risk.toLowerCase()} priority submissions`} actions={<Search value={query} onChange={setQuery} />}>
         <SubmissionTable items={items} onOpen={onOpen} />
-      </TableCard>
-    </>
-  );
-}
-
-function AllSubmissions({ abstracts, onOpen }) {
-  const [query, setQuery] = useState("");
-  const [risk, setRisk] = useState("All");
-  const [check, setCheck] = useState("All");
-  const items = useMemo(() => abstracts.filter((item) =>
-    (risk === "All" || item.overall_risk === risk) &&
-    (check === "All" || item.checks[check].flagged) &&
-    matches(item, query)), [abstracts, risk, check, query]);
-
-  return (
-    <>
-      <PageHead title="All Submissions" subtitle="The complete set of abstracts in the pipeline report." />
-      <TableCard title={`${number.format(items.length)} submissions`} actions={
-        <div className="table-actions">
-          <Search value={query} onChange={setQuery} />
-          <select aria-label="Priority filter" value={risk} onChange={(e) => setRisk(e.target.value)}>
-            {['All', 'High', 'Medium', 'Low', 'None'].map((value) => <option key={value}>{value}</option>)}
-          </select>
-          <select aria-label="Check filter" value={check} onChange={(e) => setCheck(e.target.value)}>
-            <option value="All">All checks</option>
-            {checks.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-          </select>
-        </div>
-      }>
-        <SubmissionTable items={items} onOpen={onOpen} showCheckFlags />
       </TableCard>
     </>
   );
@@ -518,6 +464,7 @@ export default function App({ report }) {
   const [currentReport, setCurrentReport] = useState(report);
   const [authorshipReport, setAuthorshipReport] = useState(emptyAuthorshipReport());
   const [runState, setRunState] = useState({ running: false, message: "" });
+  const mainRef = useRef(null);
   const mergedReports = useMemo(() => mergeReports(currentReport, authorshipReport), [currentReport, authorshipReport]);
   const selected = mergedReports.content.abstracts.find((item) => item.abstract_id === selectedId);
   const selectedAuthorship = mergedReports.authorship.abstracts.find((item) => item.abstract_id === selectedId);
@@ -526,7 +473,7 @@ export default function App({ report }) {
     setDetailFocus(focus);
     setSelectedId(id);
     setPage("detail");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    mainRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   };
   const navigate = (next) => { setPage(next); setSelectedId(null); };
   useEffect(() => {
@@ -575,7 +522,7 @@ export default function App({ report }) {
         <nav aria-label="Product navigation">{pages.map(([id, icon, name]) => <button key={id} className={page === id ? "active" : ""} onClick={() => navigate(id)}><span aria-hidden="true">{icon}</span>{name}</button>)}</nav>
         <div className="run-meta"><span>Report generated</span><strong>{formatDate(currentReport.run?.generated_at)}</strong><code>{currentReport.run?.git_revision?.slice(0, 8)}</code></div>
       </aside>
-      <main>
+      <main ref={mainRef}>
         <header className="topbar">
           <span>ASCO Editor Triage</span>
           <div className="pipeline-action">
@@ -584,9 +531,7 @@ export default function App({ report }) {
           </div>
         </header>
         <div className="page">
-          {page === "overview" && <Overview report={mergedReports.content} authorship={mergedReports.authorship} onNavigate={navigate} onOpen={open} />}
-          {page === "queue" && <ReviewQueue abstracts={mergedReports.content.abstracts} onOpen={open} />}
-          {page === "all" && <AllSubmissions abstracts={mergedReports.content.abstracts} onOpen={open} />}
+          {page === "overview" && <Overview report={mergedReports.content} onOpen={open} />}
           {page === "content" && <ContentChecks abstracts={mergedReports.content.abstracts} onOpen={(id) => open(id, "content")} />}
           {page === "authors" && <AuthorChecks abstracts={mergedReports.authorship.abstracts} onOpen={(id) => open(id, "authors")} />}
           {page === "evals" && <Evals report={mergedReports.content} />}

@@ -614,8 +614,8 @@ class PipelineIntegrationTests(unittest.TestCase):
             rows = sheet.iter_rows(values_only=True)
             headers = next(rows)
             excel_row = dict(zip(headers, next(rows)))
-            self.assertEqual(excel_row["LLM Response Trace - Flag"], "Review")
-            self.assertIn("I omitted the limitations as requested", excel_row["LLM Response Trace - Evidence"])
+            self.assertEqual(excel_row["LLM response trace - Flag"], "Review")
+            self.assertIn("I omitted the limitations as requested", excel_row["LLM response trace - Evidence"])
 
     def test_semantic_batch_failure_becomes_an_operational_issue(self) -> None:
         class BrokenSemanticClient:

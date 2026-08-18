@@ -1,17 +1,17 @@
 export const checks = [
   {
     id: "tortured_phrases",
-    label: "Tortured Phrases",
+    label: "Nonsense and tortured phrases",
     description: "Known paraphrase-evasion patterns detected in the abstract text.",
   },
   {
     id: "llm_response_trace",
-    label: "LLM Response Trace",
+    label: "LLM response trace",
     description: "Residual AI-assistant response language detected in the abstract text.",
   },
   {
     id: "templating",
-    label: "Template Detection",
+    label: "Templating",
     description: "Pair-level template evidence with record-level corroborating checks.",
   },
 ];
