@@ -8,7 +8,7 @@ import {
   normalizeAuthorshipReport,
 } from "./authorship.js";
 import { mergeReports } from "./mergedReports.js";
-import { checks, isQueuedByRisk, normalizeReport, validationRows } from "./report.js";
+import { checks, createEmptyReport, isQueuedByRisk, normalizeReport, validationRows } from "./report.js";
 
 const pages = [
   ["overview", "▦", "Overview"],
@@ -303,9 +303,15 @@ function Finding({ definition, result }) {
         {hasFinding && (
           <>
             <p><strong>Reason:</strong> {result.reason || "—"}</p>
+            {!!result.supporting_checks?.length && (
+              <div className="nested-checks">
+                <p><strong>Record support</strong></p>
+                {result.supporting_checks.map((check) => <NestedCheck key={check.check_name} check={check} />)}
+              </div>
+            )}
             <div className="template-pairs">
               {(result.evidence_pairs || []).map((pair) => (
-                <details className="template-pair" key={pair.pair_id} open>
+                <details className="template-pair" key={pair.pair_id}>
                   <summary>{pair.submitted_abstract_id} ↔ {pair.matched_abstract_id} · {pair.section || "Abstract"}</summary>
                   <div className="template-pair-meta"><span>{pair.reason}</span><span>{pair.same_author_group ? "Same author group" : "Different author group"}</span></div>
                   <div className="template-evidence-grid">
@@ -334,11 +340,12 @@ function Finding({ definition, result }) {
 
 function NestedCheck({ check }) {
   const evidenceCount = check.result?.supporting_data?.length || 0;
+  if (!evidenceCount) return null;
   return (
-    <div className="nested-check">
-      <div><strong>{check.check_name.replaceAll("_", " ")}</strong><span>{check.evidence_role || "SUPPORTING"} · {check.result?.level || "UNKNOWN"}</span></div>
+    <details className="nested-check">
+      <summary><strong>{check.check_name.replaceAll("_", " ")}</strong><span>{check.evidence_role || "SUPPORTING"} · {check.result?.level || "UNKNOWN"}</span></summary>
       <p>{check.result?.comment || "No result comment."}{evidenceCount ? ` · ${evidenceCount} evidence item(s)` : ""}</p>
-    </div>
+    </details>
   );
 }
 
@@ -476,6 +483,15 @@ export default function App({ report }) {
     mainRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   };
   const navigate = (next) => { setPage(next); setSelectedId(null); };
+  const clearDashboard = () => {
+    setCurrentReport(createEmptyReport());
+    setAuthorshipReport(emptyAuthorshipReport());
+    setSelectedId(null);
+    setLastPage("overview");
+    setDetailFocus("content");
+    setPage("overview");
+    setRunState({ running: false, message: "Dashboard cleared." });
+  };
   useEffect(() => {
     const refreshReports = async () => {
       const [contentResponse, authorshipResponse] = await Promise.all([
@@ -501,7 +517,8 @@ export default function App({ report }) {
       const response = await fetch("/api/run-pipeline", { method: "POST" });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || "Pipeline failed.");
-      setCurrentReport(normalizeReport(body.report));
+      const nextReport = normalizeReport(body.report);
+      setCurrentReport(nextReport);
       const authorshipResponse = await fetch("/api/authorship-report");
       if (authorshipResponse.ok) {
         const authorshipBody = await authorshipResponse.json();
@@ -509,7 +526,7 @@ export default function App({ report }) {
       }
       setSelectedId(null);
       setPage("overview");
-      setRunState({ running: false, message: `Completed: ${body.report.summary.total_submissions} submissions.` });
+      setRunState({ running: false, message: `Completed: ${nextReport.summary.total_submissions} submissions.` });
     } catch (error) {
       setRunState({ running: false, message: error.message });
     }
@@ -520,13 +537,13 @@ export default function App({ report }) {
       <aside className="sidebar">
         <div className="brand"><span>INTEGRITY</span><span>CENTRAL</span></div>
         <nav aria-label="Product navigation">{pages.map(([id, icon, name]) => <button key={id} className={page === id ? "active" : ""} onClick={() => navigate(id)}><span aria-hidden="true">{icon}</span>{name}</button>)}</nav>
-        <div className="run-meta"><span>Report generated</span><strong>{formatDate(currentReport.run?.generated_at)}</strong><code>{currentReport.run?.git_revision?.slice(0, 8)}</code></div>
       </aside>
       <main ref={mainRef}>
         <header className="topbar">
           <span>ASCO Editor Triage</span>
           <div className="pipeline-action">
             <span className="run-status" aria-live="polite">{runState.message}</span>
+            <button className="clear-btn" disabled={runState.running} onClick={clearDashboard}>Clear</button>
             <button className="run-btn" disabled={runState.running} onClick={runPipeline}>{runState.running ? "Running…" : "Run pipeline"}</button>
           </div>
         </header>

@@ -18,11 +18,31 @@ export const checks = [
 
 const validationChecks = new Set(["tortured_phrases", "llm_response_trace"]);
 const queueableRisks = new Set(["High", "Medium", "Low"]);
+const templatingSupportChecks = new Set([
+  "numerical_contradiction",
+  "design_contradiction",
+  "unverifiable_clinical_trial",
+]);
 
 export function isQueuedByRisk(item, risk) {
   if (risk === "Low") return item.overall_risk === "Low" || item.overall_risk === "None";
   if (risk === "None") return false;
   return item.overall_risk === risk && (queueableRisks.has(risk) || item.review_required);
+}
+
+export function createEmptyReport() {
+  return normalizeReport({
+    run: {},
+    summary: {
+      total_submissions: 0,
+      high_risk: 0,
+      moderate_risk: 0,
+      low_risk: 0,
+      requires_editor_judgement: 0,
+      cleared_without_manual_review: 0,
+    },
+    abstracts: [],
+  });
 }
 
 export function normalizeReport(report) {
@@ -72,7 +92,11 @@ export function normalizeReport(report) {
             section: subCheckData(pair, "section_similarity")?.strongest_section || "",
             similarity: subCheckData(pair, "section_similarity")?.strongest_section_similarity || 0,
           })),
-          supporting_checks: recordScope.supporting_checks || [],
+          supporting_checks: (recordScope.supporting_checks || []).filter(
+            (check) =>
+              templatingSupportChecks.has(check.check_name) &&
+              (check.result?.supporting_data || []).length > 0,
+          ),
         },
       },
     };

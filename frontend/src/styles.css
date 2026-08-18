@@ -39,9 +39,12 @@ main { min-width: 0; height: 100%; overflow-y: auto; }
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 59px; padding: 10px 22px; border-bottom: 1px solid var(--border); background: var(--card); color: var(--muted); font-size: 13px; }
 .pipeline-action { display: flex; align-items: center; gap: 10px; }
 .run-status { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
-.run-btn { padding: 8px 12px; border: 0; border-radius: 7px; color: white; background: var(--accent); font-weight: 650; cursor: pointer; }
+.run-btn, .clear-btn { padding: 8px 12px; border: 0; border-radius: 7px; color: white; font-weight: 650; cursor: pointer; }
+.run-btn { background: var(--accent); }
 .run-btn:hover { background: #1d4ed8; }
-.run-btn:disabled { cursor: wait; opacity: .65; }
+.clear-btn { background: #475569; }
+.clear-btn:hover { background: #334155; }
+.run-btn:disabled, .clear-btn:disabled { cursor: wait; opacity: .65; }
 .report-version { font-family: ui-monospace, monospace; font-size: 11px; }
 .page { padding: 24px; }
 .page-head { margin-bottom: 20px; }
@@ -110,8 +113,10 @@ td { padding: 11px 12px; border-top: 1px solid var(--border); vertical-align: mi
 .template-evidence-grid p { margin-top: 6px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 .nested-checks { display: grid; gap: 6px; padding: 0 11px 11px; }
 .nested-check { padding: 8px 9px; border-left: 3px solid var(--border); background: var(--card); }
-.nested-check > div { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; text-transform: capitalize; }
+.nested-check summary { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; text-transform: capitalize; cursor: pointer; list-style: none; }
+.nested-check summary::-webkit-details-marker { display: none; }
 .nested-check span { color: var(--muted); font-size: 10px; }
+.nested-check p { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .status-flag, .status-clear { display: inline-flex; padding: 3px 7px; border: 1px solid; border-radius: 999px; font-size: 11px; font-weight: 650; white-space: nowrap; }
 .status-flag { border-color: var(--high-border); color: var(--high-text); background: var(--high-bg); }
 .status-clear { border-color: var(--low-border); color: var(--low-text); background: var(--low-bg); }

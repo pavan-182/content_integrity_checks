@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { isQueuedByRisk, normalizeReport, validationRows } from "./report.js";
+import { createEmptyReport, isQueuedByRisk, normalizeReport, validationRows } from "./report.js";
 
 test("maps the pipeline report into dashboard records", async () => {
   const source = new URL("../../outputs/test_real/content_integrity_results.json", import.meta.url);
@@ -20,6 +20,12 @@ test("maps the pipeline report into dashboard records", async () => {
   assert.ok(flagged.every(({ check }) => check.evidence));
   assert.ok(flagged.every(({ item, check }) => check.evidence !== item.why_flagged));
   assert.equal(validationRows(report).length, 0);
+});
+
+test("creates an empty dashboard report", () => {
+  const report = createEmptyReport();
+  assert.equal(report.summary.total_submissions, 0);
+  assert.deepEqual(report.abstracts, []);
 });
 
 test("extracts validator judgments for the evals tab", () => {
@@ -156,4 +162,57 @@ test("normalizes DOI-keyed template sub-checks and record support", () => {
   assert.equal(report.abstracts[0].checks.templating.evidence_pairs[0].matched_abstract_id, "B-1");
   assert.equal(report.abstracts[0].checks.templating.evidence_pairs[0].section, "results");
   assert.equal(report.abstracts[0].checks.templating.supporting_checks[0].check_name, "numerical_contradiction");
+});
+
+test("keeps only templating support checks with findings and excludes authorship risk", () => {
+  const report = normalizeReport({
+    "10.1000/example": {
+      title: "Example",
+      abstract_id: "A-1",
+      checks: [
+        {
+          check_name: "content_integrity_summary",
+          result: {
+            level: "LOW",
+            supporting_data: [{ overall_content_risk: "LOW", review_required: false }],
+            comment: "Template pair only.",
+          },
+        },
+        { check_name: "tortured_phrases", result: { level: "LOW", supporting_data: [], comment: "" } },
+        { check_name: "llm_response_trace", result: { level: "LOW", supporting_data: [], comment: "" } },
+        {
+          check_name: "template_detection",
+          result: {
+            level: "LOW",
+            comment: "Possible template reuse.",
+            supporting_data: [
+              {
+                evidence_scope: "RECORD",
+                supporting_checks: [
+                  {
+                    check_name: "numerical_contradiction",
+                    result: { level: "LOW", supporting_data: [{ finding_id: "N-1" }], comment: "Mismatch." },
+                  },
+                  {
+                    check_name: "design_contradiction",
+                    result: { level: "LOW", supporting_data: [], comment: "No active study-design contradiction was detected." },
+                  },
+                  {
+                    check_name: "unverifiable_clinical_trial",
+                    result: { level: "LOW", supporting_data: [], comment: "No unverifiable clinical-trial reference was detected." },
+                  },
+                  {
+                    check_name: "authorship_risk",
+                    result: { level: "HIGH", supporting_data: [{ reason: "Retraction History" }], comment: "Should stay out of templating support." },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+    },
+  });
+
+  assert.deepEqual(report.abstracts[0].checks.templating.supporting_checks.map((item) => item.check_name), ["numerical_contradiction"]);
 });
