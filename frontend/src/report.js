@@ -17,6 +17,13 @@ export const checks = [
 ];
 
 const validationChecks = new Set(["tortured_phrases", "llm_response_trace"]);
+const queueableRisks = new Set(["High", "Medium", "Low"]);
+
+export function isQueuedByRisk(item, risk) {
+  if (risk === "Low") return item.overall_risk === "Low" || item.overall_risk === "None";
+  if (risk === "None") return false;
+  return item.overall_risk === risk && (queueableRisks.has(risk) || item.review_required);
+}
 
 export function normalizeReport(report) {
   if (report?.summary && Array.isArray(report.abstracts)) return normalizeLegacyReport(report);

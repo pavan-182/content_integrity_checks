@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { normalizeReport, validationRows } from "./report.js";
+import { isQueuedByRisk, normalizeReport, validationRows } from "./report.js";
 
 test("maps the pipeline report into dashboard records", async () => {
   const source = new URL("../../outputs/test_real/content_integrity_results.json", import.meta.url);
@@ -93,6 +93,13 @@ test("preserves authoritative risk and treats a missing check as unknown", () =>
   assert.equal(report.abstracts[0].overall_risk, "None");
   assert.equal(report.abstracts[0].checks.tortured_phrases.flagged, false);
   assert.equal("operational_failure" in report.abstracts[0].checks.templating, false);
+});
+
+test("queues low-risk submissions without requiring manual review", () => {
+  assert.equal(isQueuedByRisk({ overall_risk: "Low", review_required: false }, "Low"), true);
+  assert.equal(isQueuedByRisk({ overall_risk: "None", review_required: false }, "Low"), true);
+  assert.equal(isQueuedByRisk({ overall_risk: "None", review_required: false }, "None"), false);
+  assert.equal(isQueuedByRisk({ overall_risk: "None", review_required: true }, "None"), false);
 });
 
 test("normalizes DOI-keyed template sub-checks and record support", () => {
