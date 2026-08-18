@@ -24,6 +24,10 @@ const templatingSupportChecks = new Set([
   "unverifiable_clinical_trial",
 ]);
 
+export function hasTemplatingSupportChecks(result) {
+  return Boolean(result?.supporting_checks?.some((check) => check.result?.supporting_data?.length));
+}
+
 export function isQueuedByRisk(item, risk) {
   if (risk === "Low") return item.overall_risk === "Low" || item.overall_risk === "None";
   if (risk === "None") return false;

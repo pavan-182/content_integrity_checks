@@ -8,6 +8,7 @@ import {
   normalizeAuthorshipReport,
 } from "./authorship.js";
 import { mergeReports } from "./mergedReports.js";
+import { hasTemplatingSupportChecks } from "./report.js";
 import { checks, createEmptyReport, isQueuedByRisk, normalizeReport, validationRows } from "./report.js";
 
 const pages = [
@@ -294,16 +295,16 @@ function Detail({ abstract, authorship, onBack, focus = "content" }) {
 
 function Finding({ definition, result }) {
   const hasFinding = result.flagged || result.review_candidate;
+  const hasRecordSupport = definition.id === "templating" && hasTemplatingSupportChecks(result);
   if (definition.id === "templating") {
     return (
       <article className="finding">
         <div className="finding-top"><strong>{definition.label}</strong><CheckStatus definition={definition} result={result} /></div>
-        {hasFinding && (
+        {(hasFinding || hasRecordSupport) && (
           <>
-            <p><strong>Reason:</strong> {result.reason || "—"}</p>
+            {hasFinding && <p><strong>Reason:</strong> {result.reason || "—"}</p>}
             {!!result.supporting_checks?.length && (
               <div className="nested-checks">
-                <p><strong>Record support</strong></p>
                 {result.supporting_checks.map((check) => <NestedCheck key={check.check_name} check={check} />)}
               </div>
             )}

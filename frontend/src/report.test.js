@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { createEmptyReport, isQueuedByRisk, normalizeReport, validationRows } from "./report.js";
+import { createEmptyReport, hasTemplatingSupportChecks, isQueuedByRisk, normalizeReport, validationRows } from "./report.js";
 
 test("maps the pipeline report into dashboard records", async () => {
   const source = new URL("../../outputs/test_real/content_integrity_results.json", import.meta.url);
@@ -215,4 +215,18 @@ test("keeps only templating support checks with findings and excludes authorship
   });
 
   assert.deepEqual(report.abstracts[0].checks.templating.supporting_checks.map((item) => item.check_name), ["numerical_contradiction"]);
+});
+
+test("treats record-level templating support as visible even without pair findings", () => {
+  assert.equal(
+    hasTemplatingSupportChecks({
+      supporting_checks: [
+        { check_name: "numerical_contradiction", result: { supporting_data: [{ finding_id: "N-1" }] } },
+        { check_name: "design_contradiction", result: { supporting_data: [] } },
+      ],
+    }),
+    true,
+  );
+  assert.equal(hasTemplatingSupportChecks({ supporting_checks: [] }), false);
+  assert.equal(hasTemplatingSupportChecks({}), false);
 });
