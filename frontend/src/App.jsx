@@ -39,9 +39,10 @@ function CheckStatus({ definition, result }) {
   return <span className="status-flag">● Finding detected{count ? ` · ${count} ${unit}` : ""}</span>;
 }
 
-function AuthorCheckStatus({ result }) {
+function AuthorCheckStatus({ definition, result }) {
   if (!result.flagged) return <span className="status-clear">✓ No active finding</span>;
   const count = result.match_count || result.findings?.length || 0;
+  if (definition?.id === "retraction_history") return <span className="status-flag">● {result.level}</span>;
   return <span className="status-flag">● {result.level} · {count} finding{count === 1 ? "" : "s"}</span>;
 }
 
@@ -56,7 +57,7 @@ function Metric({ label, value, help, onClick, active }) {
     >
       <div className="metric-label">{label}</div>
       <div className="metric-value">{number.format(value)}</div>
-      <div className="metric-help">{help}</div>
+      {help && <div className="metric-help">{help}</div>}
     </Tag>
   );
 }
@@ -111,17 +112,16 @@ function Overview({ report, onOpen }) {
 
   return (
     <>
-      <PageHead title="Editor Triage Overview" subtitle="See what requires editor judgement, then move into the review queue." />
+      <PageHead title="Editor Triage Overview" />
       <div className="metrics">
-        <Metric label="Total submissions" value={summary.total_submissions} help="Every abstract appears once" />
+        <Metric label="Total submissions" value={summary.total_submissions} />
         <Metric
           label="Needs editor judgement"
           value={summary.requires_editor_judgement}
-          help="Moderate + High · click to view queue"
           onClick={() => setShowQueue((value) => !value)}
           active={showQueue}
         />
-        <Metric label="Cleared automatically" value={summary.cleared_without_manual_review} help="Review not required" />
+        <Metric label="Cleared automatically" value={summary.cleared_without_manual_review} />
       </div>
       {showQueue && <ReviewQueue abstracts={abstracts} onOpen={onOpen} />}
     </>
@@ -131,12 +131,12 @@ function Overview({ report, onOpen }) {
 function ReviewQueue({ abstracts, onOpen }) {
   const [risk, setRisk] = useState("High");
   const [query, setQuery] = useState("");
-  const risks = ["High", "Medium", "Low", "None"];
+  const risks = ["High", "Medium", "Low"];
   const items = abstracts.filter((item) => isQueuedByRisk(item, risk) && matches(item, query));
 
   return (
     <>
-      <PageHead title="Review Queue" subtitle="High, Moderate and Low pipeline results in one editor view." />
+      <PageHead title="Review Queue" />
       <div className="queue-tabs">
         {risks.map((item) => <button key={item} className={`tab-btn ${risk === item ? "active" : ""}`} onClick={() => setRisk(item)}>{item} ({abstracts.filter((a) => isQueuedByRisk(a, item)).length})</button>)}
       </div>
@@ -153,7 +153,7 @@ function ContentChecks({ abstracts, onOpen }) {
 
   return (
     <>
-      <PageHead title="Content Integrity Checks" subtitle="Checks applied to abstract text and cross-submission content." />
+      <PageHead title="Content Integrity Checks" />
       <div className="check-grid content-check-grid">
         <button className={`check-tile ${active === "All" ? "active" : ""}`} onClick={() => setActive("All")}><strong>All content findings</strong><span>{number.format(affectedCount(abstracts))} submissions</span></button>
         {checks.map((check) => <button key={check.id} className={`check-tile ${active === check.id ? "active" : ""}`} onClick={() => setActive(check.id)}><strong>{check.label}</strong><span>{number.format(abstracts.filter((item) => item.checks[check.id].flagged).length)} active</span></button>)}
@@ -204,7 +204,7 @@ function AuthorChecks({ abstracts, onOpen }) {
 
   return (
     <>
-      <PageHead title="Author Integrity Checks" subtitle="Checks applied to authorship patterns, affiliations, and prior retraction history." />
+      <PageHead title="Author Integrity Checks" />
       <div className="check-grid author-check-grid">
         <button className={`check-tile ${active === "All" ? "active" : ""}`} onClick={() => setActive("All")}><strong>All author findings</strong><span>{number.format(authorAffectedCount(abstracts))} submissions</span></button>
         {authorChecks.map((check) => <button key={check.id} className={`check-tile ${active === check.id ? "active" : ""}`} onClick={() => setActive(check.id)}><strong>{check.label}</strong><span>{number.format(abstracts.filter((item) => item.checks[check.id].flagged).length)} active</span></button>)}
@@ -272,7 +272,6 @@ function Detail({ abstract, authorship, onBack, focus = "content" }) {
       <div className="section-title">
         <div>
           <h2>Author integrity</h2>
-          <div className="domain-label"><RiskBadge risk={authorship.overall_author_risk} /> · {authorship.why_flagged}</div>
         </div>
       </div>
       {authorChecks.map((check) => <AuthorFinding key={check.id} definition={check} result={authorship.checks[check.id]} />)}
@@ -285,7 +284,6 @@ function Detail({ abstract, authorship, onBack, focus = "content" }) {
       <div className="detail-head">
         <div><div className="detail-title"><h1>{abstract.title}</h1><RiskBadge risk={abstract.overall_risk} /></div><div className="detail-meta">{abstract.abstract_id} · {abstract.corresponding_author}</div></div>
       </div>
-      <section className="why-box"><h2>Why this submission is here</h2><p>{abstract.why_flagged}</p></section>
       {!!abstract.operational_issues?.length && (
         <section className="why-box"><h2>Operational issues</h2><p>{abstract.operational_issues.map((issue) => `${issue.component}: ${issue.message}`).join(" · ")}</p></section>
       )}
@@ -353,7 +351,7 @@ function AuthorFinding({ definition, result }) {
   const hasFinding = result.flagged;
   return (
     <article className="finding">
-      <div className="finding-top"><strong>{definition.label}</strong><AuthorCheckStatus result={result} /></div>
+      <div className="finding-top"><strong>{definition.label}</strong><AuthorCheckStatus definition={definition} result={result} /></div>
       {hasFinding && result.reason && <p><strong>Summary:</strong> {result.reason}</p>}
       {hasFinding && !result.findings?.length && <p><strong>Evidence:</strong> {result.evidence || "None"}</p>}
       {definition.id === "submission_volume" && !!result.findings?.length && (
@@ -423,16 +421,13 @@ function AuthorFinding({ definition, result }) {
                   </div>
                   {finding.retraction_record.reason && <p className="retraction-reason">{finding.retraction_record.reason.replaceAll("+", " · ")}</p>}
                   <div className="tag-list">
-                    {finding.retraction_record.original_paper_doi && <span className="tag">Original {finding.retraction_record.original_paper_doi}</span>}
+                    {finding.retraction_record.original_paper_doi && <span className="tag">{finding.retraction_record.original_paper_doi}</span>}
                     {finding.retraction_record.retraction_doi && <span className="tag">Retraction {finding.retraction_record.retraction_doi}</span>}
                   </div>
                 </>
               )}
             </details>
           ))}
-          {result.findings.length > MAX_RETRACTION_HISTORY && (
-            <p className="finding-limit-note">Showing {MAX_RETRACTION_HISTORY} of {result.findings.length} retraction records.</p>
-          )}
         </div>
       )}
     </article>
