@@ -8,7 +8,7 @@ import {
   normalizeAuthorshipReport,
 } from "./authorship.js";
 import { mergeReports } from "./mergedReports.js";
-import { checks, normalizeReport, validationRows } from "./report.js";
+import { checks, isQueuedByRisk, normalizeReport, validationRows } from "./report.js";
 
 const pages = [
   ["overview", "▦", "Overview"],
@@ -132,13 +132,13 @@ function ReviewQueue({ abstracts, onOpen }) {
   const [risk, setRisk] = useState("High");
   const [query, setQuery] = useState("");
   const risks = ["High", "Medium", "Low", "None"];
-  const items = abstracts.filter((item) => item.review_required && item.overall_risk === risk && matches(item, query));
+  const items = abstracts.filter((item) => isQueuedByRisk(item, risk) && matches(item, query));
 
   return (
     <>
       <PageHead title="Review Queue" subtitle="High, Moderate and Low pipeline results in one editor view." />
       <div className="queue-tabs">
-        {risks.map((item) => <button key={item} className={`tab-btn ${risk === item ? "active" : ""}`} onClick={() => setRisk(item)}>{item} ({abstracts.filter((a) => a.review_required && a.overall_risk === item).length})</button>)}
+        {risks.map((item) => <button key={item} className={`tab-btn ${risk === item ? "active" : ""}`} onClick={() => setRisk(item)}>{item} ({abstracts.filter((a) => isQueuedByRisk(a, item)).length})</button>)}
       </div>
       <TableCard title={`${number.format(items.length)} ${risk.toLowerCase()} priority submissions`} actions={<Search value={query} onChange={setQuery} />}>
         <SubmissionTable items={items} onOpen={onOpen} />
