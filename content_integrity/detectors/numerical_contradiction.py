@@ -1,4 +1,9 @@
-"""Sentence-local V1 checks; numbers are not linked across sentences or sections.
+"""Sentence-local V1 checks, plus one lightweight cross-sentence pass: the most recently
+stated population total ("120 patients were enrolled") is carried forward in document order
+and used as the denominator for a later percentage/count claim that states no local
+denominator, provided the population category matches (patient/participant/subject/case) and
+the later sentence carries no qualifier (e.g. "evaluable", "responders", a named subgroup)
+marking it as a different (sub)population. Everything else remains sentence-local.
 
 Known limitation: exclusive subgroup counts are only compared against a total stated in the
 same sentence. Falling back to a record-level enrollment total was evaluated and rejected: a
@@ -121,9 +126,25 @@ RANGE_RE = re.compile(
     re.IGNORECASE,
 )
 EXCLUSIVE_RE = re.compile(r"\b(?:mutually exclusive|non-overlapping|disjoint)\b", re.IGNORECASE)
-TOTAL_RE = re.compile(
+TOTAL_KEYWORD_RE = re.compile(
     rf"\b(?:among|total(?:\s+of)?|included|enrolled)\s+"
     rf"(?P<total>\d+)\s+(?P<unit>(?:evaluable\s+)?{POPULATION})\b",
+    re.IGNORECASE,
+)
+# "N patients were enrolled" -- the number precedes the population noun, with the
+# enrollment verb trailing. Not covered by TOTAL_KEYWORD_RE (keyword-before-number only),
+# but this is the phrasing the OE-09 audit example itself uses.
+TOTAL_ENROLLED_RE = re.compile(
+    rf"\b(?P<total>\d+)\s+(?P<unit>(?:evaluable\s+)?{POPULATION})\s+"
+    rf"(?:were\s+|was\s+)?(?:enrolled|included)\b",
+    re.IGNORECASE,
+)
+# Sentences carrying one of these qualifiers describe a (sub)population distinct from a
+# plain enrollment/total count, so a total from one sentence must not be linked to -- or
+# read out of -- a sentence that contains one of these words.
+DIFFERENT_POPULATION_RE = re.compile(
+    r"\b(?:evaluable|eligible|assessable|responders?|responding|survivors?|"
+    r"non-responders?|per-protocol|completers?|subgroup|cohort|arm|subset)\b",
     re.IGNORECASE,
 )
 SUBGROUP_RE = re.compile(
@@ -151,6 +172,11 @@ class NumericalClaim:
     unit: str = ""
     extraction_method: str = ""
     outcome_classification: str = "ambiguous"
+    # Non-empty only when the denominator was not stated in this claim's own sentence but
+    # carried forward from an earlier population-total sentence (see OE-09); holds that
+    # earlier sentence, for evidence and for excluding these claims from same-sentence-only
+    # checks.
+    denominator_source_sentence: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,6 +221,11 @@ def _unit(value: str | None) -> str:
 def _compatible_units(*values: str | None) -> bool:
     units = {_unit(value) for value in values if _unit(value)}
     return len(units) <= 1
+
+
+def _find_total(text: str) -> re.Match[str] | None:
+    matches = [m for m in (TOTAL_KEYWORD_RE.search(text), TOTAL_ENROLLED_RE.search(text)) if m]
+    return min(matches, key=lambda m: m.start()) if matches else None
 
 
 def _label_before(sentence: str, start: int) -> str:
@@ -249,6 +280,13 @@ def _claim(
 
 def extract_numerical_claims(record: ParsedRecord) -> list[NumericalClaim]:
     claims: list[NumericalClaim] = []
+    # Most recently stated population total, carried forward across sentences (OE-09).
+    # Updated only after a sentence's own claims are extracted, so a total and a percentage
+    # in the same sentence are never linked through this path -- that's already the
+    # same-sentence checks' job.
+    carried_total: float | None = None
+    carried_unit = ""
+    carried_sentence = ""
     for section, sentence in _section_sentences(record):
         for pattern, method in COUNT_PERCENT_PATTERNS:
             for match in pattern.finditer(sentence):
@@ -265,15 +303,37 @@ def extract_numerical_claims(record: ParsedRecord) -> list[NumericalClaim]:
 
         for match in COUNT_PERCENT_WITHOUT_DENOMINATOR_RE.finditer(sentence):
             label = _label_before(sentence, match.start())
+            numerator = _float(match.group("numerator"))
+            unit = _unit(match.group("unit"))
             claims.append(_claim(
                 record, section, sentence, "count_percentage",
                 "count_with_parenthetical_percentage",
                 label=label,
-                numerator=_float(match.group("numerator")),
+                numerator=numerator,
                 reported_percentage=_float(match.group("percentage")),
-                unit=_unit(match.group("unit")),
+                unit=unit,
                 outcome_classification=_classify_outcome(label, sentence),
             ))
+            # This claim has no local denominator. If an earlier sentence stated a
+            # population total of the same kind (patient/participant/subject/case), and
+            # this sentence carries no qualifier marking it a different (sub)population,
+            # link the two -- conservatively: no match at all if either check fails.
+            if (
+                carried_total is not None
+                and unit.split()[-1] == carried_unit.split()[-1]
+                and not DIFFERENT_POPULATION_RE.search(sentence)
+            ):
+                claims.append(_claim(
+                    record, section, sentence, "count_percentage",
+                    "carried_forward_denominator",
+                    label=label,
+                    numerator=numerator,
+                    denominator=carried_total,
+                    reported_percentage=_float(match.group("percentage")),
+                    unit=unit,
+                    outcome_classification=_classify_outcome(label, sentence),
+                    denominator_source_sentence=carried_sentence,
+                ))
 
         if COUNT_CONTEXT_RE.search(sentence):
             for pattern, method in (
@@ -338,7 +398,7 @@ def extract_numerical_claims(record: ParsedRecord) -> list[NumericalClaim]:
                 ))
 
         exclusive = EXCLUSIVE_RE.search(sentence)
-        if exclusive and (total := TOTAL_RE.search(sentence[:exclusive.start()])):
+        if exclusive and (total := _find_total(sentence[:exclusive.start()])):
             groups = [
                 (float(match.group("count")), normalize_whitespace(match.group("label")))
                 for match in SUBGROUP_RE.finditer(sentence[exclusive.end():])
@@ -352,6 +412,16 @@ def extract_numerical_claims(record: ParsedRecord) -> list[NumericalClaim]:
                     denominator=float(total.group("total")),
                     unit=_unit(total.group("unit")),
                 ))
+
+        # Update the carried-forward total *after* this sentence's own claims are built,
+        # and only from a sentence that isn't itself qualifying a sub-population (e.g. "50
+        # patients were evaluable") -- otherwise a subset count would leak forward as if it
+        # were the whole enrolled population.
+        total_match = _find_total(sentence)
+        if total_match and not DIFFERENT_POPULATION_RE.search(sentence):
+            carried_total = _float(total_match.group("total"))
+            carried_unit = _unit(total_match.group("unit"))
+            carried_sentence = sentence
     return claims
 
 
@@ -431,7 +501,8 @@ def detect_numerical_contradictions(
                 not in invalid_count_percentages
             ):
                 if (
-                    claim.numerator > claim.denominator
+                    not claim.denominator_source_sentence
+                    and claim.numerator > claim.denominator
                     and claim.outcome_classification == "one_per_person"
                 ):
                     difference = claim.numerator - claim.denominator
@@ -445,7 +516,20 @@ def detect_numerical_contradictions(
                 if claim.reported_percentage is not None and claim.denominator > 0:
                     calculated = claim.numerator / claim.denominator * 100
                     difference = abs(claim.reported_percentage - calculated)
-                    if difference > percentage_tolerance:
+                    if difference > percentage_tolerance and claim.denominator_source_sentence:
+                        add(record, claim, _finding(
+                            record, claim, "carried_forward_percentage_mismatch",
+                            f"{claim.numerator:g} of {claim.denominator:g} calculates to "
+                            f"{calculated:.1f}%, not the reported {claim.reported_percentage:g}%. "
+                            f"The denominator {claim.denominator:g} is not stated in this sentence; "
+                            f"it was carried forward from an earlier sentence: "
+                            f"\"{claim.denominator_source_sentence}\"",
+                            "medium", "medium",
+                            f"{claim.numerator:g}/{claim.denominator:g} (denominator carried forward); "
+                            f"reported_percentage={claim.reported_percentage:g}%",
+                            round(calculated, 3), difference, percentage_tolerance,
+                        ))
+                    elif difference > percentage_tolerance:
                         add(record, claim, _finding(
                             record, claim, "count_percentage_mismatch",
                             f"{claim.numerator:g} of {claim.denominator:g} calculates to "
