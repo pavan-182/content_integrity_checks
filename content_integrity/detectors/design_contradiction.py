@@ -538,7 +538,6 @@ def detect_design_contradictions(
                         finding,
                         validation_status=status,
                         validation_reason=reason,
-                        check_triggered=status not in INACTIVE_VALIDATION_STATUSES,
                         review_status={
                             "confirmed": "needs_review",
                             "rejected": "excluded_by_validation",
