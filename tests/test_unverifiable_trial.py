@@ -340,6 +340,92 @@ class UnverifiableTrialTests(unittest.TestCase):
                 )
                 self.assertEqual(result.lookup_status, "unsupported_registry")
 
+    def test_new_registry_invalid_format(self) -> None:
+        cases = (
+            ("CTRI/15/3/5634", "Clinical Trials Registry - India", "CTRI/YYYY/MM/NNNNNN"),
+            ("DRKS1234", "German Clinical Trials Register", "DRKS followed by exactly eight digits"),
+            (
+                "jRCT12345",
+                "Japan Registry of Clinical Trials",
+                "sub-registry code and nine digits",
+            ),
+            (
+                "IRCT2009030100",
+                "Iranian Registry of Clinical Trials",
+                "fourteen-digit registration number",
+            ),
+            (
+                "U1111-119-8390",
+                "WHO ICTRP Universal Trial Number",
+                "two hyphen-separated four-character blocks",
+            ),
+        )
+        for trial_id, registry, expected_format in cases:
+            with self.subTest(trial_id=trial_id):
+                result = detect_unverifiable_trials([
+                    _record(f"Registered as {trial_id}.")
+                ])[0]
+                self.assertEqual(result.finding_type, "invalid_trial_id_format")
+                self.assertEqual(result.lookup_status, "invalid_format")
+                self.assertEqual(result.registry_name, registry)
+                self.assertIn(expected_format, result.evidence)
+
+    def test_valid_new_registry_ids_remain_unsupported(self) -> None:
+        cases = (
+            ("CTRI/2015/03/005634", "Clinical Trials Registry - India"),
+            ("DRKS00005219", "German Clinical Trials Register"),
+            ("jRCT1031190001", "Japan Registry of Clinical Trials"),
+            ("jRCTs031190001", "Japan Registry of Clinical Trials"),
+            ("IRCT20090301001709N35", "Iranian Registry of Clinical Trials"),
+            ("U1111-1119-8390", "WHO ICTRP Universal Trial Number"),
+        )
+        for trial_id, registry in cases:
+            with self.subTest(trial_id=trial_id):
+                result = detect_unverifiable_trials([
+                    _record(f"The trial was registered as {trial_id}.")
+                ])[0]
+                self.assertEqual(
+                    result.finding_type,
+                    "unsupported_registry_manual_verification",
+                )
+                self.assertEqual(result.lookup_status, "unsupported_registry")
+                self.assertEqual(result.registry_name, registry)
+
+    def test_new_registry_ids_extracted_from_sentence(self) -> None:
+        cases = (
+            (
+                "The trial was registered as CTRI/2015/03/005634.",
+                "CTRI/2015/03/005634",
+                "Clinical Trials Registry - India",
+            ),
+            (
+                "The trial was registered as DRKS00005219.",
+                "DRKS00005219",
+                "German Clinical Trials Register",
+            ),
+            (
+                "The trial was registered as jRCT1031190001.",
+                "JRCT1031190001",
+                "Japan Registry of Clinical Trials",
+            ),
+            (
+                "The trial was registered as IRCT20090301001709N35.",
+                "IRCT20090301001709N35",
+                "Iranian Registry of Clinical Trials",
+            ),
+            (
+                "The trial's WHO ICTRP Universal Trial Number is U1111-1119-8390.",
+                "U1111-1119-8390",
+                "WHO ICTRP Universal Trial Number",
+            ),
+        )
+        for sentence, normalized_id, registry in cases:
+            with self.subTest(sentence=sentence):
+                claim = extract_trial_reference_claims(_record(sentence))[0]
+                self.assertEqual(claim.registry_name, registry)
+                self.assertEqual(claim.normalized_trial_id, normalized_id)
+                self.assertTrue(claim.format_valid)
+
     def test_cache_write_failures_are_best_effort(self) -> None:
         for status in ("verified", "not_found"):
             with self.subTest(status=status), tempfile.TemporaryDirectory() as directory:
