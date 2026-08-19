@@ -128,6 +128,20 @@ def _similarity(left: str, right: str) -> float:
     return (forward + reverse) / 2
 
 
+def _bounded_block_pairs(members: list[str], cap: int = MAX_APPROXIMATE_BUCKET) -> set[tuple[str, str]]:
+    # Every member of an exact-hash block shares identical text, so once a block exceeds
+    # `cap` a star anchored on the smallest id still connects every member (transitively,
+    # for clustering/dedup) in O(k) pairs instead of the O(k^2) full clique - that's what
+    # keeps a large cross-year boilerplate cluster from becoming a compute-time cliff.
+    ordered = sorted(set(members))
+    if len(ordered) < 2:
+        return set()
+    if len(ordered) <= cap:
+        return set(combinations(ordered, 2))
+    anchor = ordered[0]
+    return {(anchor, other) for other in ordered[1:]}
+
+
 def _shared_excerpt(skeletons: list[str]) -> str:
     sentence_counter: Counter[str] = Counter()
     for skeleton in skeletons:
@@ -170,15 +184,15 @@ def _candidate_pairs(
         for shingle in _shingles(skeleton):
             ngram_index[shingle].add(record_id)
 
-    pairs = {
-        pair
-        for block_key, members in blocks.items()
-        if len(members) >= 2 and not (
-            block_key.startswith(("shape:", "prefix:"))
-            and len(members) > MAX_APPROXIMATE_BUCKET
-        )
-        for pair in combinations(sorted(members), 2)
-    }
+    pairs: set[tuple[str, str]] = set()
+    for block_key, members in blocks.items():
+        if len(members) < 2:
+            continue
+        if block_key.startswith(("shape:", "prefix:")):
+            if len(members) <= MAX_APPROXIMATE_BUCKET:
+                pairs.update(combinations(sorted(members), 2))
+        else:
+            pairs.update(_bounded_block_pairs(members))
     shared_ngram_counts: Counter[tuple[str, str]] = Counter()
     # ponytail: frequency cap downweights boilerplate; replace with learned IDF after validation.
     for members in ngram_index.values():
