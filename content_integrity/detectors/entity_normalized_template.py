@@ -17,6 +17,7 @@ from ..template_matching_common import (
     PLACEHOLDER_TOKENS,
     SECTION_WEIGHTS,
     TRIAL_PATTERN,
+    _bounded_block_pairs,
     _candidate_pairs,
     _content_class,
     _shared_excerpt,
@@ -187,12 +188,10 @@ def _section_candidate_pairs(
                     normalize_for_matching(section),
                     blake2b(skeleton.encode(), digest_size=16).hexdigest(),
                 ].append(record_id)
-    return {
-        pair
-        for members in blocks.values()
-        if len(members) >= 2
-        for pair in combinations(sorted(members), 2)
-    }
+    pairs: set[tuple[str, str]] = set()
+    for members in blocks.values():
+        pairs.update(_bounded_block_pairs(members))
+    return pairs
 
 
 def _title_candidate_pairs(
@@ -212,12 +211,9 @@ def _title_candidate_pairs(
         for index in range(len(tokens) - 3):
             shingles[tuple(tokens[index:index + 4])].append(record.record_id)
 
-    pairs = {
-        pair
-        for members in exact.values()
-        if len(members) >= 2
-        for pair in combinations(sorted(set(members)), 2)
-    }
+    pairs: set[tuple[str, str]] = set()
+    for members in exact.values():
+        pairs.update(_bounded_block_pairs(members))
     shared: dict[tuple[str, str], int] = defaultdict(int)
     for members in shingles.values():
         unique = sorted(set(members))

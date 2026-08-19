@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import asdict, dataclass
-from itertools import combinations
 
 from .models import ParsedRecord
 from .template_features import TemplateFeatures, build_template_features
-from .template_matching_common import _candidate_pairs
+from .template_matching_common import _bounded_block_pairs, _candidate_pairs
 from .title_templates import title_candidate_pairs
 
 
@@ -28,12 +27,10 @@ def _pairs_by_value(values: dict[str, str]) -> set[tuple[str, str]]:
     for record_id, value in values.items():
         if value:
             buckets[value].append(record_id)
-    return {
-        pair
-        for members in buckets.values()
-        if len(members) >= 2
-        for pair in combinations(sorted(members), 2)
-    }
+    pairs: set[tuple[str, str]] = set()
+    for members in buckets.values():
+        pairs.update(_bounded_block_pairs(members))
+    return pairs
 
 
 def generate_candidate_pairs(
@@ -67,10 +64,8 @@ def generate_candidate_pairs(
         for section in feature.sections:
             if section.masked:
                 section_buckets[(section.section, section.masked)].add(feature.record_id)
-    add({
-        pair
-        for members in section_buckets.values()
-        if len(members) >= 2
-        for pair in combinations(sorted(members), 2)
-    }, "exact_masked_section")
+    section_pairs: set[tuple[str, str]] = set()
+    for members in section_buckets.values():
+        section_pairs.update(_bounded_block_pairs(members))
+    add(section_pairs, "exact_masked_section")
     return [CandidatePair(left, right, tuple(sorted(pair_routes))) for (left, right), pair_routes in sorted(routes.items())]

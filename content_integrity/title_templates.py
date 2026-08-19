@@ -7,6 +7,7 @@ from hashlib import sha256
 from itertools import combinations
 
 from .template_features import TemplateFeatures
+from .template_matching_common import _bounded_block_pairs
 from .thresholds import (
     TITLE_TEMPLATES_MAX_BUCKET_SIZE as MAX_BUCKET_SIZE,
     TITLE_TEMPLATES_MIN_TITLE_WORDS as MIN_TITLE_WORDS,
@@ -32,12 +33,9 @@ def title_candidate_pairs(features: list[TemplateFeatures]) -> set[tuple[str, st
         tokens = text_tokens(normalize_for_matching(feature.title.masked))
         for index in range(len(tokens) - 2):
             trigrams.setdefault(tuple(tokens[index:index + 3]), []).append(feature.record_id)
-    pairs = {
-        pair
-        for members in exact.values()
-        if len(members) >= 2
-        for pair in combinations(sorted(set(members)), 2)
-    }
+    pairs: set[tuple[str, str]] = set()
+    for members in exact.values():
+        pairs.update(_bounded_block_pairs(members))
     shared = Counter()
     for members in trigrams.values():
         if 2 <= len(members) <= MAX_BUCKET_SIZE:
