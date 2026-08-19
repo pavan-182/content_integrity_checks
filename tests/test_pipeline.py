@@ -1088,6 +1088,30 @@ class PipelineTests(unittest.TestCase):
                 "Numerical Contradiction, Design Contradiction, Unverifiable Clinical Trial",
             )
 
+            numerical_finding = next(
+                item for item in supporting["numerical_contradiction"]["result"]["supporting_data"]
+                if item["check_type"] == "impossible_percentage"
+            )
+            self.assertEqual(numerical_finding["calculated_value"], 100.0)
+            self.assertEqual(numerical_finding["difference"], 35.0)
+            self.assertEqual(numerical_finding["tolerance"], 0.0)
+
+            design_finding = next(
+                item for item in supporting["design_contradiction"]["result"]["supporting_data"]
+                if item["check_type"] == "open_label_vs_blinded"
+            )
+            self.assertIn("Review the protocol wording", design_finding["review_reason"])
+
+            trial_finding = next(
+                item for item in supporting["unverifiable_clinical_trial"]["result"]["supporting_data"]
+                if item["check_type"] == "invalid_trial_id_format"
+            )
+            self.assertEqual(trial_finding["registry_name"], "ClinicalTrials.gov")
+            self.assertEqual(trial_finding["normalized_trial_id"], "NCT123")
+            self.assertFalse(trial_finding["format_valid"])
+            self.assertEqual(trial_finding["verification_status"], "invalid_format")
+            self.assertIn("correct its format", trial_finding["review_reason"])
+
     def test_validator_marks_bad_json_validation_failed(self) -> None:
         class BrokenClient:
             def complete(self, *, system: str, user: str, max_tokens: int = 150, temperature: float = 0.0) -> str:

@@ -217,6 +217,14 @@ def _integrated_finding(result: Any) -> Finding:
         validation_status=getattr(result, "validation_status", ""),
         validation_reason=getattr(result, "validation_reason", ""),
         review_status=result.review_status,
+        review_reason=getattr(result, "review_reason", ""),
+        calculated_value=getattr(result, "calculated_value", None),
+        difference=getattr(result, "difference", None),
+        tolerance=getattr(result, "tolerance", None),
+        registry_name=getattr(result, "registry_name", ""),
+        normalized_trial_id=getattr(result, "normalized_trial_id", ""),
+        format_valid=getattr(result, "format_valid", None),
+        verification_status=getattr(result, "verification_status", ""),
     )
 
 
