@@ -350,6 +350,21 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(matches("gatherings " + "filler " * 12 + "clustering."), [])
             self.assertEqual(matches("We did the gatherings. Then we applied clustering."), [])
 
+    def test_tortured_phrase_single_token_proximity_warns_and_is_dropped(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir_str:
+            dictionary_path = _write_temp_file(
+                Path(temp_dir_str),
+                "tortured.csv",
+                '''
+                Fingerprint - Tortured Phrase,Expected Text,Nb Retrieved Papers
+                """lonesome""~5","solitary","1"
+                ''',
+            )
+            with self.assertWarns(UserWarning) as cm:
+                rules = load_tortured_rules(dictionary_path)
+            self.assertIn("unsupported", str(cm.warning))
+            self.assertEqual(rules, [])
+
     def test_tortured_phrase_proximity_inside_a_not_clause_is_parsed(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir_str:
             dictionary_path = _write_temp_file(
