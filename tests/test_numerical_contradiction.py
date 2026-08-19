@@ -285,6 +285,68 @@ class NumericalContradictionTests(unittest.TestCase):
                 )
                 self.assertEqual(finding.calculated_value, calculated_value)
 
+    def test_carried_forward_percentage_mismatch(self) -> None:
+        finding = detect_numerical_contradictions([
+            _record(
+                "A total of 120 patients were enrolled. "
+                "Overall, 71 patients (72%) achieved an objective response."
+            )
+        ])[0]
+        self.assertEqual(finding.contradiction_type, "carried_forward_percentage_mismatch")
+        self.assertEqual(finding.confidence, "medium")
+        self.assertAlmostEqual(finding.calculated_value, 71 / 120 * 100, places=3)
+        self.assertIn("carried forward", finding.evidence)
+        self.assertIn("were enrolled", finding.evidence)
+
+    def test_carried_forward_denominator_not_applied_to_evaluable_subset(self) -> None:
+        self.assertEqual(
+            detect_numerical_contradictions([
+                _record(
+                    "A total of 120 patients were enrolled. "
+                    "Among evaluable patients, 71 patients (72%) achieved an objective response."
+                )
+            ]),
+            [],
+        )
+
+    def test_carried_forward_denominator_not_applied_to_named_subgroup(self) -> None:
+        self.assertEqual(
+            detect_numerical_contradictions([
+                _record(
+                    "A total of 120 patients were enrolled. "
+                    "Among responders, 40 patients (65%) had a complete response."
+                )
+            ]),
+            [],
+        )
+
+    def test_carried_forward_denominator_does_not_affect_same_sentence_checks(self) -> None:
+        finding = detect_numerical_contradictions([
+            _record(
+                "A total of 120 patients were enrolled. "
+                "Responses occurred in 8 of 20 patients reported as 65%."
+            )
+        ])[0]
+        self.assertEqual(finding.contradiction_type, "count_percentage_mismatch")
+        self.assertEqual(finding.confidence, "very_high")
+        self.assertEqual(finding.calculated_value, 40.0)
+
+    def test_carried_forward_denominator_uses_most_recent_total(self) -> None:
+        finding = detect_numerical_contradictions([
+            _record(
+                "A total of 200 patients were enrolled. "
+                "A total of 50 patients were evaluable for response. "
+                "Among 40 patients, treatment was well tolerated. "
+                "Overall, 22 patients (73%) achieved an objective response."
+            )
+        ])[0]
+        self.assertEqual(finding.contradiction_type, "carried_forward_percentage_mismatch")
+        self.assertEqual(finding.calculated_value, 55.0)
+        self.assertEqual(
+            finding.reported_values,
+            "22/40 (denominator carried forward); reported_percentage=73%",
+        )
+
     def test_cli_writes_one_csv_row_per_finding(self) -> None:
         xml = """
         <article article-type="meeting-abstract">

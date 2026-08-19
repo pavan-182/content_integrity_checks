@@ -31,9 +31,14 @@ PERCENT_PATTERN = re.compile(r"\b\d+(?:\.\d+)?\s*%")
 NUMBER_PATTERN = re.compile(r"\b\d+(?:\.\d+)?\b")
 # Single source of truth for supported trial-registry prefixes; unverifiable_trial.py builds its
 # own registry-specific regexes from this instead of re-listing the prefixes independently.
-SUPPORTED_REGISTRY_PREFIXES = ("NCT", "ISRCTN", "ACTRN", "EUCTR", "EudraCT", "ChiCTR")
+SUPPORTED_REGISTRY_PREFIXES = (
+    "NCT", "ISRCTN", "ACTRN", "EUCTR", "EudraCT", "ChiCTR",
+    "CTRI", "DRKS", "jRCT", "IRCT", "U1111",
+)
+# "/" is required for CTRI's CTRI/YYYY/MM/NNNNNN format; harmless for the other prefixes, none
+# of which use it.
 TRIAL_PATTERN = re.compile(
-    r"\b(?:" + "|".join(SUPPORTED_REGISTRY_PREFIXES) + r")[A-Za-z0-9\-_.]+\b", re.IGNORECASE
+    r"\b(?:" + "|".join(SUPPORTED_REGISTRY_PREFIXES) + r")[A-Za-z0-9\-_./]+\b", re.IGNORECASE
 )
 GENE_PATTERN = re.compile(r"\b(?:[A-Z]{2,}\d+[A-Z0-9\-]*|[A-Z]{2,}-\d+[A-Z0-9\-]*)\b")
 DRUG_SUFFIX_PATTERN = re.compile(

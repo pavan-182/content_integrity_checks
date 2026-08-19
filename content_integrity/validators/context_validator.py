@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
 import re
 import ssl
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -177,6 +179,8 @@ class IntelliHubGPTOSSClient:
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         max_attempts: int = DEFAULT_MAX_ATTEMPTS,
         backoff_seconds: float = DEFAULT_BACKOFF_SECONDS,
+        cache_dir: str | Path | None = None,
+        max_cache_age_seconds: float | None = None,
     ) -> None:
         if not api_key:
             raise ValueError("api_key must not be empty")
@@ -186,6 +190,8 @@ class IntelliHubGPTOSSClient:
             raise ValueError("max_attempts must be at least 1")
         if backoff_seconds < 0:
             raise ValueError("backoff_seconds cannot be negative")
+        if max_cache_age_seconds is not None and max_cache_age_seconds < 0:
+            raise ValueError("max_cache_age_seconds must be non-negative")
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model_name = model_name
@@ -194,9 +200,72 @@ class IntelliHubGPTOSSClient:
         self.timeout_seconds = timeout_seconds
         self.max_attempts = max_attempts
         self.backoff_seconds = backoff_seconds
+        self.cache_dir = Path(cache_dir) if cache_dir is not None else None
+        self.max_cache_age_seconds = max_cache_age_seconds
         self.call_stats = CallStats()
 
+    @staticmethod
+    def _cache_key(endpoint: str, payload: dict[str, Any]) -> str:
+        # Content-addressed on everything that determines the response (endpoint + full
+        # payload: model, messages, max_tokens, temperature), so any change to the request
+        # is a cache miss - no stale or cross-contaminated hits.
+        canonical = json.dumps({"endpoint": endpoint, "payload": payload}, ensure_ascii=False, sort_keys=True)
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    def _cache_path(self, cache_key: str) -> Path | None:
+        return self.cache_dir / f"{cache_key}.json" if self.cache_dir is not None else None
+
+    def _read_cache(self, cache_key: str) -> dict[str, Any] | None:
+        path = self._cache_path(cache_key)
+        if path is None:
+            return None
+        try:
+            if not path.is_file():
+                return None
+            if (
+                self.max_cache_age_seconds is not None
+                and time.time() - path.stat().st_mtime > self.max_cache_age_seconds
+            ):
+                return None
+            parsed = json.loads(path.read_text(encoding="utf-8"))
+            return parsed if isinstance(parsed, dict) else None
+        except (OSError, ValueError, json.JSONDecodeError):
+            return None
+
+    def _write_cache(self, cache_key: str, response: dict[str, Any]) -> None:
+        path = self._cache_path(cache_key)
+        if path is None:
+            return
+        temporary_name = ""
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            body = json.dumps(response, ensure_ascii=False, sort_keys=True)
+            with tempfile.NamedTemporaryFile(
+                "w", encoding="utf-8", dir=path.parent, delete=False
+            ) as handle:
+                handle.write(body)
+                temporary_name = handle.name
+            os.replace(temporary_name, path)
+        except (OSError, TypeError, ValueError):
+            return
+        finally:
+            try:
+                if temporary_name and os.path.exists(temporary_name):
+                    os.unlink(temporary_name)
+            except OSError:
+                pass
+
     def _request(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
+        # Caching is off by default (cache_dir=None); when off, skip cache lookups
+        # entirely so behavior is unchanged from before caching existed.
+        cache_key = self._cache_key(endpoint, payload) if self.cache_dir is not None else None
+        if cache_key is not None:
+            cached = self._read_cache(cache_key)
+            if cached is not None:
+                # Cache hit: no network call, so it doesn't touch CallStats (which
+                # tracks live gateway request/success/failure/retry/latency).
+                return cached
+
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         headers = {
@@ -219,6 +288,8 @@ class IntelliHubGPTOSSClient:
                     if not isinstance(parsed, dict):
                         raise RuntimeError("Validator response was not a JSON object")
                     self.call_stats.success_count += 1
+                    if cache_key is not None:
+                        self._write_cache(cache_key, parsed)
                     return parsed
                 except urllib.error.HTTPError as exc:
                     last_error = exc
@@ -264,7 +335,10 @@ class IntelliHubGPTOSSClient:
         return _extract_response_content(response)
 
 
-def build_gpt_oss_client(env_file: str | Path = ".env") -> IntelliHubGPTOSSClient:
+def build_gpt_oss_client(
+    env_file: str | Path = ".env",
+    cache_dir: str | Path | None = None,
+) -> IntelliHubGPTOSSClient:
     settings = _load_validator_settings(env_file)
     api_key = settings["api_key"]
     if not api_key:
@@ -277,6 +351,7 @@ def build_gpt_oss_client(env_file: str | Path = ".env") -> IntelliHubGPTOSSClien
         model_name=settings["model_name"],
         verify_ssl=settings["verify_ssl"],
         ca_bundle=settings["ca_bundle"],
+        cache_dir=cache_dir,
     )
 
 

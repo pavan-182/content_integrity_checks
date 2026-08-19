@@ -32,10 +32,22 @@ NCT_REFERENCE_RE = re.compile(
     r"\bNCT\s*[-_:]?\s*(?P<body>\d[A-Za-z0-9]{0,11}|X{2,}|pending|TBD)\b",
     re.IGNORECASE,
 )
-_OTHER_REGISTRY_PREFIXES = tuple(prefix for prefix in SUPPORTED_REGISTRY_PREFIXES if prefix != "NCT")
+# U1111 (WHO ICTRP's Universal Trial Number) is excluded here because its canonical format,
+# U1111-XXXX-XXXX, has a mandatory hyphen immediately after the prefix. OTHER_REGISTRY_RE's
+# optional separator group below (`[-_:]?`) exists to discard incidental punctuation for
+# registries whose real ID has none there (e.g. "ISRCTN-12345678") -- for U1111 it would instead
+# eat the ID's own required hyphen and corrupt the normalized id. It falls through to the
+# TRIAL_PATTERN-based matcher later in extract_trial_reference_claims, which splits prefix/body
+# without a separator group and so preserves the hyphen intact.
+_OTHER_REGISTRY_PREFIXES = tuple(
+    prefix for prefix in SUPPORTED_REGISTRY_PREFIXES if prefix not in ("NCT", "U1111")
+)
+# Body's leading char class includes "/" so CTRI's CTRI/YYYY/MM/NNNNNN format is captured intact
+# in the body group (a "/" right after the prefix must not be swallowed by the optional
+# separator, or the leading slash would be lost from the normalized trial id).
 OTHER_REGISTRY_RE = re.compile(
     r"\b(?P<prefix>" + "|".join(_OTHER_REGISTRY_PREFIXES) + r")"
-    r"\s*[-_:]?\s*(?P<body>[A-Za-z0-9][A-Za-z0-9._/-]*)\b",
+    r"\s*[-_:]?\s*(?P<body>[A-Za-z0-9/][A-Za-z0-9._/-]*)\b",
     re.IGNORECASE,
 )
 PLACEHOLDER_REGISTRATION_RE = re.compile(
@@ -68,6 +80,11 @@ REGISTRY_NAMES = {
     "EUCTR": "EU Clinical Trials Register",
     "EUDRACT": "EU Clinical Trials Register",
     "CHICTR": "Chinese Clinical Trial Registry",
+    "CTRI": "Clinical Trials Registry - India",
+    "DRKS": "German Clinical Trials Register",
+    "JRCT": "Japan Registry of Clinical Trials",
+    "IRCT": "Iranian Registry of Clinical Trials",
+    "U1111": "WHO ICTRP Universal Trial Number",
 }
 assert set(REGISTRY_NAMES) == {prefix.upper() for prefix in SUPPORTED_REGISTRY_PREFIXES}, (
     "REGISTRY_NAMES must cover exactly the prefixes in SUPPORTED_REGISTRY_PREFIXES; "
@@ -79,6 +96,15 @@ REGISTRY_FORMAT_DESCRIPTIONS = {
     "ANZCTR": "ACTRN followed by the expected fourteen-digit registration number",
     "EU Clinical Trials Register": "a recognised EUCTR or EudraCT registration format",
     "Chinese Clinical Trial Registry": "a recognised ChiCTR registration format",
+    "Clinical Trials Registry - India": "CTRI/YYYY/MM/NNNNNN (year, month, six-digit sequence)",
+    "German Clinical Trials Register": "DRKS followed by exactly eight digits",
+    "Japan Registry of Clinical Trials": (
+        "jRCT followed by a one-character sub-registry code and nine digits"
+    ),
+    "Iranian Registry of Clinical Trials": (
+        "IRCT followed by a fourteen-digit registration number, then N and a revision number"
+    ),
+    "WHO ICTRP Universal Trial Number": "U1111 followed by two hyphen-separated four-character blocks",
 }
 
 
@@ -579,6 +605,22 @@ def _format_valid(prefix: str, normalized_trial_id: str) -> bool:
         "EUCTR": r"EUCTR\d{4}-\d{6}-\d{2}",
         "EUDRACT": r"EUDRACT\d{4}-\d{6}-\d{2}",
         "CHICTR": r"CHICTR[A-Z0-9-]{6,}",
+        # CTRI/YYYY/MM/NNNNNN, e.g. CTRI/2015/03/005634.
+        "CTRI": r"CTRI/\d{4}/\d{2}/\d{6}",
+        # DRKS + 8 digits, e.g. DRKS00005219.
+        "DRKS": r"DRKS\d{8}",
+        # jRCT is the least standardized of these five: real IDs are a one-character
+        # sub-registry code (1/2/3/s/c observed) followed by nine digits, e.g.
+        # jRCT1031190001, jRCTs031190001. Permissive on the sub-registry character
+        # (any alnum) rather than hardcoding the observed set, since new codes could
+        # be added; still anchored on the 1+9 digit length to avoid matching noise.
+        "JRCT": r"JRCT[A-Z0-9]\d{9}",
+        # IRCT + 8-digit date + 6-digit sequence (14 digits), then N + revision number,
+        # e.g. IRCT20090301001709N35. The N<revision> suffix is part of every real IRCT
+        # id (amendments increment it from N1), so it's required, not optional.
+        "IRCT": r"IRCT\d{14}N\d+",
+        # WHO ICTRP Universal Trial Number: U1111-XXXX-XXXX (two 4-char alnum blocks).
+        "U1111": r"U1111-[A-Z0-9]{4}-[A-Z0-9]{4}",
     }
     return bool(re.fullmatch(patterns[prefix.upper()], normalized_trial_id, re.IGNORECASE))
 
@@ -647,6 +689,9 @@ def extract_trial_reference_claims(record: ParsedRecord) -> list[TrialReferenceC
                 occupied.append(match.span())
 
         # Reuse the repository's broader prefix matcher without duplicating matched spans.
+        # This is also where U1111 (WHO ICTRP UTN) IDs get extracted: it is deliberately absent
+        # from _OTHER_REGISTRY_PREFIXES (see comment above OTHER_REGISTRY_RE), and this
+        # separator-free prefix/body split is what keeps its mandatory hyphen intact.
         for match in TRIAL_PATTERN.finditer(sentence):
             if any(match.start() < end and start < match.end() for start, end in occupied):
                 continue
