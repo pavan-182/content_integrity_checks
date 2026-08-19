@@ -888,7 +888,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     if config.detect_nonsense_candidates or config.detect_llm_semantic or config.validate_llm:
         llm_client = _run_detector(
             "gpt_oss_model",
-            build_gpt_oss_client,
+            lambda: build_gpt_oss_client(cache_dir=config.output_dir / ".gpt_oss_cache"),
             operational_issues,
             None,
         )
