@@ -48,7 +48,15 @@ from .enriched_reporting import (
     build_enriched_reports,
     directional_finding_rows,
 )
-from .entity_extraction import model_inference_count, reset_model_inference_count
+from .editorial_scoring import SCORING_VERSION as EDITORIAL_SCORING_VERSION
+from .entity_extraction import (
+    VOCABULARY_VERSION as ENTITY_VOCABULARY_VERSION,
+    model_inference_count,
+    reset_model_inference_count,
+)
+from .family_clustering import FAMILY_VERSION as TEMPLATE_FAMILY_VERSION
+from .pair_classification import CLASSIFIER_VERSION as TEMPLATE_PAIR_CLASSIFIER_VERSION
+from .signal_validation import VALIDATION_VERSION as TEMPLATE_SIGNAL_VALIDATION_VERSION
 from .template_clustering import (
     CONFIDENCE_RANK,
     PairFinding,
@@ -56,7 +64,7 @@ from .template_clustering import (
     merge_pair_findings,
     other_record_id,
 )
-from .template_features import build_template_features
+from .template_features import FEATURE_VERSION as TEMPLATE_FEATURE_VERSION, build_template_features
 from .reporting import (
     AUTHORSHIP_CHECKS,
     build_content_integrity_frontend_json,
@@ -73,6 +81,10 @@ from .xml_parser import discover_xml_files, parse_xml_records
 
 
 RISK_INELIGIBLE_CHECK_TYPES = {"unsupported_registry_manual_verification"}
+# Components that consume `comparable_records`; a record excluded there means none of these
+# checks ran for it, so each must get its own operational issue (component names match what
+# reporting.py's _component_failed() looks up) instead of silently reading as a clean pass.
+COMPARABILITY_GATED_COMPONENTS = ("numerical_contradiction", "design_contradiction", "unverifiable_clinical_trial")
 
 
 def _normalized_validation_status(finding: Finding) -> str:
@@ -935,11 +947,27 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     apply_llm_trace_validation(llm_candidates, llm_validator)
     findings.extend(candidate_to_finding(candidate) for candidate in llm_candidates)
 
-    comparable_records = [
-        record
+    def _is_comparable(record: ParsedRecord) -> bool:
+        return record.parse_status != "failed" and bool(record.title.strip() or record.abstract_text.strip())
+
+    comparable_records = [record for record in records if _is_comparable(record)]
+    operational_issues.extend(
+        OperationalIssue(
+            component=component,
+            error_type="record_excluded_parse_failed" if record.parse_status == "failed" else "record_excluded_no_text",
+            message=(
+                "This check did not run: XML parsing failed for this record."
+                if record.parse_status == "failed"
+                else "This check did not run: record has no usable title or abstract text."
+            ),
+            record_id=record.record_id,
+            source_file=record.source_file,
+            recoverable=False,
+        )
         for record in records
-        if record.parse_status != "failed" and (record.title.strip() or record.abstract_text.strip())
-    ]
+        if not _is_comparable(record)
+        for component in COMPARABILITY_GATED_COMPONENTS
+    )
     numerical_results = _run_detector(
         "numerical_contradiction",
         lambda: detect_numerical_contradictions(comparable_records),
@@ -1096,6 +1124,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     commit_sha, worktree_dirty = _git_revision()
     catalogue_version, catalogue_checksum = catalogue_metadata()
     llm_findings = [finding for finding in findings if finding.detector_type == "llm_response_trace"]
+    llm_call_stats = getattr(llm_client, "call_stats", None)
     run_metadata_rows: list[tuple[str, Any]] = [
         ("run_date_utc", now.isoformat()),
         ("code_commit_sha", commit_sha),
@@ -1154,6 +1183,26 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         ("template_finding_directional_row_count", len(reviewer_pair_rows)),
         ("template_insufficient_evidence_count", sum(row["review_priority"] == "None" for row in enriched_pair_rows)),
         ("enriched_family_count", len(enriched_family_rows)),
+        ("template_feature_version", TEMPLATE_FEATURE_VERSION),
+        ("template_pair_classifier_version", TEMPLATE_PAIR_CLASSIFIER_VERSION),
+        ("template_signal_validation_version", TEMPLATE_SIGNAL_VALIDATION_VERSION),
+        ("template_family_version", TEMPLATE_FAMILY_VERSION),
+        ("editorial_scoring_version", EDITORIAL_SCORING_VERSION),
+        ("entity_vocabulary_version", ENTITY_VOCABULARY_VERSION),
+        ("comparable_record_count", len(comparable_records)),
+        ("records_excluded_from_numerical_design_trial_checks", len(records) - len(comparable_records)),
+        ("llm_gateway_request_count", llm_call_stats.request_count if llm_call_stats else 0),
+        ("llm_gateway_success_count", llm_call_stats.success_count if llm_call_stats else 0),
+        ("llm_gateway_failure_count", llm_call_stats.failure_count if llm_call_stats else 0),
+        ("llm_gateway_retry_count", llm_call_stats.retry_count if llm_call_stats else 0),
+        ("llm_gateway_total_latency_seconds", round(llm_call_stats.total_latency_seconds, 3) if llm_call_stats else 0.0),
+        (
+            "llm_gateway_avg_latency_seconds",
+            round(llm_call_stats.total_latency_seconds / llm_call_stats.request_count, 3)
+            if llm_call_stats and llm_call_stats.request_count
+            else 0.0,
+        ),
+        ("llm_gateway_max_latency_seconds", round(llm_call_stats.max_latency_seconds, 3) if llm_call_stats else 0.0),
         ("operational_issue_count", len(reporting_operational_issues)),
         ("limitations", "Rule-based screening flags explicit LLM response traces, known tortured phrases, and repeated abstract skeletons; optional GPT-OSS stages only annotate candidates, and the pipeline does not detect AI-generated authorship."),
         ("excluded_scope", "AI-generated text detection"),

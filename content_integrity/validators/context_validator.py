@@ -8,6 +8,7 @@ import ssl
 import time
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -147,6 +148,22 @@ def _parse_validator_payload(raw: str) -> dict[str, Any]:
     return parsed
 
 
+@dataclass
+class CallStats:
+    """Aggregate success/latency telemetry for every GPT-OSS call, across every call site.
+
+    All detectors share one IntelliHubGPTOSSClient instance per run, so instrumenting
+    _request() here is the single point that observes every gateway call in the pipeline.
+    """
+
+    request_count: int = 0
+    success_count: int = 0
+    failure_count: int = 0
+    retry_count: int = 0
+    total_latency_seconds: float = 0.0
+    max_latency_seconds: float = 0.0
+
+
 class IntelliHubGPTOSSClient:
     def __init__(
         self,
@@ -176,6 +193,7 @@ class IntelliHubGPTOSSClient:
         self.timeout_seconds = timeout_seconds
         self.max_attempts = max_attempts
         self.backoff_seconds = backoff_seconds
+        self.call_stats = CallStats()
 
     def _request(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
@@ -186,29 +204,43 @@ class IntelliHubGPTOSSClient:
         }
         context = _ssl_context(self.verify_ssl, self.ca_bundle)
         last_error: Exception | None = None
-        for attempt in range(1, self.max_attempts + 1):
-            try:
-                request = urllib.request.Request(url, data=body, headers=headers, method="POST")
-                with urllib.request.urlopen(request, timeout=self.timeout_seconds, context=context) as response:
-                    raw = response.read().decode("utf-8")
-                parsed = json.loads(raw)
-                if not isinstance(parsed, dict):
-                    raise RuntimeError("Validator response was not a JSON object")
-                return parsed
-            except urllib.error.HTTPError as exc:
-                last_error = exc
-                retryable = exc.code == 429 or exc.code >= 500
-                if not retryable or attempt == self.max_attempts:
-                    raise RuntimeError(f"Validator request failed with HTTP {exc.code}") from exc
-            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, RuntimeError) as exc:
-                last_error = exc
-                if attempt == self.max_attempts:
-                    raise RuntimeError("Validator request failed") from exc
-            if attempt < self.max_attempts:
-                time.sleep(self.backoff_seconds * (2 ** (attempt - 1)))
-        if last_error is not None:
-            raise RuntimeError("Validator request failed") from last_error
-        raise RuntimeError("Validator request failed")
+        start = time.perf_counter()
+        self.call_stats.request_count += 1
+        attempts_used = 0
+        try:
+            for attempt in range(1, self.max_attempts + 1):
+                attempts_used = attempt
+                try:
+                    request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+                    with urllib.request.urlopen(request, timeout=self.timeout_seconds, context=context) as response:
+                        raw = response.read().decode("utf-8")
+                    parsed = json.loads(raw)
+                    if not isinstance(parsed, dict):
+                        raise RuntimeError("Validator response was not a JSON object")
+                    self.call_stats.success_count += 1
+                    return parsed
+                except urllib.error.HTTPError as exc:
+                    last_error = exc
+                    retryable = exc.code == 429 or exc.code >= 500
+                    if not retryable or attempt == self.max_attempts:
+                        raise RuntimeError(f"Validator request failed with HTTP {exc.code}") from exc
+                except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, RuntimeError) as exc:
+                    last_error = exc
+                    if attempt == self.max_attempts:
+                        raise RuntimeError("Validator request failed") from exc
+                if attempt < self.max_attempts:
+                    time.sleep(self.backoff_seconds * (2 ** (attempt - 1)))
+            if last_error is not None:
+                raise RuntimeError("Validator request failed") from last_error
+            raise RuntimeError("Validator request failed")
+        except Exception:
+            self.call_stats.failure_count += 1
+            raise
+        finally:
+            self.call_stats.retry_count += max(attempts_used - 1, 0)
+            elapsed = time.perf_counter() - start
+            self.call_stats.total_latency_seconds += elapsed
+            self.call_stats.max_latency_seconds = max(self.call_stats.max_latency_seconds, elapsed)
 
     def complete(
         self,
