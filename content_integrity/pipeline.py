@@ -1036,6 +1036,8 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
                 finding.validation_status = result.status
                 finding.validation_reason = result.reason
                 finding.validated_by = f"{result.model_id}:{result.prompt_version}"
+                if result.confidence is not None:
+                    finding.confidence = result.confidence
 
     template_features = _run_detector(
         "shared_preprocessing",
@@ -1166,7 +1168,12 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         ("llm_supporting_only_count", sum(finding.review_status == "supporting_only" for finding in llm_findings)),
         ("tortured_rule_count", len(tortured_rules)),
         ("tortured_proximity_rule_count", sum(1 for rule in tortured_rules if rule.proximity)),
-        ("tortured_confidence_basis", "heuristic_rule_strength_not_calibrated_probability"),
+        (
+            "tortured_confidence_basis",
+            "llm_calibrated_probability_when_validated_else_heuristic_rule_strength"
+            if config.validate_llm
+            else "heuristic_rule_strength_not_calibrated_probability",
+        ),
         ("dictionary_version", config.dictionary_version),
         ("tortured_dictionary_version", tortured_rules[0].dictionary_version if tortured_rules else ""),
         ("tortured_dictionary_path", str(config.tortured_dictionary_path)),

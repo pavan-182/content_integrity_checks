@@ -1100,6 +1100,36 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(result.reason, "Validator response could not be parsed.")
         self.assertEqual(result.finding_id, "FND-00001")
 
+    def test_validator_confidence_out_of_range_is_validation_failed(self) -> None:
+        class BadConfidenceClient:
+            def complete(self, *, system: str, user: str, max_tokens: int = 150, temperature: float = 0.0) -> str:
+                return '{"status":"confirmed","confidence":1.5,"reason":"Odd substitution."}'
+
+        result = ContextValidator(client=BadConfidenceClient()).validate(_tortured_finding())
+
+        self.assertEqual(result.status, "validation_failed")
+        self.assertIsNone(result.confidence)
+
+    def test_validator_missing_confidence_is_validation_failed(self) -> None:
+        class NoConfidenceClient:
+            def complete(self, *, system: str, user: str, max_tokens: int = 150, temperature: float = 0.0) -> str:
+                return '{"status":"confirmed","reason":"Odd substitution."}'
+
+        result = ContextValidator(client=NoConfidenceClient()).validate(_tortured_finding())
+
+        self.assertEqual(result.status, "validation_failed")
+        self.assertIsNone(result.confidence)
+
+    def test_validator_propagates_calibrated_confidence(self) -> None:
+        class ConfidentClient:
+            def complete(self, *, system: str, user: str, max_tokens: int = 150, temperature: float = 0.0) -> str:
+                return '{"status":"confirmed","confidence":0.63,"reason":"Odd substitution."}'
+
+        result = ContextValidator(client=ConfidentClient()).validate(_tortured_finding())
+
+        self.assertEqual(result.status, "confirmed")
+        self.assertEqual(result.confidence, 0.63)
+
     def test_validator_marks_incomplete_payload_validation_failed(self) -> None:
         class BrokenClient:
             def complete(self, *, system: str, user: str, max_tokens: int = 150, temperature: float = 0.0) -> str:
@@ -1122,7 +1152,7 @@ class PipelineTests(unittest.TestCase):
 
         class UncertainClient:
             def complete(self, *, system: str, user: str, max_tokens: int = 150, temperature: float = 0.0) -> str:
-                return '{"status":"uncertain","reason":"The phrase may be legitimate in this context."}'
+                return '{"status":"uncertain","confidence":0.5,"reason":"The phrase may be legitimate in this context."}'
 
         uncertain_finding = _tortured_finding()
         uncertain = ContextValidator(client=UncertainClient()).validate(uncertain_finding)
@@ -1194,7 +1224,11 @@ class PipelineTests(unittest.TestCase):
 
             def complete(self, *, system: str, user: str, max_tokens: int = 150, temperature: float = 0.0) -> str:
                 self.max_tokens_requested = max_tokens
-                payload = {"status": "rejected", "reason": "Standard terminology, not a plausible substitution."}
+                payload = {
+                    "status": "rejected",
+                    "confidence": 0.05,
+                    "reason": "Standard terminology, not a plausible substitution.",
+                }
                 return f"```json\n{json.dumps(payload)}\n```"
 
         with tempfile.TemporaryDirectory() as temp_dir_str:
@@ -1240,8 +1274,9 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(tortured_findings[0].validation_status, "rejected")
             self.assertEqual(
                 tortured_findings[0].validated_by,
-                "gpt-oss-20b:context_validator_v2",
+                "gpt-oss-20b:context_validator_v3",
             )
+            self.assertEqual(tortured_findings[0].confidence, 0.05)
             summary = result.abstract_summary_rows[0]
             self.assertEqual(summary["tortured_rejected_count"], 1)
             self.assertEqual(summary["total_finding_count"], 0)

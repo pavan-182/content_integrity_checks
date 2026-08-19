@@ -26,7 +26,7 @@ from ..utils import normalize_whitespace
 
 logger = logging.getLogger(__name__)
 
-PROMPT_VERSION = "context_validator_v2"
+PROMPT_VERSION = "context_validator_v3"
 MODEL_ID = "gpt-oss-20b"
 DEFAULT_MODEL_NAME = "prod/gpt-oss-20b"
 DEFAULT_BASE_URL = "https://intellihub.tnq.co.in/llm_gateway/api/v1"
@@ -44,7 +44,12 @@ SYSTEM_PROMPT = (
     "domain term that only superficially overlaps the pattern, an implausible synonym pairing, "
     "or coincidental phrasing with no plausible link to AI-generated residue.\n"
     '- "uncertain": you cannot confidently decide either way from the given context.\n\n'
-    'Respond with strict JSON only: {"status": "...", "reason": "..."}\n'
+    "Also give confidence: your calibrated probability, from 0.0 to 1.0, that this is a genuine "
+    "content-integrity concern (independent of which status you picked above) - e.g. a clear-cut "
+    "confirmed case should score near 1.0, a clear-cut rejected case near 0.0, and genuine "
+    "uncertainty somewhere in between. Use the full range; do not default to round numbers out of "
+    "habit.\n\n"
+    'Respond with strict JSON only: {"status": "...", "confidence": 0.0, "reason": "..."}\n'
     "The reason must be one plain sentence an editor with no technical background can read directly.\n"
     'Do not use the words "hallucination", "token", or "embedding".'
 )
@@ -393,17 +398,22 @@ class ContextValidator:
             parsed = _parse_validator_payload(raw)
             status = normalize_whitespace(str(parsed["status"])).lower()
             reason = normalize_whitespace(str(parsed["reason"]))
+            confidence = float(parsed["confidence"])
             if status not in {"confirmed", "rejected", "uncertain"}:
                 raise ValueError("validator payload contains unsupported status")
             if not reason:
                 raise ValueError("validator payload missing reason")
+            if not 0.0 <= confidence <= 1.0:
+                raise ValueError("validator payload confidence out of range")
         except RuntimeError as exc:
             status = "validation_failed"
             reason = "Validator request failed because of an infrastructure error."
+            confidence = None
             logger.exception("Tortured phrase validator infrastructure failure: %s", exc)
         except (KeyError, TypeError, ValueError) as exc:
             status = "validation_failed"
             reason = "Validator response could not be parsed."
+            confidence = None
             logger.exception("Tortured phrase validator response parsing failure: %s", exc)
 
         return ValidationResult(
@@ -412,4 +422,5 @@ class ContextValidator:
             reason=reason,
             model_id=self.model_id,
             prompt_version=self.prompt_version,
+            confidence=confidence,
         )

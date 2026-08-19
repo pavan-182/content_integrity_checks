@@ -93,6 +93,9 @@ class ValidationResult:
     reason: str
     model_id: str
     prompt_version: str
+    # Calibrated P(genuine concern) in [0, 1] from the validator model; None when not supplied
+    # (e.g. llm_response_trace validation, which does not score confidence).
+    confidence: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
