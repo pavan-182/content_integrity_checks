@@ -4,20 +4,12 @@ from dataclasses import asdict, dataclass
 
 from .models import ParsedRecord
 from .pair_evidence import PairEvidence, collect_pair_evidence
+from .thresholds import (
+    EVIDENCE_SCORING_PRIMARY_WEIGHTS as PRIMARY_WEIGHTS,
+    EVIDENCE_SCORING_SECTION_WEIGHTS as SECTION_WEIGHTS,
+    EVIDENCE_SCORING_SUPPORTING_SECTION_THRESHOLD as SUPPORTING_SECTION_THRESHOLD,
+)
 from .utils import normalize_for_matching, normalize_label
-
-
-PRIMARY_WEIGHTS = {
-    "exact_original_body": 1.0,
-    "exact_results_section": 1.0,
-    "substantial_shared_original_block": 0.85,
-    "strong_masked_body_with_original_support": 0.75,
-    "entity_normalized_template": 0.75,
-    "distinctive_shared_text": 0.85,
-    "masked_title_template_with_original_support": 0.65,
-}
-SECTION_WEIGHTS = {"result": 0.20, "conclusion": 0.20, "background": 0.10, "method": 0.05}
-SUPPORTING_SECTION_THRESHOLD = 0.75
 
 
 def _context(left: ParsedRecord, right: ParsedRecord) -> tuple[str, ...]:

@@ -24,6 +24,10 @@ def lowercase_normalize(text: str | None) -> str:
     return normalize_whitespace(text).lower()
 
 
+def split_sentences(text: str) -> list[str]:
+    return [piece.strip() for piece in re.split(r"(?<=[.!?])\s+", normalize_whitespace(text)) if piece.strip()]
+
+
 def text_tokens(text: str | None) -> list[str]:
     if not text:
         return []

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from collections import defaultdict
 from difflib import SequenceMatcher
 from typing import Any
@@ -14,7 +13,7 @@ from .pair_classification import classify_pairs
 from .pair_evidence import collect_pair_evidence
 from .study_context import compare_study_context
 from .template_features import TemplateFeatures, build_template_features
-from .utils import normalize_for_matching, text_tokens
+from .utils import normalize_for_matching, split_sentences, text_tokens
 
 
 REPORT_VERSION = "asco-enriched-report-v1"
@@ -56,12 +55,7 @@ def _reverse_substitutions(value: object) -> str:
 
 def _abstract_windows(record: ParsedRecord) -> list[str]:
     sections = [item.get("text", "") for item in record.abstract_sections] or [record.abstract_text]
-    sentences = [
-        sentence.strip()
-        for section in sections
-        for sentence in re.split(r"(?<=[.!?])\s+", section)
-        if sentence.strip()
-    ]
+    sentences = [sentence for section in sections for sentence in split_sentences(section)]
     return sentences + [" ".join(sentences[index:index + 2]) for index in range(len(sentences) - 1)]
 
 

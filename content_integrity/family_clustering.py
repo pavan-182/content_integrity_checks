@@ -1,3 +1,13 @@
+"""Connected-component clustering of templated abstract families (>=3 linked records).
+
+Reaches content_integrity_results.json's top-level `template_families` array (via
+enriched_reporting.build_enriched_reports) today; it is intentionally NOT surfaced in the
+Editor Triage Workbook or the frontend yet, pending evidence that editors would use a
+dedicated family view instead of the existing pairwise rows. Ship-or-delete is an open
+product decision, not forgotten technical debt - see the Content Integrity Pipeline Audit,
+Overengineering Log OE-05.
+"""
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -5,11 +15,11 @@ from dataclasses import asdict, dataclass
 
 from .models import ParsedRecord
 from .pair_classification import PairClassification, classify_pairs
+from .thresholds import FAMILY_CLUSTERING_MIN_EDGE_SCORE as MIN_EDGE_SCORE
 
 
 FAMILY_VERSION = "asco-suspicious-families-v1"
 ELIGIBLE_CLASSES = {"possible_template_reuse"}
-MIN_EDGE_SCORE = 0.75
 
 
 @dataclass(frozen=True, slots=True)

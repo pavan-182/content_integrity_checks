@@ -7,12 +7,12 @@ from typing import Any
 from .candidate_routes import generate_candidate_pairs
 from .models import ParsedRecord
 from .template_features import TemplateFeatures, build_template_features
+from .thresholds import (
+    PAIR_EVIDENCE_MIN_SHARED_BLOCK_WORDS as MIN_SHARED_BLOCK_WORDS,
+    PAIR_EVIDENCE_ORIGINAL_SUPPORT as ORIGINAL_SUPPORT,
+    PAIR_EVIDENCE_STRONG_MASKED_BODY as STRONG_MASKED_BODY,
+)
 from .utils import normalize_for_matching, normalize_label, text_tokens
-
-
-STRONG_MASKED_BODY = 0.88
-ORIGINAL_SUPPORT = 0.55
-MIN_SHARED_BLOCK_WORDS = 30
 
 
 def _similarity(left: str, right: str) -> float:

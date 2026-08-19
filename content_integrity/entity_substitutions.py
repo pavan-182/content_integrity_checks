@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import re
 from dataclasses import asdict, dataclass
 
 from .candidate_routes import generate_candidate_pairs
 from .pair_evidence import PairEvidence
 from .template_features import TemplateFeatures, build_template_features
-from .utils import normalize_whitespace
+from .utils import normalize_whitespace, split_sentences
 
 
 ENTITY_TYPE_ORDER = (
@@ -20,7 +19,7 @@ SUBSTITUTABLE_TYPES = ENTITY_TYPES - {"assay", "treatment_class"}
 def _entities(feature: TemplateFeatures) -> dict[str, dict[str, tuple[str, str]]]:
     values: dict[str, dict[str, tuple[str, str]]] = {}
     for section in (feature.title, feature.abstract):
-        sentences = re.split(r"(?<=[.!?])\s+", section.original)
+        sentences = split_sentences(section.original)
         for entity in section.entities:
             if entity.entity_type not in ENTITY_TYPES or not entity.normalized:
                 continue

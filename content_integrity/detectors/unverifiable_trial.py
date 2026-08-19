@@ -16,22 +16,25 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
 
 from ..models import ParsedRecord
-from ..template_matching_common import TRIAL_PATTERN, _sentence_split
+from ..template_matching_common import SUPPORTED_REGISTRY_PREFIXES, TRIAL_PATTERN, _sentence_split
+from ..thresholds import (
+    UNVERIFIABLE_TRIAL_DEFAULT_MAX_CONCURRENT_LOOKUPS as DEFAULT_MAX_CONCURRENT_LOOKUPS,
+    UNVERIFIABLE_TRIAL_DEFAULT_MAX_RETRIES as DEFAULT_MAX_RETRIES,
+    UNVERIFIABLE_TRIAL_DEFAULT_TIMEOUT_SECONDS as DEFAULT_TIMEOUT_SECONDS,
+)
 from ..utils import normalize_label, normalize_whitespace
 
 
 CLINICAL_TRIALS_GOV = "ClinicalTrials.gov"
-DEFAULT_TIMEOUT_SECONDS = 10.0
-DEFAULT_MAX_RETRIES = 2
-DEFAULT_MAX_CONCURRENT_LOOKUPS = 4
 CLINICAL_TRIALS_GOV_API = "https://clinicaltrials.gov/api/v2/studies"
 
 NCT_REFERENCE_RE = re.compile(
     r"\bNCT\s*[-_:]?\s*(?P<body>\d[A-Za-z0-9]{0,11}|X{2,}|pending|TBD)\b",
     re.IGNORECASE,
 )
+_OTHER_REGISTRY_PREFIXES = tuple(prefix for prefix in SUPPORTED_REGISTRY_PREFIXES if prefix != "NCT")
 OTHER_REGISTRY_RE = re.compile(
-    r"\b(?P<prefix>ISRCTN|ACTRN|EUCTR|EudraCT|ChiCTR)"
+    r"\b(?P<prefix>" + "|".join(_OTHER_REGISTRY_PREFIXES) + r")"
     r"\s*[-_:]?\s*(?P<body>[A-Za-z0-9][A-Za-z0-9._/-]*)\b",
     re.IGNORECASE,
 )
@@ -66,6 +69,10 @@ REGISTRY_NAMES = {
     "EUDRACT": "EU Clinical Trials Register",
     "CHICTR": "Chinese Clinical Trial Registry",
 }
+assert set(REGISTRY_NAMES) == {prefix.upper() for prefix in SUPPORTED_REGISTRY_PREFIXES}, (
+    "REGISTRY_NAMES must cover exactly the prefixes in SUPPORTED_REGISTRY_PREFIXES; "
+    "adding a registry prefix without a display name (or vice versa) is a bug."
+)
 REGISTRY_FORMAT_DESCRIPTIONS = {
     CLINICAL_TRIALS_GOV: "NCT followed by exactly eight digits",
     "ISRCTN": "ISRCTN followed by exactly eight digits",
@@ -644,7 +651,7 @@ def extract_trial_reference_claims(record: ParsedRecord) -> list[TrialReferenceC
             if any(match.start() < end and start < match.end() for start, end in occupied):
                 continue
             prefix_match = re.match(
-                r"(?P<prefix>NCT|ISRCTN|ACTRN|EUCTR|EudraCT|ChiCTR)(?P<body>.+)",
+                r"(?P<prefix>" + "|".join(SUPPORTED_REGISTRY_PREFIXES) + r")(?P<body>.+)",
                 match.group(0),
                 re.IGNORECASE,
             )

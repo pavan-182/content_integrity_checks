@@ -224,6 +224,13 @@ def load_tortured_rules(csv_path: str | Path, dictionary_version: str = "") -> l
                 continue
             if len(token_pattern) < 2 and not (required_groups or excluded):
                 continue
+            if proximity and len(token_pattern) == 1:
+                import warnings
+                warnings.warn(
+                    f"Rule {raw_query!r} specifies ~{proximity} proximity on a single token "
+                    "(unsupported; proximity matching requires 2+ tokens). Operator will be ignored.",
+                    stacklevel=2,
+                )
             severity = "high" if normalize_for_matching(matched_phrase) in high_severity_seed else "medium"
             confidence = 0.98 if severity == "high" else 0.87
             identity = f"{normalize_for_matching(raw_query)}\0{normalize_for_matching(expected_term)}"

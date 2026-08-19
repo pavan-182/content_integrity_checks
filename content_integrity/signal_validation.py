@@ -10,11 +10,11 @@ from pathlib import Path
 from .candidate_routes import generate_candidate_pairs
 from .entity_extraction import extract_typed_entities
 from .models import ParsedRecord
-from .utils import normalize_for_matching, normalize_whitespace
+from .thresholds import SIGNAL_VALIDATION_MAX_SIGNATURE_BUCKET as MAX_SIGNATURE_BUCKET
+from .utils import normalize_for_matching, normalize_whitespace, split_sentences
 
 
 VALIDATION_VERSION = "asco-signal-validation-v1"
-MAX_SIGNATURE_BUCKET = 20
 RELATION_RE = re.compile(r"\b(regulates?|targets?|activates?|inhibits?|sponges?)\b", re.IGNORECASE)
 MOLECULAR_TYPES = {"lncrna", "mirna", "gene", "protein", "pathway", "biomarker"}
 POSITIVE_VERDICTS = {
@@ -62,7 +62,7 @@ class SignatureEvidence:
 
 
 def _sentences(text: str) -> list[str]:
-    return [item for item in re.split(r"(?<=[.!?])\s+", normalize_whitespace(text)) if item]
+    return split_sentences(text)
 
 
 def molecular_axis_signatures(record: ParsedRecord) -> list[SignatureEvidence]:

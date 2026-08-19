@@ -31,6 +31,8 @@ from .detectors.nonsense_candidate import NonsenseRunStats
 from .models import Finding, OperationalIssue, ParsedRecord
 from .rules import catalogue_metadata
 from .detectors.design_contradiction import (
+    PROMPT_VERSION as DESIGN_CONTRADICTION_PROMPT_VERSION,
+    RULE_TABLE_VERSION as DESIGN_CONTRADICTION_RULE_TABLE_VERSION,
     LLMDesignContradictionValidator,
     detect_design_contradictions,
 )
@@ -1189,6 +1191,9 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         ("template_family_version", TEMPLATE_FAMILY_VERSION),
         ("editorial_scoring_version", EDITORIAL_SCORING_VERSION),
         ("entity_vocabulary_version", ENTITY_VOCABULARY_VERSION),
+        ("threshold_config_module", "content_integrity.thresholds"),
+        ("design_contradiction_rule_table_version", DESIGN_CONTRADICTION_RULE_TABLE_VERSION),
+        ("design_contradiction_prompt_version", DESIGN_CONTRADICTION_PROMPT_VERSION),
         ("comparable_record_count", len(comparable_records)),
         ("records_excluded_from_numerical_design_trial_checks", len(records) - len(comparable_records)),
         ("llm_gateway_request_count", llm_call_stats.request_count if llm_call_stats else 0),

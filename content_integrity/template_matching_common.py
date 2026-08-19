@@ -7,7 +7,14 @@ from hashlib import blake2b
 from itertools import combinations
 
 from .models import ParsedRecord
-from .utils import normalize_for_matching, normalize_whitespace, text_tokens
+from .thresholds import (
+    TEMPLATE_MATCHING_COMMON_MAX_APPROXIMATE_BUCKET as MAX_APPROXIMATE_BUCKET,
+    TEMPLATE_MATCHING_COMMON_MAX_NGRAM_BUCKET as MAX_NGRAM_BUCKET,
+    TEMPLATE_MATCHING_COMMON_MIN_SHARED_NGRAMS as MIN_SHARED_NGRAMS,
+    TEMPLATE_MATCHING_COMMON_NGRAM_SIZE as NGRAM_SIZE,
+    TEMPLATE_MATCHING_COMMON_SECTION_WEIGHTS as SECTION_WEIGHTS,
+)
+from .utils import normalize_for_matching, normalize_whitespace, split_sentences, text_tokens
 
 
 DATE_PATTERNS = [
@@ -22,7 +29,12 @@ DATE_PATTERNS = [
 PVAL_PATTERN = re.compile(r"\bp\s*[<>=]\s*0?\.\d+\b", re.IGNORECASE)
 PERCENT_PATTERN = re.compile(r"\b\d+(?:\.\d+)?\s*%")
 NUMBER_PATTERN = re.compile(r"\b\d+(?:\.\d+)?\b")
-TRIAL_PATTERN = re.compile(r"\b(?:NCT|ACTRN|ISRCTN|EUCTR|EudraCT|ChiCTR)[A-Za-z0-9\-_.]+\b", re.IGNORECASE)
+# Single source of truth for supported trial-registry prefixes; unverifiable_trial.py builds its
+# own registry-specific regexes from this instead of re-listing the prefixes independently.
+SUPPORTED_REGISTRY_PREFIXES = ("NCT", "ISRCTN", "ACTRN", "EUCTR", "EudraCT", "ChiCTR")
+TRIAL_PATTERN = re.compile(
+    r"\b(?:" + "|".join(SUPPORTED_REGISTRY_PREFIXES) + r")[A-Za-z0-9\-_.]+\b", re.IGNORECASE
+)
 GENE_PATTERN = re.compile(r"\b(?:[A-Z]{2,}\d+[A-Z0-9\-]*|[A-Z]{2,}-\d+[A-Z0-9\-]*)\b")
 DRUG_SUFFIX_PATTERN = re.compile(
     r"\b[A-Za-z]{4,}(?:mab|nib|tinib|cept|vir|statin|caftor|parib|azole|cillin|ximab|zumab|ib)\b",
@@ -40,12 +52,6 @@ PLACEHOLDER_TOKENS = {
     "line", "assay", "endpoint", "registry", "population", "treatment", "class", "num",
 }
 BOILERPLATE_RE = re.compile(r"\b(?:n a n a|not applicable|none|n a)\b")
-# ponytail: provisional transparent weights; replace after labelled ASCO calibration.
-SECTION_WEIGHTS = {"background": 0.1, "methods": 0.2, "results": 0.4, "conclusions": 0.3}
-NGRAM_SIZE = 5
-MIN_SHARED_NGRAMS = 3
-MAX_NGRAM_BUCKET = 50
-MAX_APPROXIMATE_BUCKET = 50
 
 
 def _entity_shape_key(skeleton: str, bucket_size: int = 5) -> str:
@@ -55,7 +61,7 @@ def _entity_shape_key(skeleton: str, bucket_size: int = 5) -> str:
 
 
 def _sentence_split(text: str) -> list[str]:
-    return [piece.strip() for piece in re.split(r"(?<=[.!?])\s+", normalize_whitespace(text)) if piece.strip()]
+    return split_sentences(text)
 
 
 def _mask_variables(text: str) -> str:

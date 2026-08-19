@@ -20,6 +20,12 @@ from typing import Any, Iterable, Sequence
 
 from ..models import Finding, ParsedRecord
 from ..template_matching_common import BOILERPLATE_RE, DRUG_SUFFIX_PATTERN, GENE_PATTERN, _sentence_split
+from ..thresholds import (
+    NONSENSE_CANDIDATE_DEFAULT_MAX_CONCURRENT_BATCHES as DEFAULT_MAX_CONCURRENT_BATCHES,
+    NONSENSE_CANDIDATE_DEFAULT_SENTENCES_PER_BATCH as DEFAULT_SENTENCES_PER_BATCH,
+    NONSENSE_CANDIDATE_MIN_SENTENCE_TOKENS as MIN_SENTENCE_TOKENS,
+    NONSENSE_CANDIDATE_MODEL_RESPONSE_ATTEMPTS as MODEL_RESPONSE_ATTEMPTS,
+)
 from ..utils import normalize_for_matching, normalize_whitespace, text_tokens
 from ..validators.context_validator import MODEL_ID, _parse_validator_payload
 from .tortured_phrase import TorturedRule
@@ -27,10 +33,6 @@ from .tortured_phrase import TorturedRule
 
 PROMPT_VERSION = "nonsense_candidate_v2"
 RULE_ID = "NONSENSE-GPT-OSS-V1"
-MIN_SENTENCE_TOKENS = 8
-DEFAULT_SENTENCES_PER_BATCH = 10
-DEFAULT_MAX_CONCURRENT_BATCHES = 4
-MODEL_RESPONSE_ATTEMPTS = 2
 CONFIDENCE = {"low": 0.55, "medium": 0.72, "high": 0.88}
 SECTION_HEADER_RE = re.compile(
     r"^(?:background|objective|methods?|results?|conclusions?|discussion|introduction)\s*[:.\-]?$",

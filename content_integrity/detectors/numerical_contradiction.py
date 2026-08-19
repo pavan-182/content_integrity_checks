@@ -16,10 +16,8 @@ from typing import Any
 
 from ..models import ParsedRecord
 from ..template_matching_common import _sentence_split
+from ..thresholds import NUMERICAL_CONTRADICTION_PERCENTAGE_TOLERANCE as PERCENTAGE_TOLERANCE
 from ..utils import normalize_label, normalize_whitespace
-
-
-PERCENTAGE_TOLERANCE = 1.0
 NUMBER = r"-?\d+(?:\.\d+)?"
 PERCENT_NUMBER = r"-?\d+(?:[.,]\d+)?"
 POPULATION = r"patients?|participants?|subjects?|cases?"

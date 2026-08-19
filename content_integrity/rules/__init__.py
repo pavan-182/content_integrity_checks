@@ -8,6 +8,8 @@ from typing import Any
 
 import yaml
 
+from ..thresholds import RULES_SIGNAL_LEVEL_DEFAULT_CONFIDENCE
+
 
 CATALOGUE_PATH = Path(__file__).with_name("llm_response_trace_rules.yaml")
 REQUIRED_FIELDS = {
@@ -131,7 +133,7 @@ def load_llm_trace_rules(path: str | Path = CATALOGUE_PATH) -> list[LLMTraceRule
             raise ValueError(f"{rule_id}: version must be a positive integer")
         confidence = item.get(
             "confidence",
-            {"strong": 0.98, "contextual": 0.85, "supporting": 0.55}[signal_level],
+            RULES_SIGNAL_LEVEL_DEFAULT_CONFIDENCE[signal_level],
         )
         if isinstance(confidence, bool) or not isinstance(confidence, (int, float)) or not 0 <= confidence <= 1:
             raise ValueError(f"{rule_id}: confidence must be between 0 and 1")

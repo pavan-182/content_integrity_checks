@@ -7,11 +7,11 @@ from hashlib import sha256
 from itertools import combinations
 
 from .template_features import TemplateFeatures
+from .thresholds import (
+    TITLE_TEMPLATES_MAX_BUCKET_SIZE as MAX_BUCKET_SIZE,
+    TITLE_TEMPLATES_MIN_TITLE_WORDS as MIN_TITLE_WORDS,
+)
 from .utils import normalize_for_matching, text_tokens
-
-
-MIN_TITLE_WORDS = 4
-MAX_BUCKET_SIZE = 50
 
 
 def masked_title_signature(features: TemplateFeatures) -> str:

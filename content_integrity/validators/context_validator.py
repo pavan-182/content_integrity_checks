@@ -13,6 +13,12 @@ from pathlib import Path
 from typing import Any
 
 from ..models import Finding, ValidationResult
+from ..thresholds import (
+    CONTEXT_VALIDATOR_DEFAULT_BACKOFF_SECONDS as DEFAULT_BACKOFF_SECONDS,
+    CONTEXT_VALIDATOR_DEFAULT_MAX_ATTEMPTS as DEFAULT_MAX_ATTEMPTS,
+    CONTEXT_VALIDATOR_DEFAULT_TIMEOUT_SECONDS as DEFAULT_TIMEOUT_SECONDS,
+    CONTEXT_VALIDATOR_VALIDATION_MAX_TOKENS as VALIDATION_MAX_TOKENS,
+)
 from ..utils import normalize_whitespace
 
 
@@ -22,11 +28,6 @@ PROMPT_VERSION = "context_validator_v2"
 MODEL_ID = "gpt-oss-20b"
 DEFAULT_MODEL_NAME = "prod/gpt-oss-20b"
 DEFAULT_BASE_URL = "https://intellihub.tnq.co.in/llm_gateway/api/v1"
-DEFAULT_TIMEOUT_SECONDS = 120.0
-DEFAULT_MAX_ATTEMPTS = 3
-DEFAULT_BACKOFF_SECONDS = 1.0
-# The validator model is reasoning-heavy, so leave enough budget for the final JSON answer.
-VALIDATION_MAX_TOKENS = 2048
 
 SYSTEM_PROMPT = (
     "You are checking whether an automatically flagged phrase in a scientific abstract is a "

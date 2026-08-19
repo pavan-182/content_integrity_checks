@@ -16,7 +16,7 @@ from .template_matching_common import (
     TRIAL_PATTERN,
     URL_PATTERN,
 )
-from .utils import normalize_for_matching, normalize_whitespace
+from .utils import normalize_for_matching, normalize_whitespace, split_sentences
 
 
 VOCABULARY_VERSION = "asco-hybrid-v1"
@@ -72,7 +72,9 @@ class TypedEntity:
 
 
 def _sentence_index(text: str, offset: int) -> int:
-    return len(re.findall(r"[.!?]\s+", text[:offset]))
+    # Must derive from the same split as entity_substitutions._entities() uses to build its
+    # sentence list, or the index looked up there can land in the wrong sentence.
+    return len(split_sentences(text[:offset]))
 
 
 @lru_cache(maxsize=1)

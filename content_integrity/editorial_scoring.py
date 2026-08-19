@@ -4,12 +4,13 @@ from dataclasses import asdict, dataclass
 
 from .models import ParsedRecord
 from .pair_classification import PairClassification, classify_pairs
+from .thresholds import (
+    EDITORIAL_SCORING_HIGH_THRESHOLD as HIGH_THRESHOLD,
+    EDITORIAL_SCORING_MEDIUM_THRESHOLD as MEDIUM_THRESHOLD,
+)
 
 
 SCORING_VERSION = "asco-editorial-priority-v1"
-# ponytail: bands reuse audited primary-evidence weights; re-fit when labelled pairs include this score schema.
-HIGH_THRESHOLD = 0.85
-MEDIUM_THRESHOLD = 0.75
 
 
 @dataclass(frozen=True, slots=True)
