@@ -122,6 +122,20 @@ class Finding:
     validation_reason: str = ""
     validated_by: str = ""
     review_status: str = ""
+    review_reason: str = ""
+    # numerical_contradiction only: the derived percentage/subgroup-sum/numerator/valid
+    # boundary value, how far the reported number is from it, and the tolerance it was
+    # checked against.
+    calculated_value: float | None = None
+    difference: float | None = None
+    tolerance: float | None = None
+    # unverifiable_clinical_trial only: which registry the trial ID was checked against,
+    # its normalized form, whether it matches that registry's expected ID format, and the
+    # registry lookup's resolved status.
+    registry_name: str = ""
+    normalized_trial_id: str = ""
+    format_valid: bool | None = None
+    verification_status: str = ""
 
     def __post_init__(self) -> None:
         if self.detector_type == "llm_response_trace" and self.check_type == "llm_trace":
