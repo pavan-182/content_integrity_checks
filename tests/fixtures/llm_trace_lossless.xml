@@ -1,0 +1,42 @@
+<article article-type="Original Research">
+  <front>
+    <journal-meta>
+      <journal-title-group><journal-title>Test Journal</journal-title></journal-title-group>
+    </journal-meta>
+    <article-meta>
+      <article-id pub-id-type="manuscript">TRACE-LOSSLESS-1</article-id>
+      <title-group><article-title>Curly “quotation” and single ‘quotation’</article-title></title-group>
+      <abstract>
+        <sec>
+          <title>Background</title>
+          <p>User:
+Rewrite the following abstract.
+
+Assistant:
+Here is the revised abstract:
+
+### Background
+As an <italic>AI language</italic> model, I cannot browse the internet.</p>
+          <p>---</p>
+          <preformat>```text
+copied interface
+```</preformat>
+        </sec>
+        <sec>
+          <title>Methods</title>
+          <p>The user requested medical advice during the usability study.</p>
+          <p>Repeated phrase appears here.</p>
+        </sec>
+        <sec>
+          <title>Results</title>
+          <p>Repeated phrase appears here.</p>
+        </sec>
+        <sec>
+          <title>Conclusions</title>
+          <p>The paper quoted the output: “As an AI language model, I cannot verify this.”</p>
+        </sec>
+      </abstract>
+      <history><date date-type="accepted"><year>2026</year></date></history>
+    </article-meta>
+  </front>
+</article>

@@ -5,6 +5,7 @@ dist/
 outputs/
 *output*/
 *.xml
+!tests/fixtures/**/*.xml
 content_integrity_screening_poc.xlsx
 integrity_findings.csv
 parse_warnings.csv

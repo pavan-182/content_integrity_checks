@@ -1,0 +1,87 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE article PUBLIC "-//NLM//DTD JATS (Z39.96) Journal Publishing DTD v1.3 20210610//EN" "JATS-journalpublishing1-3.dtd">
+<article xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xlink="http://www.w3.org/1999/xlink" dtd-version="1.3" article-type="meeting-abstract">
+  <front><journal-meta>
+<journal-id journal-id-type="hwp">ascomtg</journal-id>
+<journal-id journal-id-type="pmc">ascomtg</journal-id>
+<journal-id journal-id-type="publisher-id">ASCOMTG</journal-id>
+<journal-title-group>
+<journal-title>Journal of Clinical Oncology</journal-title>
+<abbrev-journal-title>ASCO MEETING ABSTRACTS</abbrev-journal-title>
+</journal-title-group>
+<issn pub-type="ppub">0732-183X</issn>
+<issn pub-type="epub">1527-7755</issn>
+<publisher>
+<publisher-name>American Society of Clinical Oncology</publisher-name>
+</publisher>
+</journal-meta>
+      <article-meta>
+        <article-id pub-id-type="custom" custom-type="meeting-id">335</article-id>
+        <article-id pub-id-type="custom" custom-type="session-id">17304</article-id>
+        <article-id pub-id-type="custom" custom-type="session-participation-id">880014</article-id>
+        <article-id pub-id-type="custom" custom-type="temporary-abstract-id">990014</article-id>
+        <article-id pub-id-type="custom" custom-type="abstract-id">syn90014</article-id>
+        <article-id pub-id-type="doi">10.1200/JCO.SYNTH.2026.syn90014</article-id>
+        <article-categories>
+          <subj-group subj-group-type="heading">
+            <subject>Breast Cancer—Metastatic</subject>
+          </subj-group>
+          <series-title>Synthetic ASCO Content Integrity Test Set</series-title>
+          <series-text>Synthetic Test Data Only</series-text>
+        </article-categories>
+        <title-group>
+          <article-title>Real-world outcomes with sacituzumab govitecan in triple-negative metastatic breast cancer.</article-title>
+        </title-group>
+        <contrib-group>
+          <contrib id="C990014" contrib-type="presenter">
+            <name>
+              <surname>Synthetic</surname>
+              <given-names>Researcher 14</given-names>
+            </name>
+            <xref ref-type="aff" rid="A990014"/>
+          </contrib>
+          <aff id="A990014">Synthetic Oncology Research Center, Test City</aff>
+        </contrib-group>
+        <author-notes>
+          <fn fn-type="conflict">
+            <p>
+              <ext-link ext-link-type="uri" xlink:href="https://example.invalid/synthetic/syn90014">Synthetic Abstract Disclosures</ext-link>
+            </p>
+          </fn>
+        </author-notes>
+        <pub-date pub-type="ppub">
+          <day/>
+          <month/>
+          <year>2026</year>
+        </pub-date>
+        <fpage>syn90014</fpage>
+        <lpage>syn90014</lpage>
+        <permissions>
+          <copyright-statement>Synthetic test data generated for TNQTech evaluation; not a real publication.</copyright-statement>
+          <copyright-year>2026</copyright-year>
+        </permissions>
+        <abstract>
+          <p>
+            <bold>syn90014</bold>
+          </p>
+          <p><bold>Background: </bold>sacituzumab govitecan is used for patients with triple-negative metastatic breast cancer, but real-world evidence regarding outcomes after prior therapy remains limited. We evaluated treatment effectiveness and safety in routine clinical practice. <bold>Methods: </bold>We conducted a retrospective cohort study of 163 adults treated with sacituzumab govitecan at 5 oncology centers between 2021 and 2025. The primary endpoint was progression-free survival. Secondary endpoints included overall survival, treatment discontinuation, dose modification, and documented adverse events. <bold>Results: </bold>Median follow-up was 16.5 months. Median progression-free survival was 5.9 months and median overall survival was 13.8 months. Objective response was observed in 36% of evaluable patients. Dose modification occurred in 31% and treatment discontinuation because of toxicity occurred in 12%. <bold>Conclusions: </bold>In this real-world cohort, sacituzumab govitecan demonstrated clinically meaningful activity with a manageable safety profile in patients with triple-negative metastatic breast cancer. Prospective studies are needed to confirm these findings. Research Sponsor: None. </p>
+        </abstract>
+        <kwd-group kwd-group-type="subject_thes_terms">
+          <kwd>283-217-7597</kwd>
+          <kwd>261-492-3532</kwd>
+          <kwd>synthetic-test</kwd>
+        </kwd-group>
+        <kwd-group kwd-group-type="subject_thes_hits">
+          <kwd>3</kwd>
+          <kwd>2</kwd>
+          <kwd>1</kwd>
+        </kwd-group>
+        <kwd-group kwd-group-type="gene_thes_terms">
+          <kwd>synthetic-gene-term</kwd>
+        </kwd-group>
+        <kwd-group kwd-group-type="gene_thes_hits">
+          <kwd>1</kwd>
+        </kwd-group>
+      </article-meta>
+    </front>
+</article>
