@@ -1260,7 +1260,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
 
 
 def run_default_pipeline(
-    input_dir: str | Path = "WILEY_LIVE_PREFLIGHT_metadata_files",
+    input_dir: str | Path = "/home/pavankrishna/Projets/ASCO/real_asco_files",
     tortured_dictionary_path: str | Path = "🤷_tortured.csv",
     output_dir: str | Path = "outputs",
     authorship_json_path: str | Path = "outputs/frontend_run/final_json.json",
@@ -1288,7 +1288,7 @@ def main(argv: list[str] | None = None) -> int:
     import argparse
 
     parser = argparse.ArgumentParser(description="Run the ASCO content integrity screening POC.")
-    parser.add_argument("--input-dir", default="WILEY_LIVE_PREFLIGHT_metadata_files", help="Folder containing Wiley XML files.")
+    parser.add_argument("--input-dir", default="/home/pavankrishna/Projets/ASCO/real_asco_files", help="Folder containing Wiley XML files.")
     parser.add_argument("--tortured-dictionary", default="🤷_tortured.csv", help="Tortured phrase dictionary CSV.")
     parser.add_argument("--output-dir", default="outputs", help="Directory for generated reports.")
     parser.add_argument(

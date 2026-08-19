@@ -6,12 +6,15 @@ from pathlib import Path
 from typing import Any
 from typing import TYPE_CHECKING
 
+import pysbd
+
 if TYPE_CHECKING:
     from .models import ParsedRecord
 
 WHITESPACE_RE = re.compile(r"\s+")
 NON_ALNUM_RE = re.compile(r"[^0-9A-Za-z]+")
 TOKEN_RE = re.compile(r"[0-9A-Za-z]+")
+_SENTENCE_SEGMENTER = pysbd.Segmenter(language="en", clean=False)
 
 
 def normalize_whitespace(text: str | None) -> str:
@@ -25,7 +28,7 @@ def lowercase_normalize(text: str | None) -> str:
 
 
 def split_sentences(text: str) -> list[str]:
-    return [piece.strip() for piece in re.split(r"(?<=[.!?])\s+", normalize_whitespace(text)) if piece.strip()]
+    return [piece.strip() for piece in _SENTENCE_SEGMENTER.segment(normalize_whitespace(text)) if piece.strip()]
 
 
 def text_tokens(text: str | None) -> list[str]:

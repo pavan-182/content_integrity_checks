@@ -59,7 +59,7 @@ The command-line interface accepts:
 
 | Argument | Default | Function |
 |---|---|---|
-| `--input-dir` | `WILEY_LIVE_PREFLIGHT_metadata_files` | Root directory searched recursively for `*.xml` files |
+| `--input-dir` | `/home/pavankrishna/Projets/ASCO/real_asco_files` | Root directory searched recursively for `*.xml` files |
 | `--tortured-dictionary` | `🤷_tortured.csv` | CSV containing tortured-phrase rules and expected terms |
 | `--output-dir` | `outputs` | Destination for all generated artifacts |
 | `--validate-llm` | disabled | Enables per-finding GPT-OSS context validation |
@@ -76,7 +76,7 @@ An explicit run is:
 
 ```bash
 python scripts/run_pipeline.py \
-  --input-dir WILEY_LIVE_PREFLIGHT_metadata_files \
+  --input-dir /home/pavankrishna/Projets/ASCO/real_asco_files \
   --tortured-dictionary '🤷_tortured.csv' \
   --output-dir outputs
 ```
