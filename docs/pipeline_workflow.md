@@ -65,6 +65,10 @@ The command-line interface accepts:
 | `--validate-llm` | disabled | Enables per-finding GPT-OSS context validation |
 | `--detect-nonsense-candidates` | disabled | Enables sentence-level GPT-OSS review for dictionary misses |
 | `--verify-trials` | disabled | Verifies valid NCT identifiers against ClinicalTrials.gov; local format and placeholder checks always run |
+| `--quiet` | disabled | Suppresses per-stage progress logging (parse, each detector, enriched reports, output writing) |
+
+Progress is logged to stderr as one timed line per stage, so a long run is not silent. The
+table above lists the flag that turns it off; nothing else needs configuring.
 
 Run the default pipeline with:
 
@@ -86,8 +90,9 @@ The optional validator reads these settings from the environment or `.env`:
 | Setting | Required | Meaning |
 |---|---:|---|
 | `INTELLIHUB_API_KEY` or `api_key` | yes | IntelliHub gateway credential |
-| `INTELLIHUB_BASE_URL` | no | Gateway base URL |
-| `INTELLIHUB_MODEL` | no | Gateway model name; defaults to `prod/gpt-oss-20b` |
+| `INTELLIHUB_BASE_URL` | yes | Gateway base URL; no in-code default (see `.env.example`) |
+| `INTELLIHUB_MODEL` | yes | Gateway model name; no in-code default |
+| `INTELLIHUB_MODEL_ID` | no | Provenance tag in findings; defaults to the last path segment of `INTELLIHUB_MODEL` |
 | `INTELLIHUB_VERIFY_SSL` | no | SSL verification switch; defaults to `true` |
 | `INTELLIHUB_CA_BUNDLE` | no | Optional CA bundle path |
 

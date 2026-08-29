@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
+import time
 from collections import Counter, defaultdict
+from contextlib import contextmanager
 from dataclasses import dataclass, fields
 from datetime import datetime, timezone
 from hashlib import sha256
@@ -81,6 +84,8 @@ from .validators.llm_trace_validator import PROMPT_VERSION as LLM_VALIDATION_PRO
 from .utils import dedupe_records, normalize_whitespace, to_pipe_string
 from .xml_parser import discover_xml_files, parse_xml_records
 
+
+logger = logging.getLogger(__name__)
 
 RISK_INELIGIBLE_CHECK_TYPES = {"unsupported_registry_manual_verification"}
 # Components that consume `comparable_records`; a record excluded there means none of these
@@ -549,6 +554,10 @@ def _aggregate_findings(
                 "parse_warnings": to_pipe_string([warning.warning_code for warning in record.parse_warnings]),
                 "llm_trace_flag": "Yes" if active_llm_findings else "No",
                 "llm_review_priority": llm_review_priority,
+                # Review priority covers every trace including unvalidated ones; risk priority
+                # counts only active findings and is what feeds total_finding_count above. Both
+                # are surfaced so a "Low review priority, 0 findings" row reconciles.
+                "llm_risk_priority": llm_risk_priority,
                 "tortured_phrase_flag": "Yes" if any(finding.active for finding in tortured_findings) else "No",
                 "nonsense_candidate_flag": "Yes" if any(finding.active for finding in nonsense_findings) else "No",
                 "numerical_contradiction_flag": "Yes" if any(finding.active for finding in numerical_findings) else "No",
@@ -787,6 +796,19 @@ def _parse_warning_rows(records: list[ParsedRecord]) -> list[dict[str, Any]]:
     return rows
 
 
+@contextmanager
+def _stage(name: str):
+    """Time one pipeline stage. A full-corpus run is long; it must not be silent."""
+    start = time.perf_counter()
+    try:
+        yield
+    finally:
+        elapsed = time.perf_counter() - start
+        # `extra` carries the timing structurally so a benchmark can collect it with a
+        # logging handler instead of regexing the rendered message.
+        logger.info("%s: done in %.1fs", name, elapsed, extra={"stage": name, "seconds": elapsed})
+
+
 def _run_detector(
     component: str,
     operation: Any,
@@ -794,6 +816,9 @@ def _run_detector(
     default: Any,
     record: ParsedRecord | None = None,
 ) -> Any:
+    # Per-record calls pass `record`; logging those at info would emit one line per record,
+    # so only corpus-level stages are timed here.
+    start = time.perf_counter()
     try:
         return operation()
     except Exception as exc:  # Detector/model boundaries must be visible in completed reports.
@@ -804,7 +829,15 @@ def _run_detector(
             record_id=record.record_id if record else "",
             source_file=record.source_file if record else "",
         ))
+        logger.warning("%s: failed (%s)", component, type(exc).__name__)
         return default
+    finally:
+        if record is None:
+            elapsed = time.perf_counter() - start
+            logger.info(
+                "%s: done in %.1fs", component, elapsed,
+                extra={"stage": component, "seconds": elapsed},
+            )
 
 
 def _collect_operational_issues(
@@ -885,9 +918,11 @@ def _dictionary_rows(llm_rules: list[dict[str, Any]], tortured_rules: list[dict[
 
 def run_pipeline(config: PipelineConfig) -> PipelineResult:
     reset_model_inference_count()
-    xml_files = discover_xml_files(config.input_dir)
-    records = [record for path in xml_files for record in parse_xml_records(path)]
-    records, record_id_warnings = dedupe_records(records)
+    with _stage("parse"):
+        xml_files = discover_xml_files(config.input_dir)
+        records = [record for path in xml_files for record in parse_xml_records(path)]
+        records, record_id_warnings = dedupe_records(records)
+    logger.info("parse: %d files -> %d records", len(xml_files), len(records))
     operational_issues: list[OperationalIssue] = []
     llm_rules = built_in_llm_rules()
     tortured_rules = load_tortured_rules(config.tortured_dictionary_path, config.dictionary_version)
@@ -1069,9 +1104,11 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     )
     pair_findings = merge_pair_findings(exact_template_findings, entity_template_findings)
     template_rows = cluster_template_findings(pair_findings, records)
-    enriched_pair_rows, enriched_family_rows, enriched_abstract_rows = build_enriched_reports(
-        records, [*exact_template_findings, *entity_template_findings], template_features
-    )
+    with _stage("enriched_reports"):
+        enriched_pair_rows, enriched_family_rows, enriched_abstract_rows = build_enriched_reports(
+            records, [*exact_template_findings, *entity_template_findings], template_features
+        )
+    logger.info("enriched_reports: %d candidate pairs", len(enriched_pair_rows))
     reviewer_pair_rows = directional_finding_rows(enriched_pair_rows)
     field_inventory_rows, root_summary_rows = _inventory_rows(records)
     authorship_checks_by_key = _load_authorship_checks(config.authorship_json_path)
@@ -1231,31 +1268,32 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     output_dir = config.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
     output_paths: dict[str, Path] = {}
-    canonical_report = build_content_integrity_frontend_json(
-        records=records,
-        findings=reporting_findings,
-        enriched_pair_rows=enriched_pair_rows,
-        enriched_abstract_rows=enriched_abstract_rows,
-        abstract_summary_rows=abstract_summary_rows,
-        operational_issues=reporting_operational_issues,
-        generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        git_revision=commit_sha,
-        run_metadata=dict(run_metadata_rows),
-        template_family_rows=enriched_family_rows,
-    )
-    output_paths["content_integrity_json"] = write_json(
-        output_dir / "content_integrity_results.json",
-        build_integrated_content_integrity_json(canonical_report),
-    )
-    output_paths["workbook"] = write_workbook(
-        output_dir / "Editor_Triage_Workbook.xlsx",
-        abstract_summary_rows=abstract_summary_rows,
-        findings_rows=integrity_finding_rows,
-        pair_rows=reviewer_pair_rows,
-        operational_issue_rows=[issue.to_dict() for issue in reporting_operational_issues],
-        run_metadata_rows=run_metadata_rows,
-        authorship_checks_by_key=authorship_checks_by_key,
-    )
+    with _stage("write_outputs"):
+        canonical_report = build_content_integrity_frontend_json(
+            records=records,
+            findings=reporting_findings,
+            enriched_pair_rows=enriched_pair_rows,
+            enriched_abstract_rows=enriched_abstract_rows,
+            abstract_summary_rows=abstract_summary_rows,
+            operational_issues=reporting_operational_issues,
+            generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            git_revision=commit_sha,
+            run_metadata=dict(run_metadata_rows),
+            template_family_rows=enriched_family_rows,
+        )
+        output_paths["content_integrity_json"] = write_json(
+            output_dir / "content_integrity_results.json",
+            build_integrated_content_integrity_json(canonical_report),
+        )
+        output_paths["workbook"] = write_workbook(
+            output_dir / "Editor_Triage_Workbook.xlsx",
+            abstract_summary_rows=abstract_summary_rows,
+            findings_rows=integrity_finding_rows,
+            pair_rows=reviewer_pair_rows,
+            operational_issue_rows=[issue.to_dict() for issue in reporting_operational_issues],
+            run_metadata_rows=run_metadata_rows,
+            authorship_checks_by_key=authorship_checks_by_key,
+        )
     return PipelineResult(
         xml_files=xml_files,
         records=records,
@@ -1337,7 +1375,19 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_MAX_CONCURRENT_BATCHES,
         help="Maximum semantic LLM batches in flight at once.",
     )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress per-stage progress logging.",
+    )
     args = parser.parse_args(argv)
+
+    # Only the CLI configures logging; importing the pipeline as a library must not.
+    logging.basicConfig(
+        level=logging.WARNING if args.quiet else logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        datefmt="%H:%M:%S",
+    )
 
     result = run_default_pipeline(
         input_dir=args.input_dir,

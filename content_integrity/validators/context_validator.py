@@ -27,9 +27,6 @@ from ..utils import normalize_whitespace
 logger = logging.getLogger(__name__)
 
 PROMPT_VERSION = "context_validator_v3"
-MODEL_ID = "gpt-oss-20b"
-DEFAULT_MODEL_NAME = "prod/gpt-oss-20b"
-DEFAULT_BASE_URL = "https://intellihub.tnq.co.in/llm_gateway/api/v1"
 
 SYSTEM_PROMPT = (
     "You are checking whether an automatically flagged phrase in a scientific abstract is a "
@@ -81,12 +78,19 @@ def _load_dotenv_file(path: str | Path) -> None:
         os.environ[key] = _normalize_env_value(value)
 
 
+# Gateway identity is deployment-specific: keep it in .env, never in the source tree.
+_load_dotenv_file(os.getenv("INTELLIHUB_ENV_FILE", ".env"))
+DEFAULT_BASE_URL = os.getenv("INTELLIHUB_BASE_URL", "").strip().rstrip("/")
+DEFAULT_MODEL_NAME = os.getenv("INTELLIHUB_MODEL", "").strip()
+MODEL_ID = os.getenv("INTELLIHUB_MODEL_ID", "").strip() or DEFAULT_MODEL_NAME.rsplit("/", 1)[-1]
+
+
 def _load_validator_settings(env_file: str | Path = ".env") -> dict[str, str]:
     _load_dotenv_file(env_file)
     settings = {
         "api_key": os.getenv("INTELLIHUB_API_KEY") or os.getenv("api_key", ""),
-        "base_url": os.getenv("INTELLIHUB_BASE_URL", DEFAULT_BASE_URL).rstrip("/"),
-        "model_name": os.getenv("INTELLIHUB_MODEL", DEFAULT_MODEL_NAME).strip() or DEFAULT_MODEL_NAME,
+        "base_url": os.getenv("INTELLIHUB_BASE_URL", "").strip().rstrip("/"),
+        "model_name": os.getenv("INTELLIHUB_MODEL", "").strip(),
         "verify_ssl": os.getenv("INTELLIHUB_VERIFY_SSL", "true").lower(),
         "ca_bundle": os.getenv("INTELLIHUB_CA_BUNDLE", "").strip(),
     }
@@ -346,9 +350,20 @@ def build_gpt_oss_client(
 ) -> IntelliHubGPTOSSClient:
     settings = _load_validator_settings(env_file)
     api_key = settings["api_key"]
-    if not api_key:
+    missing = [
+        name
+        for name, value in (
+            ("INTELLIHUB_API_KEY", api_key),
+            ("INTELLIHUB_BASE_URL", settings["base_url"]),
+            ("INTELLIHUB_MODEL", settings["model_name"]),
+        )
+        if not value
+    ]
+    if missing:
         raise ValueError(
-            "GPT-OSS validator is not configured. Set INTELLIHUB_API_KEY or api_key in .env."
+            "GPT-OSS validator is not configured. Set "
+            + ", ".join(missing)
+            + " in .env (see .env.example)."
         )
     return IntelliHubGPTOSSClient(
         api_key=api_key,

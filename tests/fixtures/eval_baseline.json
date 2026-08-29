@@ -1,0 +1,20 @@
+{
+  "_comment": "Floors for scores and ceilings for error counts on tests/fixtures/eval_corpus. run_eval.py fails if any score drops below its floor or any error count rises above its ceiling. Regenerate with: python scripts/run_eval.py --update-baseline",
+  "scores": {
+    "abstract template flags.precision": 1.0,
+    "abstract template flags.recall": 1.0,
+    "family members.precision": 1.0,
+    "family members.recall": 1.0,
+    "family pairwise.precision": 1.0,
+    "family pairwise.recall": 1.0,
+    "pair findings.precision": 1.0,
+    "pair findings.recall": 1.0
+  },
+  "errors": {
+    "family_cluster_flag_errors": 0,
+    "split_expected_families": 0,
+    "template_double_count_errors": 0,
+    "two_member_cluster_flag_errors": 0,
+    "wrongly_merged_families": 0
+  }
+}

@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # pytest is not in requirements.txt (runtime deps only) and there is no
+          # pyproject yet to hold a dev extra, so install it explicitly here.
+          pip install pytest
+
+      - name: Unit tests
+        run: python -m pytest tests/ -q
+
+      # Detection regression gate: run_eval.py exits non-zero on any precision/recall
+      # loss, wrongly merged or split family, or finding-count mismatch.
+      - name: Detection regression
+        run: python scripts/run_eval.py

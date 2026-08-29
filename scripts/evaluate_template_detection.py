@@ -3,8 +3,38 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from content_integrity.pipeline import _input_manifest_checksum
+from content_integrity.xml_parser import discover_xml_files
+
+
+def _verify_corpus(corpus_dir: Path, gold_csv: Path) -> None:
+    """Fail loudly if the corpus is not the one the gold labels were written against.
+
+    The corpus is third-party publication XML and is not tracked in git, so the only thing
+    tying a score to a corpus is this checksum. Without the check, scoring against a
+    different or partial copy silently produces a wrong precision/recall number.
+    """
+    manifest_path = gold_csv.with_suffix(".manifest.json")
+    if not manifest_path.is_file():
+        raise SystemExit(f"No manifest beside {gold_csv.name}; cannot verify {corpus_dir}.")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    files = discover_xml_files(corpus_dir)
+    actual = _input_manifest_checksum(files, corpus_dir)
+    expected = manifest["input_manifest_sha256"]
+    if actual != expected:
+        raise SystemExit(
+            f"Corpus does not match {manifest_path.name}: found {len(files)} files with "
+            f"checksum {actual}, expected {manifest['file_count']} files with {expected}. "
+            "Scoring would not be comparable to the published metrics."
+        )
 
 
 POSITIVE_VERDICTS = {
@@ -141,7 +171,15 @@ def main() -> int:
         action="store_true",
         help="Use only when the gold CSV exhaustively labels every possible pair.",
     )
+    parser.add_argument(
+        "--corpus-dir",
+        type=Path,
+        help="Verify this corpus against the gold CSV's .manifest.json before scoring.",
+    )
     args = parser.parse_args()
+
+    if args.corpus_dir:
+        _verify_corpus(args.corpus_dir, args.gold_csv)
 
     labels, excluded = _load_gold(args.gold_csv, args.verdict_column, exclude_manual=not args.include_manual)
     loaded = [_load_prediction_sets(path) for path in args.predictions_csv]

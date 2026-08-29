@@ -1,0 +1,32 @@
+{
+  "_comment": "Performance baseline from scripts/benchmark_scale.py. Compare a change against this; regenerate deliberately when the corpus or hardware changes.",
+  "record_count": 519,
+  "requested_records": 519,
+  "perturbation_rate": 0.15,
+  "seed": 0,
+  "total_seconds": 498.6,
+  "seconds_per_record": 0.9607,
+  "peak_rss_mb": 263.4,
+  "stage_seconds": {
+    "design_contradiction": 11.37,
+    "enriched_reports": 131.33,
+    "entity_normalized_template": 44.33,
+    "exact_text_reuse": 33.37,
+    "numerical_contradiction": 12.04,
+    "parse": 2.76,
+    "shared_preprocessing": 241.24,
+    "unverifiable_clinical_trial": 10.45,
+    "write_outputs": 5.18
+  },
+  "counters": {
+    "parsed_successfully": 519,
+    "failed_files": 0,
+    "comparable_record_count": 519,
+    "template_candidate_pair_count": 2382,
+    "template_final_pair_count": 18,
+    "enriched_family_count": 1,
+    "entity_model_inference_count": 0,
+    "operational_issue_count": 24,
+    "llm_gateway_request_count": 0
+  }
+}
