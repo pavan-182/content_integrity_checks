@@ -56,7 +56,7 @@ The detailed template workflow planned the following stages:
 |---:|---|---|
 | 1 | Reviewer-labelled evaluation baseline | Complete. Gold v3 contains 180 reviewed pairs; 178 are automatic labels and 2 require manual review. |
 | 2 | Structured XML ingestion and provenance | Complete. Titles, sections, authors, affiliations, trial IDs, source text, offsets, exclusions, parse status, and warnings are retained. |
-| 3 | Typed biomedical extraction and masking | Complete as a hybrid extractor. Deterministic rules are always available; SciSpaCy is an optional gap-filler selected with `ASCO_SCISPACY_MODEL`. |
+| 3 | Typed biomedical extraction and masking | Complete as a hybrid extractor. Deterministic rules are always available; the GPT-OSS model on the IntelliHub gateway fills the remaining gaps (one call per record). |
 | 4 | Versioned reusable feature object | Complete. Original, normalized, and masked title/body/sections, entities, trial IDs, source hash, and version metadata are exportable as JSONL. |
 | 5 | Dedicated title-template comparison | Complete. Exact masked titles and conservative title shingles retrieve candidates without making title-only findings automatically. |
 | 6 | Candidate generation and route tracking | Complete. Body, exact original/masked, exact section, and title routes are deduplicated and retained per pair. |
@@ -120,11 +120,11 @@ The final implementation follows that design conservatively:
 
 - deterministic patterns always extract stable types such as trial IDs, dates, percentages, p-values, numbers, URLs, and emails;
 - oncology-aware rules cover genes, proteins, miRNAs, lncRNAs, drugs, diseases, biomarkers, pathways, cell lines, assays, endpoints, registries, populations, and treatment classes;
-- SciSpaCy is optional and contributes only mapped entity types;
-- deterministic spans are retained when the model is absent or fails to load; and
+- GPT-OSS contributes only the listed entity types, and only for spans found verbatim in the source text;
+- deterministic spans are retained when the model is unavailable or its call fails; and
 - uncertain model labels are not guessed into unsupported output types.
 
-SciSpaCy is not active by default. The latest real-ASCO run had no `ASCO_SCISPACY_MODEL` configured, so it used the deterministic/hybrid rule path. This avoids making the batch runner depend on an unavailable or incompatible model.
+The local SciSpaCy and PubMedBERT gap-fillers were removed: both were too inaccurate on ASCO abstracts. Masking now calls the shared GPT-OSS client (the same one the validators use, with its disk cache) once per record on title+abstract together. When `.env` has no IntelliHub credentials the pipeline records an operational issue and masking falls back to the deterministic/hybrid rule path.
 
 Entity validation against the supplied 244-abstract masked reference produced:
 

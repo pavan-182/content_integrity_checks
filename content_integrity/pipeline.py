@@ -58,6 +58,7 @@ from .entity_extraction import (
     VOCABULARY_VERSION as ENTITY_VOCABULARY_VERSION,
     model_inference_count,
     reset_model_inference_count,
+    set_entity_llm_client,
 )
 from .family_clustering import FAMILY_VERSION as TEMPLATE_FAMILY_VERSION
 from .pair_classification import CLASSIFIER_VERSION as TEMPLATE_PAIR_CLASSIFIER_VERSION
@@ -927,14 +928,15 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     llm_rules = built_in_llm_rules()
     tortured_rules = load_tortured_rules(config.tortured_dictionary_path, config.dictionary_version)
     tortured_index = build_tortured_rule_index(tortured_rules)
-    llm_client = None
-    if config.detect_nonsense_candidates or config.detect_llm_semantic or config.validate_llm:
-        llm_client = _run_detector(
-            "gpt_oss_model",
-            lambda: build_gpt_oss_client(cache_dir=config.output_dir / ".gpt_oss_cache"),
-            operational_issues,
-            None,
-        )
+    # Entity masking now runs on GPT-OSS too, so the client is always needed; when it cannot
+    # be built the failure is recorded and every stage degrades to its deterministic path.
+    llm_client = _run_detector(
+        "gpt_oss_model",
+        lambda: build_gpt_oss_client(cache_dir=config.output_dir / ".gpt_oss_cache"),
+        operational_issues,
+        None,
+    )
+    set_entity_llm_client(llm_client)
     nonsense_detector = (
         NonsenseCandidateDetector(
             llm_client,

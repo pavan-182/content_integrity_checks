@@ -1,14 +1,35 @@
 from __future__ import annotations
 
+import json
 import unittest
-from unittest.mock import patch
+from contextlib import contextmanager
 
 from content_integrity.entity_evaluation import evaluate_entities
 from content_integrity.entity_extraction import (
     extract_typed_entities,
     mask_text,
+    set_entity_llm_client,
     validate_masking,
 )
+
+
+class _StubClient:
+    def __init__(self, reply: str | Exception) -> None:
+        self.reply = reply
+
+    def complete(self, **_: object) -> str:
+        if isinstance(self.reply, Exception):
+            raise self.reply
+        return self.reply
+
+
+@contextmanager
+def _entity_client(client: _StubClient):
+    set_entity_llm_client(client)
+    try:
+        yield client
+    finally:
+        set_entity_llm_client(None)
 
 
 class EntityExtractionTests(unittest.TestCase):
@@ -38,31 +59,31 @@ class EntityExtractionTests(unittest.TestCase):
         self.assertEqual(report["overall"]["fn"], 1)
 
     def test_new_cell_lines_and_contextual_biomarker_are_deterministic(self) -> None:
-        entities = extract_typed_entities("A549 and H1975 cells expressed circPVT1 as a potentially valuable biomarker.")
+        entities = extract_typed_entities("A549 and H1975 cells expressed circPVT1 as a potentially valuable biomarker.", use_model=False)
         self.assertEqual(
             [(entity.text, entity.entity_type) for entity in entities],
             [("A549", "cell_line"), ("H1975", "cell_line"), ("circPVT1", "biomarker")],
         )
 
-    @patch("content_integrity.entity_extraction._pubmedbert_pipeline")
-    def test_pubmedbert_only_fills_allowed_non_overlapping_types(self, pipeline) -> None:
-        pipeline.return_value.return_value = [
-            {"entity_group": "Gene_or_gene_product", "score": 0.99, "start": 0, "end": 7},
-            {"entity_group": "Gene_or_gene_product", "score": 0.95, "start": 16, "end": 20},
-            {"entity_group": "Cell", "score": 0.99, "start": 21, "end": 26},
-            {"entity_group": "Cancer", "score": 0.70, "start": 30, "end": 36},
-        ]
-        with patch.dict("os.environ", {"ASCO_PUBMEDBERT_MODEL": "test", "ASCO_PUBMEDBERT_MIN_SCORE": "0.8"}):
+    def test_gpt_oss_only_fills_non_overlapping_verified_spans(self) -> None:
+        # "miR-708" overlaps a deterministic span, "Notch" is not in the text, "cells" has an
+        # unknown type: only the verified, non-overlapping "FOXP" survives.
+        client = _StubClient(json.dumps({"entities": [
+            {"text": "miR-708", "type": "gene"},
+            {"text": "FOXP", "type": "gene"},
+            {"text": "cells", "type": "organelle"},
+            {"text": "Notch", "type": "pathway"},
+        ]}))
+        with _entity_client(client):
             entities = extract_typed_entities("miR-708 targets FOXP cells in cancer")
         self.assertEqual(
             [(entity.text, entity.entity_type, entity.extraction_method) for entity in entities],
-            [("miR-708", "mirna", "hybrid_context"), ("FOXP", "gene", "pubmedbert")],
+            [("miR-708", "mirna", "hybrid_context"), ("FOXP", "gene", "gpt_oss")],
         )
 
-    @patch("content_integrity.entity_extraction._pubmedbert_pipeline", side_effect=RuntimeError("model unavailable"))
-    def test_configured_pubmedbert_failure_is_not_silent(self, pipeline) -> None:
-        with patch.dict("os.environ", {"ASCO_PUBMEDBERT_MODEL": "test"}):
-            with self.assertRaisesRegex(RuntimeError, "model unavailable"):
+    def test_gpt_oss_failure_is_not_silent(self) -> None:
+        with _entity_client(_StubClient(RuntimeError("gateway unavailable"))):
+            with self.assertRaisesRegex(RuntimeError, "gateway unavailable"):
                 extract_typed_entities("FOXP expression")
 
 

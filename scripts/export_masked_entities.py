@@ -11,7 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from content_integrity.entity_extraction import mask_text, validate_masking
+from content_integrity.entity_extraction import mask_text, set_entity_llm_client, validate_masking
+from content_integrity.validators.context_validator import build_gpt_oss_client
 from content_integrity.xml_parser import parse_xml_records
 
 
@@ -20,7 +21,9 @@ def main() -> int:
     parser.add_argument("--input-xml", type=Path, required=True)
     parser.add_argument("--output-csv", type=Path, required=True)
     parser.add_argument("--validation-csv", type=Path, required=True)
+    parser.add_argument("--env-file", type=Path, default=Path(".env"))
     args = parser.parse_args()
+    set_entity_llm_client(build_gpt_oss_client(args.env_file, cache_dir=ROOT / ".gpt_oss_cache"))
     rows, checks, entity_types = [], [], Counter()
     for record in parse_xml_records(args.input_xml):
         for index, item in enumerate(record.abstract_sections):

@@ -105,6 +105,15 @@ def _ssl_context(verify_ssl: str, ca_bundle: str) -> ssl.SSLContext | None:
     return ssl.create_default_context()
 
 
+class TruncatedResponseError(RuntimeError):
+    """The model spent its whole token budget without emitting message content.
+
+    Raised separately from transport failures so callers can react to it - the reasoning
+    model returns an empty message when an input is long or hard enough that its reasoning
+    fills `max_tokens`, and the fix for that is a smaller input, not a retry.
+    """
+
+
 def _extract_response_content(payload: dict[str, Any]) -> str:
     choices = payload.get("choices")
     if not isinstance(choices, list) or not choices:
@@ -136,6 +145,10 @@ def _extract_response_content(payload: dict[str, Any]) -> str:
         cleaned = "".join(pieces).strip()
         if cleaned:
             return cleaned
+    if first_choice.get("finish_reason") == "length":
+        raise TruncatedResponseError(
+            "Validator response hit the token limit before emitting message content"
+        )
     raise RuntimeError("Validator response did not include message content")
 
 

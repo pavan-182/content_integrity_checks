@@ -1,9 +1,0 @@
-{
-  "_comment": "Identifies the corpus that golden_data_template_detection_v3.csv was labelled against. The corpus itself is third-party publication XML and is deliberately not tracked in git (.gitignore excludes *.xml); this manifest lets anyone holding a copy prove it is the same one, instead of silently scoring against a different corpus. Verify with: python scripts/evaluate_template_detection.py --corpus-dir phase0_asco_xml_output_v3 ...",
-  "gold_csv": "golden_data_template_detection_v3.csv",
-  "corpus_dir": "phase0_asco_xml_output_v3",
-  "file_count": 190,
-  "input_manifest_sha256": "a6be3245b84c4ecd23b9b78e895ce042111369213432e113b302afc3a954ad10",
-  "checksum_algorithm": "content_integrity.pipeline._input_manifest_checksum (sha256 over each file's root-relative path then bytes, in sorted path order)",
-  "pinned_on": "2026-08-25"
-}

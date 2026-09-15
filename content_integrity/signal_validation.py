@@ -8,6 +8,9 @@ from itertools import combinations
 from pathlib import Path
 
 from .candidate_routes import generate_candidate_pairs
+# Rule-only extraction here on purpose: these loops run per sentence and per section, and
+# one GPT-OSS call each would swamp the rate-limited gateway. They only consume entity types
+# the deterministic rules already cover.
 from .entity_extraction import extract_typed_entities
 from .models import ParsedRecord
 from .thresholds import SIGNAL_VALIDATION_MAX_SIGNATURE_BUCKET as MAX_SIGNATURE_BUCKET
@@ -69,7 +72,7 @@ def molecular_axis_signatures(record: ParsedRecord) -> list[SignatureEvidence]:
     output = []
     for section in record.abstract_sections or [{"section": "Abstract", "text": record.abstract_text}]:
         for sentence in _sentences(section.get("text", "")):
-            entities = [entity for entity in extract_typed_entities(sentence, section.get("section", "Abstract")) if entity.entity_type in MOLECULAR_TYPES]
+            entities = [entity for entity in extract_typed_entities(sentence, section.get("section", "Abstract"), use_model=False) if entity.entity_type in MOLECULAR_TYPES]
             triples = []
             for relation in RELATION_RE.finditer(sentence):
                 left = [entity for entity in entities if entity.end <= relation.start()]
@@ -91,7 +94,7 @@ def assay_workflow_signatures(record: ParsedRecord) -> list[SignatureEvidence]:
         label, text = section.get("section", "Abstract"), section.get("text", "")
         if has_assay_sections and not any(name in normalize_for_matching(label) for name in ("method", "result")):
             continue
-        assays = [entity.normalized for entity in extract_typed_entities(text, label) if entity.entity_type == "assay"]
+        assays = [entity.normalized for entity in extract_typed_entities(text, label, use_model=False) if entity.entity_type == "assay"]
         ordered = list(dict.fromkeys(assays))
         if len(ordered) >= 2:
             output.append(SignatureEvidence("assay_workflow", record.record_id, " > ".join(ordered), label, normalize_whitespace(text)[:240]))
@@ -102,7 +105,7 @@ def endpoint_bundle_signatures(record: ParsedRecord) -> list[SignatureEvidence]:
     sections = record.abstract_sections or [{"section": "Abstract", "text": record.abstract_text}]
     endpoints = []
     for section in sections:
-        endpoints.extend(entity.normalized for entity in extract_typed_entities(section.get("text", ""), section.get("section", "Abstract")) if entity.entity_type == "endpoint")
+        endpoints.extend(entity.normalized for entity in extract_typed_entities(section.get("text", ""), section.get("section", "Abstract"), use_model=False) if entity.entity_type == "endpoint")
     unique = sorted(set(endpoints))
     if len(unique) < 2:
         return []

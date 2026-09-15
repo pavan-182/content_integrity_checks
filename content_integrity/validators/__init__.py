@@ -7,6 +7,7 @@ from .context_validator import (
     MODEL_ID,
     PROMPT_VERSION,
     SYSTEM_PROMPT,
+    TruncatedResponseError,
     build_gpt_oss_client,
 )
 from .llm_trace_validator import (
@@ -22,6 +23,7 @@ __all__ = [
     "MODEL_ID",
     "PROMPT_VERSION",
     "SYSTEM_PROMPT",
+    "TruncatedResponseError",
     "build_gpt_oss_client",
     "LLMTraceValidator",
     "apply_llm_trace_validation",
