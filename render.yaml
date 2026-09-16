@@ -10,6 +10,5 @@ services:
         value: /opt/render/project/src
       - key: PORT
         value: 8000
-    routes:
-      - path: /
-        destination: /
+      - key: ASCO_OFFLINE_MODE
+        value: "true"

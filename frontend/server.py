@@ -13,8 +13,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DIST = Path(__file__).resolve().parent / "dist"
-INPUT = Path(os.environ.get("ASCO_PIPELINE_INPUT", ROOT / "synthetic_asco_retractionwatch_validation.xml")).resolve()
+INPUT = Path(os.environ.get("ASCO_PIPELINE_INPUT", ROOT / "metadata_files")).resolve()
 PORT = int(os.environ.get("PORT", "8000"))
+OFFLINE_MODE = os.environ.get("ASCO_OFFLINE_MODE", "false").lower() == "true"
 OUTPUT = ROOT / "outputs/frontend_run"
 REPORT = OUTPUT / "content_integrity_results.json"
 AUTHORSHIP_REPORT = OUTPUT / "final_json.json"
@@ -33,14 +34,17 @@ def run_pipeline(input_path: Path = INPUT, output_dir: Path = OUTPUT, runner=sub
             input_dir.mkdir()
             shutil.copy2(input_path, input_dir / input_path.name)
 
+        cmd = [
+            sys.executable,
+            str(ROOT / "scripts/run_pipeline.py"),
+            "--input-dir", str(input_dir),
+            "--tortured-dictionary", str(ROOT / "🤷_tortured.csv"),
+            "--output-dir", str(output_dir),
+        ]
+        if OFFLINE_MODE:
+            cmd.append("--offline")
         runner(
-            [
-                sys.executable,
-                str(ROOT / "scripts/run_pipeline.py"),
-                "--input-dir", str(input_dir),
-                "--tortured-dictionary", str(ROOT / "🤷_tortured.csv"),
-                "--output-dir", str(output_dir),
-            ],
+            cmd,
             cwd=ROOT,
             check=True,
             capture_output=True,
