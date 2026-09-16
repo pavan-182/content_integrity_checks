@@ -1838,7 +1838,7 @@
           <p>
             <bold>SYNIC0013</bold>
           </p>
-          <p><bold>Background: </bold>Long intergenic non-protein coding RNA 504 (LINC00504) is a long non-coding RNA that has an important regulatory role in a variety of human cancers. In this study, LINC00504 expression in bosom peril tissues and cell lines was detected. Studies were also conducted to determine the impact of LINC00504 on the tumor behavior of breast cancer cells. The potential mechanisms underlying the oncogenic role of LINC00504 in breast cancer cells were elucidated in detail.  <bold>Methods: </bold>Expression of LINC00504 in breast cancer was analyzed by quantitative real-time polymerase chain reaction. The effects of LINC00504 on proliferation, apoptosis, in vitro migration and invasion, and in vivo tumor growth were elucidated using Cell Counting Kit-8 assay, flow cytometry, Transwell assays, and tumor xenograft models, respectively. Bioinformatics analyses in conjunction with RNA immunoprecipitation, luciferase reporter assays, and rescue experiments were conducted to investigate the underlying molecular mechanisms. LINC00504 was upregulated in breast cancer tissues and cell lines. Knocking down LINC00504 suppressed breast cancer cell proliferation, migration, and invasion and facilitated apoptosis in vitro.  <bold>Results: </bold>In addition, tumor growth in vivo was significantly inhibited by LINC00504 depletion. Regarding the underlying mechanism, LIN00504 could function as a competing endogenous RNA in breast cancer by sponging microRNA-876-3p (miR-876-3p), resulting in the upregulation of high mobility group box 3 (HMGB3). Rescue experiments further revealed that miR-876-3p downregulation or HMGB3 upregulation effectively reversed the inhibitory effects of LIN00504 deficiency on breast cancer cells. The LIN00504-miR-876-3p-HMGB3 axis shows carcinogenic effects in modulating the biological behavior of breast cancer cells. This pathway may represent an effective target for CRC diagnosis and anticancer therapy. This experimental design was based on lncRNA LINC00504 to explore the malignant behavior of breast cancer.  <bold>Conclusions: </bold>RT-qPCR was used to detect the expression of lncRNA LINC00504 and miR-876-3p in bosom peril tissues and cell lines. CCK-8, colony formation, and transwell assays were used to examine the effects of lncRNA LINC00504 and miR-876-3p on breast cancer cell proliferation and migration invasiveness. For target gene prediction and screening, luciferase reporter assays were used to verify HMGB3 as a downstream target of the LINC00504/miR-876-3p axis.</p>
+          <p><bold>Background: </bold>Long intergenic non-protein coding RNA 504 (LINC00504) is a long non-coding RNA that has an important regulatory role in a variety of human cancers. In this study, LINC00504 expression in breast cancer tissues and cell lines was detected. A test arrangement was used to compare the paired tumor and control groups. Studies were also conducted to determine the impact of LINC00504 on the tumor behavior of breast cancer cells. The potential mechanisms underlying the oncogenic role of LINC00504 in breast cancer cells were elucidated in detail.  <bold>Methods: </bold>Expression of LINC00504 in breast cancer was analyzed by quantitative real-time polymerase chain reaction. The effects of LINC00504 on proliferation, apoptosis, in vitro migration and invasion, and in vivo tumor growth were elucidated using Cell Counting Kit-8 assay, flow cytometry, Transwell assays, and tumor xenograft models, respectively. Bioinformatics analyses in conjunction with RNA immunoprecipitation, luciferase reporter assays, and rescue experiments were conducted to investigate the underlying molecular mechanisms. LINC00504 was upregulated in breast cancer tissues and cell lines. Knocking down LINC00504 suppressed breast cancer cell proliferation, migration, and invasion and facilitated apoptosis in vitro.  <bold>Results: </bold>In addition, tumor growth in vivo was significantly inhibited by LINC00504 depletion. Regarding the underlying mechanism, LIN00504 could function as a competing endogenous RNA in breast cancer by sponging microRNA-876-3p (miR-876-3p), resulting in the upregulation of high mobility group box 3 (HMGB3). Rescue experiments further revealed that miR-876-3p downregulation or HMGB3 upregulation effectively reversed the inhibitory effects of LIN00504 deficiency on breast cancer cells. The LIN00504-miR-876-3p-HMGB3 axis shows carcinogenic effects in modulating the biological behavior of breast cancer cells. This pathway may represent an effective target for CRC diagnosis and anticancer therapy. This experimental design was based on lncRNA LINC00504 to explore the malignant behavior of breast cancer.  <bold>Conclusions: </bold>RT-qPCR was used to detect the expression of lncRNA LINC00504 and miR-876-3p in breast cancer tissues and cell lines. CCK-8, colony formation, and transwell assays were used to examine the effects of lncRNA LINC00504 and miR-876-3p on breast cancer cell proliferation and migration invasiveness. For target gene prediction and screening, luciferase reporter assays were used to verify HMGB3 as a downstream target of the LINC00504/miR-876-3p axis.</p>
         </abstract>
         <kwd-group kwd-group-type="subject_thes_terms">
           <kwd>(BLS) Biology - Cancer</kwd>
@@ -1920,7 +1920,7 @@
           <p>
             <bold>SYNIC0014</bold>
           </p>
-          <p><bold>Background: </bold>Circular RNAs (circRNAs) are a class of covalently closed circular RNA transcripts and have been found to regulate the progression of human malignancies. The objective of this study was to identify the functions of circRNAs in bosom peril (BCa). BCa and adjacent non-cancerous tissues were collected from 99 patients. Kaplan-Meier analysis was used to analyze the relationship between circPVT1 and prognosis.  <bold>Methods: </bold>CircPVT1 expression levels in BCa tissues and cell lines were detected via PCR. Transfection technology was used to silence circPVT1 and overexpress miR-204-5p. Cell biological behavior was analyzed, and epithelial-mesenchymal transition (EMT) related proteins were detected by Western blot. In vivo experiments were performed with the subcutaneous xenograft tumor model.  <bold>Results: </bold>CircPVT1 was markedly overexpressed in BCa tissues and cell lines. Higher expression of circPVT1 was correlated with poor prognosis of BCa patients. Knockdown circPVT1 significantly suppressed the proliferation, migration and invasion of BCa cells invitro, and suppressed BCa tumor growth invivo. CircPVT1 knockdown upregulated E-cadherin and downregulated N-cadherin, Vimentin, Slug and Twist in BCa cells. Moreover, circPVT1 could serve as a competing endogenous RNA (ceRNA) for miR-204-5p, and restoration of miR-204-5p abrogated the oncogenic role of circPVT1 in BCa cells.  <bold>Conclusions: </bold>CircPVT1 as a potentially valuable biomarker for BCa diagnosis and therapeutic target for BCa treatment. CircPVT1 might promote the invasion and EMT of BCa cells by serving as aceRNA for miR-204-5p. Trial registration: NCTXXXXXXXX.</p>
+          <p><bold>Background: </bold>Circular RNAs (circRNAs) are a class of covalently closed circular RNA transcripts and have been found to regulate the progression of human malignancies. The objective of this study was to identify the functions of circRNAs in breast cancer (BCa). A selection making step was used to prioritize the candidate circRNAs. BCa and adjacent non-cancerous tissues were collected from 99 patients. Kaplan-Meier analysis was used to analyze the relationship between circPVT1 and prognosis.  <bold>Methods: </bold>CircPVT1 expression levels in BCa tissues and cell lines were detected via PCR. Transfection technology was used to silence circPVT1 and overexpress miR-204-5p. Cell biological behavior was analyzed, and epithelial-mesenchymal transition (EMT) related proteins were detected by Western blot. In vivo experiments were performed with the subcutaneous xenograft tumor model.  <bold>Results: </bold>CircPVT1 was markedly overexpressed in BCa tissues and cell lines. Higher expression of circPVT1 was correlated with poor prognosis of BCa patients. Knockdown circPVT1 significantly suppressed the proliferation, migration and invasion of BCa cells invitro, and suppressed BCa tumor growth invivo. CircPVT1 knockdown upregulated E-cadherin and downregulated N-cadherin, Vimentin, Slug and Twist in BCa cells. Moreover, circPVT1 could serve as a competing endogenous RNA (ceRNA) for miR-204-5p, and restoration of miR-204-5p abrogated the oncogenic role of circPVT1 in BCa cells.  <bold>Conclusions: </bold>CircPVT1 as a potentially valuable biomarker for BCa diagnosis and therapeutic target for BCa treatment. CircPVT1 might promote the invasion and EMT of BCa cells by serving as aceRNA for miR-204-5p. Trial registration: NCTXXXXXXXX.</p>
         </abstract>
         <kwd-group kwd-group-type="subject_thes_terms">
           <kwd>(BLS) Biology - Cancer</kwd>
@@ -2148,7 +2148,7 @@
           <p>
             <bold>SYNIC0016</bold>
           </p>
-          <p><bold>Background: </bold>Long intergenic non-coding RNA 922 (LINC00922) plays a critical role in the progression of lung cancer. In this study, we aimed to quantify LINC00922 expression in bosom peril and determine its influence on the malignant behavior of breast cancer cells in vitro and in vivo. We also investigated the mechanism by which LINC00922 affects the progression of breast cancer. Reverse transcription-quantitative polymerase chain reaction was performed to quantify LINC00922 expression in breast cancer tissues and cell lines.  <bold>Methods: </bold>The cell counting kit-8 assay, flow cytometry, Transwell migration and invasion assays, and tumor model assays were performed to determine the effects of LINC00922 deficiency on breast cancer cell proliferation, apoptosis, migration and invasion in vitro, and tumor growth in vivo, respectively. Furthermore, bioinformatics analysis was performed to predict the potential target microRNA of LINC00922. The prediction was further evaluated using luciferase reporter and RNA immunoprecipitation assays. LINC00922 was clearly overexpressed in breast cancer tissues and cell lines.  <bold>Results: </bold>LINC00922 depletion restricted breast cancer cell proliferation, migration, and invasion but induced cell apoptosis in vitro. Additionally, its knockdown evidently repressed tumor growth of breast cancer cells in vivo. Mechanistically, LINC00922 was demonstrated to serve as a molecular sponge for miR-424-5p in breast cancer cells. Furthermore, brain-derived neurotrophic factor (BDNF) was verified as a direct target of miR-424-5p in breast cancer cells, and BDNF expression was found to be positively regulated by LINC00922 through sponging miR-425-5p. Rescue experiments further revealed that the influences on breast cancer cell proliferation, apoptosis, migration, and invasion induced by LINC00922 silencing were abrogated by increasing the output of the miR-424-5p/BDNF axis.  <bold>Conclusions: </bold>The LINC00922/miR-424-5p/BDNF pathway is implicated in the acceleration of the malignant behavior of breast cancer cells. These findings suggest that this pathway is a promising novel molecular target in breast cancer therapy. The median follow-up was 18 months (range 24-36 months).</p>
+          <p><bold>Background: </bold>Long intergenic non-coding RNA 922 (LINC00922) plays a critical role in the progression of lung cancer. In this study, we aimed to quantify LINC00922 expression in breast cancer and determine its influence on the malignant behavior of breast cancer cells in vitro and in vivo. We also investigated the mechanism by which LINC00922 affects the progression of breast cancer. Preparing information was used to assemble the expression matrix for analysis. Reverse transcription-quantitative polymerase chain reaction was performed to quantify LINC00922 expression in breast cancer tissues and cell lines.  <bold>Methods: </bold>The cell counting kit-8 assay, flow cytometry, Transwell migration and invasion assays, and tumor model assays were performed to determine the effects of LINC00922 deficiency on breast cancer cell proliferation, apoptosis, migration and invasion in vitro, and tumor growth in vivo, respectively. Furthermore, bioinformatics analysis was performed to predict the potential target microRNA of LINC00922. The prediction was further evaluated using luciferase reporter and RNA immunoprecipitation assays. LINC00922 was clearly overexpressed in breast cancer tissues and cell lines.  <bold>Results: </bold>LINC00922 depletion restricted breast cancer cell proliferation, migration, and invasion but induced cell apoptosis in vitro. Additionally, its knockdown evidently repressed tumor growth of breast cancer cells in vivo. Mechanistically, LINC00922 was demonstrated to serve as a molecular sponge for miR-424-5p in breast cancer cells. Furthermore, brain-derived neurotrophic factor (BDNF) was verified as a direct target of miR-424-5p in breast cancer cells, and BDNF expression was found to be positively regulated by LINC00922 through sponging miR-425-5p. Rescue experiments further revealed that the influences on breast cancer cell proliferation, apoptosis, migration, and invasion induced by LINC00922 silencing were abrogated by increasing the output of the miR-424-5p/BDNF axis.  <bold>Conclusions: </bold>The LINC00922/miR-424-5p/BDNF pathway is implicated in the acceleration of the malignant behavior of breast cancer cells. These findings suggest that this pathway is a promising novel molecular target in breast cancer therapy. The median follow-up was 18 months (range 24-36 months).</p>
         </abstract>
         <kwd-group kwd-group-type="subject_thes_terms">
           <kwd>(BLS) Biology - Cancer</kwd>
@@ -2386,6 +2386,1180 @@
         </kwd-group>
         <kwd-group kwd-group-type="subject_thes_hits">
           <kwd>1</kwd>
+          <kwd>1</kwd>
+          <kwd>1</kwd>
+          <kwd>1</kwd>
+        </kwd-group>
+      </article-meta>
+    </front-stub>
+  </sub-article>
+  <sub-article article-type="meeting-abstract">
+    <front-stub>
+      <journal-meta>
+        <journal-id journal-id-type="hwp">synthetic-asco</journal-id>
+        <journal-id journal-id-type="pmc">synthetic-asco</journal-id>
+        <journal-id journal-id-type="publisher-id">SYNTHETIC-ASCO</journal-id>
+        <journal-title-group>
+          <journal-title>Synthetic ASCO Integrity Validation</journal-title>
+          <abbrev-journal-title>SYNTHETIC ASCO ABSTRACTS</abbrev-journal-title>
+        </journal-title-group>
+        <issn pub-type="ppub">0000-0000</issn>
+        <issn pub-type="epub">0000-0000</issn>
+        <publisher>
+          <publisher-name>Synthetic Validation Dataset</publisher-name>
+        </publisher>
+      </journal-meta>
+      <article-meta>
+        <article-id pub-id-type="custom" custom-type="meeting-id">SYNTH-IC-2026</article-id>
+        <article-id pub-id-type="custom" custom-type="session-id">SYNTH-VALIDATION</article-id>
+        <article-id pub-id-type="custom" custom-type="session-participation-id">990019</article-id>
+        <article-id pub-id-type="custom" custom-type="temporary-abstract-id">880019</article-id>
+        <article-id pub-id-type="custom" custom-type="abstract-id">SYNIC0019</article-id>
+        <article-id pub-id-type="custom" custom-type="source-record-id">DUMMY-0019</article-id>
+        <article-id pub-id-type="custom" custom-type="source-original-doi">10.0000/synthetic.asco.0019</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-doi">10.0000/synthetic.asco.ret.0019</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-pmid">99001900</article-id>
+        <article-id pub-id-type="doi">10.0000/synthetic.asco.0019</article-id>
+        <article-categories>
+          <subj-group subj-group-type="heading">
+            <subject>(BLS) Biology - Cancer;(BLS) Biology - Cellular;(HSC) Medicine - Oncology;</subject>
+          </subj-group>
+          <series-title>Synthetic Integrity Central Validation Dataset</series-title>
+          <series-text>Research Article;</series-text>
+        </article-categories>
+        <title-group>
+          <article-title>Circulating miR-215-5p and treatment response in metastatic colorectal cancer</article-title>
+        </title-group>
+        <contrib-group>
+          <contrib id="C0019_1" contrib-type="presenter">
+            <name>
+              <surname>Rahman</surname>
+              <given-names>Aisha</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0019_1"/>
+          </contrib>
+          <contrib id="C0019_2" contrib-type="author">
+            <name>
+              <surname>Sethi</surname>
+              <given-names>Nikhil</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0019_2"/>
+          </contrib>
+          <contrib id="C0019_3" contrib-type="author">
+            <name>
+              <surname>Menon</surname>
+              <given-names>Priya</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0019_3"/>
+          </contrib>
+          <aff id="A0019_1">Department of Medical Oncology, Northbridge Cancer Institute, Pune, India</aff>
+          <aff id="A0019_2">Molecular Diagnostics Unit, Meridian Biomedical Centre, Bengaluru, India</aff>
+          <aff id="A0019_3">Department of Pathology, Lakeshore University Hospital, Kochi, India</aff>
+        </contrib-group>
+        <author-notes>
+          <fn fn-type="other">
+            <p>Synthetic dummy validation record created for internal content-integrity testing; identifiers are non-production placeholders and no external source record is associated with this abstract.</p>
+          </fn>
+        </author-notes>
+        <pub-date pub-type="ppub">
+          <day>4</day>
+          <month>1</month>
+          <year>2026</year>
+        </pub-date>
+        <fpage>SYNIC0019</fpage>
+        <lpage>SYNIC0019</lpage>
+        <permissions>
+          <copyright-statement>Synthetic validation dataset for internal integrity testing; synthetic dummy metadata.</copyright-statement>
+          <copyright-year>2026</copyright-year>
+        </permissions>
+        <abstract>
+          <p>
+            <bold>SYNIC0019</bold>
+          </p>
+          <p><bold>Background: </bold>Circulating microRNAs may provide minimally invasive markers of treatment response in metastatic colorectal cancer (mCRC). We evaluated whether plasma miR-215-5p measured before second-line therapy was associated with early radiographic response and progression-free survival.  <bold>Methods: </bold>Plasma samples were collected from 62 patients with mCRC before treatment and again at the first imaging assessment. miR-215-5p was quantified by RT-qPCR and normalized to a synthetic spike-in control. Tumor response was assessed according to RECIST 1.1, and associations with clinical outcomes were examined using multivariable regression.  <bold>Results: </bold>Forty patients had complete radiographic and paired plasma data. Disease control was observed in 24 of 40 evaluable patients (65%). Patients with a reduction in miR-215-5p after treatment had longer median progression-free survival than patients with stable or increased levels, and this association remained significant after adjustment for treatment line and baseline tumor burden.  <bold>Conclusions: </bold>Dynamic change in circulating miR-215-5p was associated with early treatment response in this exploratory mCRC cohort. Prospective validation is required before clinical use.</p>
+        </abstract>
+        <kwd-group kwd-group-type="subject_thes_terms">
+          <kwd>(BLS) Biology - Cancer</kwd>
+          <kwd>(BLS) Biology - Cellular</kwd>
+          <kwd>(HSC) Medicine - Oncology</kwd>
+        </kwd-group>
+        <kwd-group kwd-group-type="subject_thes_hits">
+          <kwd>1</kwd>
+          <kwd>1</kwd>
+          <kwd>1</kwd>
+        </kwd-group>
+      </article-meta>
+    </front-stub>
+  </sub-article>
+  <sub-article article-type="meeting-abstract">
+    <front-stub>
+      <journal-meta>
+        <journal-id journal-id-type="hwp">synthetic-asco</journal-id>
+        <journal-id journal-id-type="pmc">synthetic-asco</journal-id>
+        <journal-id journal-id-type="publisher-id">SYNTHETIC-ASCO</journal-id>
+        <journal-title-group>
+          <journal-title>Synthetic ASCO Integrity Validation</journal-title>
+          <abbrev-journal-title>SYNTHETIC ASCO ABSTRACTS</abbrev-journal-title>
+        </journal-title-group>
+        <issn pub-type="ppub">0000-0000</issn>
+        <issn pub-type="epub">0000-0000</issn>
+        <publisher>
+          <publisher-name>Synthetic Validation Dataset</publisher-name>
+        </publisher>
+      </journal-meta>
+      <article-meta>
+        <article-id pub-id-type="custom" custom-type="meeting-id">SYNTH-IC-2026</article-id>
+        <article-id pub-id-type="custom" custom-type="session-id">SYNTH-VALIDATION</article-id>
+        <article-id pub-id-type="custom" custom-type="session-participation-id">990020</article-id>
+        <article-id pub-id-type="custom" custom-type="temporary-abstract-id">880020</article-id>
+        <article-id pub-id-type="custom" custom-type="abstract-id">SYNIC0020</article-id>
+        <article-id pub-id-type="custom" custom-type="source-record-id">DUMMY-0020</article-id>
+        <article-id pub-id-type="custom" custom-type="source-original-doi">10.0000/synthetic.asco.0020</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-doi">10.0000/synthetic.asco.ret.0020</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-pmid">99002000</article-id>
+        <article-id pub-id-type="doi">10.0000/synthetic.asco.0020</article-id>
+        <article-categories>
+          <subj-group subj-group-type="heading">
+            <subject>(BLS) Biology - Cancer;(BLS) Immunology;(HSC) Medicine - Oncology;</subject>
+          </subj-group>
+          <series-title>Synthetic Integrity Central Validation Dataset</series-title>
+          <series-text>Research Article;</series-text>
+        </article-categories>
+        <title-group>
+          <article-title>A CXCL9-rich macrophage signature is associated with response to PD-1 blockade in melanoma</article-title>
+        </title-group>
+        <contrib-group>
+          <contrib id="C0020_1" contrib-type="presenter">
+            <name>
+              <surname>Varga</surname>
+              <given-names>Elena</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0020_1"/>
+          </contrib>
+          <contrib id="C0020_2" contrib-type="author">
+            <name>
+              <surname>Novak</surname>
+              <given-names>Tomas</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0020_2"/>
+          </contrib>
+          <contrib id="C0020_3" contrib-type="author">
+            <name>
+              <surname>Petrescu</surname>
+              <given-names>Sofia</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0020_3"/>
+          </contrib>
+          <aff id="A0020_1">Division of Translational Oncology, Danube Medical Research Centre, Budapest, Hungary</aff>
+          <aff id="A0020_2">Department of Immunology, Central Moravia University Hospital, Brno, Czech Republic</aff>
+          <aff id="A0020_3">Cancer Systems Biology Program, Carpathia Institute of Medicine, Cluj-Napoca, Romania</aff>
+        </contrib-group>
+        <author-notes>
+          <fn fn-type="other">
+            <p>Synthetic dummy validation record created for internal content-integrity testing; identifiers are non-production placeholders and no external source record is associated with this abstract.</p>
+          </fn>
+        </author-notes>
+        <pub-date pub-type="ppub">
+          <day>7</day>
+          <month>2</month>
+          <year>2026</year>
+        </pub-date>
+        <fpage>SYNIC0020</fpage>
+        <lpage>SYNIC0020</lpage>
+        <permissions>
+          <copyright-statement>Synthetic validation dataset for internal integrity testing; synthetic dummy metadata.</copyright-statement>
+          <copyright-year>2026</copyright-year>
+        </permissions>
+        <abstract>
+          <p>
+            <bold>SYNIC0020</bold>
+          </p>
+          <p><bold>Background: </bold>The composition of the tumor immune microenvironment influences response to immune checkpoint blockade in melanoma. We investigated whether a macrophage-associated CXCL9 expression pattern was related to response to anti-PD-1 therapy.  <bold>Methods: </bold>Pretreatment tumor samples from 74 patients with advanced melanoma were profiled by multiplex immunofluorescence and targeted RNA sequencing. Spatial density of macrophage subsets and expression of interferon-response genes were compared between responders and nonresponders. Associations with progression-free survival were evaluated using Cox regression.  <bold>Results: </bold>Responders showed greater intratumoral density of CXCL9-positive macrophages and higher expression of an interferon-response gene set. The combined cellular and transcriptional signature was independently associated with progression-free survival after adjustment for disease stage and serum lactate dehydrogenase.  <bold>Conclusions: </bold>A CXCL9-rich macrophage state was associated with clinical benefit from PD-1 blockade and may complement established biomarkers in melanoma.</p>
+        </abstract>
+        <kwd-group kwd-group-type="subject_thes_terms">
+          <kwd>(BLS) Biology - Cancer</kwd>
+          <kwd>(BLS) Immunology</kwd>
+          <kwd>(HSC) Medicine - Oncology</kwd>
+        </kwd-group>
+        <kwd-group kwd-group-type="subject_thes_hits">
+          <kwd>1</kwd>
+          <kwd>1</kwd>
+          <kwd>1</kwd>
+        </kwd-group>
+      </article-meta>
+    </front-stub>
+  </sub-article>
+  <sub-article article-type="meeting-abstract">
+    <front-stub>
+      <journal-meta>
+        <journal-id journal-id-type="hwp">synthetic-asco</journal-id>
+        <journal-id journal-id-type="pmc">synthetic-asco</journal-id>
+        <journal-id journal-id-type="publisher-id">SYNTHETIC-ASCO</journal-id>
+        <journal-title-group>
+          <journal-title>Synthetic ASCO Integrity Validation</journal-title>
+          <abbrev-journal-title>SYNTHETIC ASCO ABSTRACTS</abbrev-journal-title>
+        </journal-title-group>
+        <issn pub-type="ppub">0000-0000</issn>
+        <issn pub-type="epub">0000-0000</issn>
+        <publisher>
+          <publisher-name>Synthetic Validation Dataset</publisher-name>
+        </publisher>
+      </journal-meta>
+      <article-meta>
+        <article-id pub-id-type="custom" custom-type="meeting-id">SYNTH-IC-2026</article-id>
+        <article-id pub-id-type="custom" custom-type="session-id">SYNTH-VALIDATION</article-id>
+        <article-id pub-id-type="custom" custom-type="session-participation-id">990021</article-id>
+        <article-id pub-id-type="custom" custom-type="temporary-abstract-id">880021</article-id>
+        <article-id pub-id-type="custom" custom-type="abstract-id">SYNIC0021</article-id>
+        <article-id pub-id-type="custom" custom-type="source-record-id">DUMMY-0021</article-id>
+        <article-id pub-id-type="custom" custom-type="source-original-doi">10.0000/synthetic.asco.0021</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-doi">10.0000/synthetic.asco.ret.0021</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-pmid">99002100</article-id>
+        <article-id pub-id-type="doi">10.0000/synthetic.asco.0021</article-id>
+        <article-categories>
+          <subj-group subj-group-type="heading">
+            <subject>(BLS) Biology - Cancer;(HSC) Medicine - Oncology;(HSC) Medicine - Surgery;</subject>
+          </subj-group>
+          <series-title>Synthetic Integrity Central Validation Dataset</series-title>
+          <series-text>Research Article;</series-text>
+        </article-categories>
+        <title-group>
+          <article-title>Neoadjuvant nivolumab plus chemotherapy in resectable esophageal squamous cell carcinoma: A phase II study</article-title>
+        </title-group>
+        <contrib-group>
+          <contrib id="C0021_1" contrib-type="presenter">
+            <name>
+              <surname>Kinoshita</surname>
+              <given-names>Haruto</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0021_1"/>
+          </contrib>
+          <contrib id="C0021_2" contrib-type="author">
+            <name>
+              <surname>Arakawa</surname>
+              <given-names>Mei</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0021_2"/>
+          </contrib>
+          <contrib id="C0021_3" contrib-type="author">
+            <name>
+              <surname>Fujimoto</surname>
+              <given-names>Daichi</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0021_3"/>
+          </contrib>
+          <aff id="A0021_1">Department of Thoracic Oncology, Seishin University Medical Center, Nagoya, Japan</aff>
+          <aff id="A0021_2">Division of Gastrointestinal Surgery, Kosei Clinical Institute, Kyoto, Japan</aff>
+          <aff id="A0021_3">Department of Medical Oncology, East Harbor Cancer Hospital, Yokohama, Japan</aff>
+        </contrib-group>
+        <author-notes>
+          <fn fn-type="other">
+            <p>Synthetic dummy validation record created for internal content-integrity testing; identifiers are non-production placeholders and no external source record is associated with this abstract.</p>
+          </fn>
+        </author-notes>
+        <pub-date pub-type="ppub">
+          <day>10</day>
+          <month>3</month>
+          <year>2026</year>
+        </pub-date>
+        <fpage>SYNIC0021</fpage>
+        <lpage>SYNIC0021</lpage>
+        <permissions>
+          <copyright-statement>Synthetic validation dataset for internal integrity testing; synthetic dummy metadata.</copyright-statement>
+          <copyright-year>2026</copyright-year>
+        </permissions>
+        <abstract>
+          <p>
+            <bold>SYNIC0021</bold>
+          </p>
+          <p><bold>Background: </bold>Neoadjuvant immune checkpoint blockade combined with chemotherapy may improve pathologic response in patients with resectable esophageal squamous cell carcinoma. We evaluated the feasibility and activity of nivolumab plus platinum-based chemotherapy before surgery.  <bold>Methods: </bold>Patients with stage II-III resectable disease received three preoperative cycles of nivolumab with cisplatin and fluorouracil. The primary endpoint was major pathologic response, and secondary endpoints included R0 resection, treatment completion, and perioperative safety.  <bold>Results: </bold>Forty-eight patients initiated treatment and 45 underwent surgery. Major pathologic response was observed in 19 patients, including 8 with pathologic complete response. The R0 resection rate was 93%, and no unexpected perioperative safety signal was observed.  <bold>Conclusions: </bold>Neoadjuvant nivolumab plus chemotherapy showed encouraging pathologic activity with acceptable perioperative feasibility. Trial registration: NCT-04738126.</p>
+        </abstract>
+        <kwd-group kwd-group-type="subject_thes_terms">
+          <kwd>(BLS) Biology - Cancer</kwd>
+          <kwd>(HSC) Medicine - Oncology</kwd>
+          <kwd>(HSC) Medicine - Surgery</kwd>
+        </kwd-group>
+        <kwd-group kwd-group-type="subject_thes_hits">
+          <kwd>1</kwd>
+          <kwd>1</kwd>
+          <kwd>1</kwd>
+        </kwd-group>
+      </article-meta>
+    </front-stub>
+  </sub-article>
+  <sub-article article-type="meeting-abstract">
+    <front-stub>
+      <journal-meta>
+        <journal-id journal-id-type="hwp">synthetic-asco</journal-id>
+        <journal-id journal-id-type="pmc">synthetic-asco</journal-id>
+        <journal-id journal-id-type="publisher-id">SYNTHETIC-ASCO</journal-id>
+        <journal-title-group>
+          <journal-title>Synthetic ASCO Integrity Validation</journal-title>
+          <abbrev-journal-title>SYNTHETIC ASCO ABSTRACTS</abbrev-journal-title>
+        </journal-title-group>
+        <issn pub-type="ppub">0000-0000</issn>
+        <issn pub-type="epub">0000-0000</issn>
+        <publisher>
+          <publisher-name>Synthetic Validation Dataset</publisher-name>
+        </publisher>
+      </journal-meta>
+      <article-meta>
+        <article-id pub-id-type="custom" custom-type="meeting-id">SYNTH-IC-2026</article-id>
+        <article-id pub-id-type="custom" custom-type="session-id">SYNTH-VALIDATION</article-id>
+        <article-id pub-id-type="custom" custom-type="session-participation-id">990022</article-id>
+        <article-id pub-id-type="custom" custom-type="temporary-abstract-id">880022</article-id>
+        <article-id pub-id-type="custom" custom-type="abstract-id">SYNIC0022</article-id>
+        <article-id pub-id-type="custom" custom-type="source-record-id">DUMMY-0022</article-id>
+        <article-id pub-id-type="custom" custom-type="source-original-doi">10.0000/synthetic.asco.0022</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-doi">10.0000/synthetic.asco.ret.0022</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-pmid">99002200</article-id>
+        <article-id pub-id-type="doi">10.0000/synthetic.asco.0022</article-id>
+        <article-categories>
+          <subj-group subj-group-type="heading">
+            <subject>(BLS) Biology - Cancer;(BLS) Genetics;(HSC) Medicine - Urology;</subject>
+          </subj-group>
+          <series-title>Synthetic Integrity Central Validation Dataset</series-title>
+          <series-text>Research Article;</series-text>
+        </article-categories>
+        <title-group>
+          <article-title>Plasma circulating tumor DNA dynamics after neoadjuvant chemotherapy in muscle-invasive bladder cancer</article-title>
+        </title-group>
+        <contrib-group>
+          <contrib id="C0022_1" contrib-type="presenter">
+            <name>
+              <surname>Ferraro</surname>
+              <given-names>Lucia</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0022_1"/>
+          </contrib>
+          <contrib id="C0022_2" contrib-type="author">
+            <name>
+              <surname>Ricciardi</surname>
+              <given-names>Matteo</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0022_2"/>
+          </contrib>
+          <contrib id="C0022_3" contrib-type="author">
+            <name>
+              <surname>Conti</surname>
+              <given-names>Giulia</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0022_3"/>
+          </contrib>
+          <aff id="A0022_1">Urologic Oncology Unit, Adriatic Clinical Research Hospital, Ancona, Italy</aff>
+          <aff id="A0022_2">Department of Molecular Pathology, Verona Biomedical Institute, Verona, Italy</aff>
+          <aff id="A0022_3">Division of Oncology, San Marco University Hospital, Padua, Italy</aff>
+        </contrib-group>
+        <author-notes>
+          <fn fn-type="other">
+            <p>Synthetic dummy validation record created for internal content-integrity testing; identifiers are non-production placeholders and no external source record is associated with this abstract.</p>
+          </fn>
+        </author-notes>
+        <pub-date pub-type="ppub">
+          <day>13</day>
+          <month>4</month>
+          <year>2026</year>
+        </pub-date>
+        <fpage>SYNIC0022</fpage>
+        <lpage>SYNIC0022</lpage>
+        <permissions>
+          <copyright-statement>Synthetic validation dataset for internal integrity testing; synthetic dummy metadata.</copyright-statement>
+          <copyright-year>2026</copyright-year>
+        </permissions>
+        <abstract>
+          <p>
+            <bold>SYNIC0022</bold>
+          </p>
+          <p><bold>Background: </bold>Circulating tumor DNA (ctDNA) may provide an early measure of treatment effect in muscle-invasive bladder cancer. We assessed changes in plasma ctDNA during neoadjuvant chemotherapy and their association with pathologic response at cystectomy.  <bold>Methods: </bold>Tumor-informed sequencing panels were generated from pretreatment tissue in 58 patients. Plasma was collected before chemotherapy, after two cycles, and before surgery. ctDNA clearance was compared with pathologic downstaging and recurrence-free survival.  <bold>Results: </bold>Pretreatment ctDNA was detectable in 41 patients. Clearance during chemotherapy was more frequent among patients with pathologic downstaging and was associated with improved recurrence-free survival. Persistent ctDNA before surgery identified a subgroup with a higher risk of early relapse.  <bold>Conclusions: </bold>Serial tumor-informed ctDNA assessment may help refine response evaluation during neoadjuvant treatment for muscle-invasive bladder cancer.</p>
+        </abstract>
+        <kwd-group kwd-group-type="subject_thes_terms">
+          <kwd>(BLS) Biology - Cancer</kwd>
+          <kwd>(BLS) Genetics</kwd>
+          <kwd>(HSC) Medicine - Urology</kwd>
+        </kwd-group>
+        <kwd-group kwd-group-type="subject_thes_hits">
+          <kwd>1</kwd>
+          <kwd>1</kwd>
+          <kwd>1</kwd>
+        </kwd-group>
+      </article-meta>
+    </front-stub>
+  </sub-article>
+  <sub-article article-type="meeting-abstract">
+    <front-stub>
+      <journal-meta>
+        <journal-id journal-id-type="hwp">synthetic-asco</journal-id>
+        <journal-id journal-id-type="pmc">synthetic-asco</journal-id>
+        <journal-id journal-id-type="publisher-id">SYNTHETIC-ASCO</journal-id>
+        <journal-title-group>
+          <journal-title>Synthetic ASCO Integrity Validation</journal-title>
+          <abbrev-journal-title>SYNTHETIC ASCO ABSTRACTS</abbrev-journal-title>
+        </journal-title-group>
+        <issn pub-type="ppub">0000-0000</issn>
+        <issn pub-type="epub">0000-0000</issn>
+        <publisher>
+          <publisher-name>Synthetic Validation Dataset</publisher-name>
+        </publisher>
+      </journal-meta>
+      <article-meta>
+        <article-id pub-id-type="custom" custom-type="meeting-id">SYNTH-IC-2026</article-id>
+        <article-id pub-id-type="custom" custom-type="session-id">SYNTH-VALIDATION</article-id>
+        <article-id pub-id-type="custom" custom-type="session-participation-id">990023</article-id>
+        <article-id pub-id-type="custom" custom-type="temporary-abstract-id">880023</article-id>
+        <article-id pub-id-type="custom" custom-type="abstract-id">SYNIC0023</article-id>
+        <article-id pub-id-type="custom" custom-type="source-record-id">DUMMY-0023</article-id>
+        <article-id pub-id-type="custom" custom-type="source-original-doi">10.0000/synthetic.asco.0023</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-doi">10.0000/synthetic.asco.ret.0023</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-pmid">99002300</article-id>
+        <article-id pub-id-type="doi">10.0000/synthetic.asco.0023</article-id>
+        <article-categories>
+          <subj-group subj-group-type="heading">
+            <subject>(BLS) Biology - Cancer;(BLS) Biology - Cellular;(BLS) Genetics;</subject>
+          </subj-group>
+          <series-title>Synthetic Integrity Central Validation Dataset</series-title>
+          <series-text>Research Article;</series-text>
+        </article-categories>
+        <title-group>
+          <article-title>LINC01711 promotes ovarian cancer progression through a miR-330-5p/FOXM1 regulatory axis</article-title>
+        </title-group>
+        <contrib-group>
+          <contrib id="C0023_1" contrib-type="presenter">
+            <name>
+              <surname>Al-Mansouri</surname>
+              <given-names>Farah</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0023_1"/>
+          </contrib>
+          <contrib id="C0023_2" contrib-type="author">
+            <name>
+              <surname>Haddad</surname>
+              <given-names>Rami</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0023_2"/>
+          </contrib>
+          <contrib id="C0023_3" contrib-type="author">
+            <name>
+              <surname>Qasem</surname>
+              <given-names>Leila</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0023_3"/>
+          </contrib>
+          <aff id="A0023_1">Department of Gynecologic Oncology, Gulf Meridian Medical College, Doha, Qatar</aff>
+          <aff id="A0023_2">Cancer Biology Laboratory, Levant Biomedical University, Amman, Jordan</aff>
+          <aff id="A0023_3">Department of Pathology, Al Noor Academic Hospital, Muscat, Oman</aff>
+        </contrib-group>
+        <author-notes>
+          <fn fn-type="other">
+            <p>Synthetic dummy validation record created for internal content-integrity testing; identifiers are non-production placeholders and no external source record is associated with this abstract.</p>
+          </fn>
+        </author-notes>
+        <pub-date pub-type="ppub">
+          <day>16</day>
+          <month>5</month>
+          <year>2026</year>
+        </pub-date>
+        <fpage>SYNIC0023</fpage>
+        <lpage>SYNIC0023</lpage>
+        <permissions>
+          <copyright-statement>Synthetic validation dataset for internal integrity testing; synthetic dummy metadata.</copyright-statement>
+          <copyright-year>2026</copyright-year>
+        </permissions>
+        <abstract>
+          <p>
+            <bold>SYNIC0023</bold>
+          </p>
+          <p><bold>Background: </bold>LINC01711 had not been well characterized in ovarian cancer. We assessed whether its abundance tracked with aggressive disease and whether it influenced tumor cell behavior.  <bold>Methods: </bold>Paired tumor and control samples were profiled by RT-qPCR. Cells were then manipulated with LINC01711 silencing or re-expression and examined for viability, colony growth, motility, and apoptosis. Direct interaction with miR-330-5p was tested by pull-down and luciferase-based assays.  <bold>Results: </bold>LINC01711 was higher in ovarian cancer tissue and aligned with advanced clinicopathologic features. Reducing LINC01711 limited growth and movement while increasing apoptosis, and restoring the miR-330-5p/FOXM1 axis weakened that effect.  <bold>Conclusions: </bold>The data support LINC01711 as a pro-tumor transcript in ovarian cancer with activity linked to miR-330-5p signaling.</p>
+        </abstract>
+        <kwd-group kwd-group-type="subject_thes_terms">
+          <kwd>(BLS) Biology - Cancer</kwd>
+          <kwd>(BLS) Biology - Cellular</kwd>
+          <kwd>(BLS) Genetics</kwd>
+        </kwd-group>
+        <kwd-group kwd-group-type="subject_thes_hits">
+          <kwd>1</kwd>
+          <kwd>1</kwd>
+          <kwd>1</kwd>
+        </kwd-group>
+      </article-meta>
+    </front-stub>
+  </sub-article>
+  <sub-article article-type="meeting-abstract">
+    <front-stub>
+      <journal-meta>
+        <journal-id journal-id-type="hwp">synthetic-asco</journal-id>
+        <journal-id journal-id-type="pmc">synthetic-asco</journal-id>
+        <journal-id journal-id-type="publisher-id">SYNTHETIC-ASCO</journal-id>
+        <journal-title-group>
+          <journal-title>Synthetic ASCO Integrity Validation</journal-title>
+          <abbrev-journal-title>SYNTHETIC ASCO ABSTRACTS</abbrev-journal-title>
+        </journal-title-group>
+        <issn pub-type="ppub">0000-0000</issn>
+        <issn pub-type="epub">0000-0000</issn>
+        <publisher>
+          <publisher-name>Synthetic Validation Dataset</publisher-name>
+        </publisher>
+      </journal-meta>
+      <article-meta>
+        <article-id pub-id-type="custom" custom-type="meeting-id">SYNTH-IC-2026</article-id>
+        <article-id pub-id-type="custom" custom-type="session-id">SYNTH-VALIDATION</article-id>
+        <article-id pub-id-type="custom" custom-type="session-participation-id">990024</article-id>
+        <article-id pub-id-type="custom" custom-type="temporary-abstract-id">880024</article-id>
+        <article-id pub-id-type="custom" custom-type="abstract-id">SYNIC0024</article-id>
+        <article-id pub-id-type="custom" custom-type="source-record-id">DUMMY-0024</article-id>
+        <article-id pub-id-type="custom" custom-type="source-original-doi">10.0000/synthetic.asco.0024</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-doi">10.0000/synthetic.asco.ret.0024</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-pmid">99002400</article-id>
+        <article-id pub-id-type="doi">10.0000/synthetic.asco.0024</article-id>
+        <article-categories>
+          <subj-group subj-group-type="heading">
+            <subject>(BLS) Biology - Cancer;(BLS) Biology - Cellular;(BLS) Genetics;</subject>
+          </subj-group>
+          <series-title>Synthetic Integrity Central Validation Dataset</series-title>
+          <series-text>Research Article;</series-text>
+        </article-categories>
+        <title-group>
+          <article-title>LINC00973 promotes pancreatic cancer progression through a miR-204-5p/IGF2BP2 regulatory axis</article-title>
+        </title-group>
+        <contrib-group>
+          <contrib id="C0024_1" contrib-type="presenter">
+            <name>
+              <surname>Navarro</surname>
+              <given-names>Diego</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0024_1"/>
+          </contrib>
+          <contrib id="C0024_2" contrib-type="author">
+            <name>
+              <surname>Ortega</surname>
+              <given-names>Camila</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0024_2"/>
+          </contrib>
+          <contrib id="C0024_3" contrib-type="author">
+            <name>
+              <surname>Mendez</surname>
+              <given-names>Javier</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0024_3"/>
+          </contrib>
+          <aff id="A0024_1">Pancreatic Disease Program, Sierra del Mar University Hospital, Valencia, Spain</aff>
+          <aff id="A0024_2">Molecular Oncology Laboratory, Instituto Costa Norte, Bilbao, Spain</aff>
+          <aff id="A0024_3">Department of Digestive Surgery, Santa Aurelia Medical Centre, Seville, Spain</aff>
+        </contrib-group>
+        <author-notes>
+          <fn fn-type="other">
+            <p>Synthetic dummy validation record created for internal content-integrity testing; identifiers are non-production placeholders and no external source record is associated with this abstract.</p>
+          </fn>
+        </author-notes>
+        <pub-date pub-type="ppub">
+          <day>19</day>
+          <month>6</month>
+          <year>2026</year>
+        </pub-date>
+        <fpage>SYNIC0024</fpage>
+        <lpage>SYNIC0024</lpage>
+        <permissions>
+          <copyright-statement>Synthetic validation dataset for internal integrity testing; synthetic dummy metadata.</copyright-statement>
+          <copyright-year>2026</copyright-year>
+        </permissions>
+        <abstract>
+          <p>
+            <bold>SYNIC0024</bold>
+          </p>
+          <p><bold>Background: </bold>LINC00973 was evaluated as a potential driver in pancreatic cancer. We asked whether its expression was disease-associated and whether the transcript altered malignant phenotypes.  <bold>Methods: </bold>Transcript levels were measured in pancreatic tumors and cell lines by RT-qPCR. Loss-of-function and rescue experiments were followed by viability, clonogenic, wound-healing, invasion, and apoptosis readouts, with AGO2-RIP and dual-luciferase experiments used to test the miR-204-5p link.  <bold>Results: </bold>LINC00973 was elevated in pancreatic cancer and associated with worse clinicopathologic features. Knockdown suppressed proliferation, migration, and invasion, and the effect was attenuated when miR-204-5p/IGF2BP2 signaling was restored.  <bold>Conclusions: </bold>LINC00973 may contribute to pancreatic cancer progression through a miR-204-5p-dependent pathway.</p>
+        </abstract>
+        <kwd-group kwd-group-type="subject_thes_terms">
+          <kwd>(BLS) Biology - Cancer</kwd>
+          <kwd>(BLS) Biology - Cellular</kwd>
+          <kwd>(BLS) Genetics</kwd>
+        </kwd-group>
+        <kwd-group kwd-group-type="subject_thes_hits">
+          <kwd>1</kwd>
+          <kwd>1</kwd>
+          <kwd>1</kwd>
+        </kwd-group>
+      </article-meta>
+    </front-stub>
+  </sub-article>
+  <sub-article article-type="meeting-abstract">
+    <front-stub>
+      <journal-meta>
+        <journal-id journal-id-type="hwp">synthetic-asco</journal-id>
+        <journal-id journal-id-type="pmc">synthetic-asco</journal-id>
+        <journal-id journal-id-type="publisher-id">SYNTHETIC-ASCO</journal-id>
+        <journal-title-group>
+          <journal-title>Synthetic ASCO Integrity Validation</journal-title>
+          <abbrev-journal-title>SYNTHETIC ASCO ABSTRACTS</abbrev-journal-title>
+        </journal-title-group>
+        <issn pub-type="ppub">0000-0000</issn>
+        <issn pub-type="epub">0000-0000</issn>
+        <publisher>
+          <publisher-name>Synthetic Validation Dataset</publisher-name>
+        </publisher>
+      </journal-meta>
+      <article-meta>
+        <article-id pub-id-type="custom" custom-type="meeting-id">SYNTH-IC-2026</article-id>
+        <article-id pub-id-type="custom" custom-type="session-id">SYNTH-VALIDATION</article-id>
+        <article-id pub-id-type="custom" custom-type="session-participation-id">990025</article-id>
+        <article-id pub-id-type="custom" custom-type="temporary-abstract-id">880025</article-id>
+        <article-id pub-id-type="custom" custom-type="abstract-id">SYNIC0025</article-id>
+        <article-id pub-id-type="custom" custom-type="source-record-id">DUMMY-0025</article-id>
+        <article-id pub-id-type="custom" custom-type="source-original-doi">10.0000/synthetic.asco.0025</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-doi">10.0000/synthetic.asco.ret.0025</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-pmid">99002500</article-id>
+        <article-id pub-id-type="doi">10.0000/synthetic.asco.0025</article-id>
+        <article-categories>
+          <subj-group subj-group-type="heading">
+            <subject>(BLS) Biology - Cancer;(HSC) Medicine - Oncology;(HSC) Medicine - Obstetrics/Gynecology;</subject>
+          </subj-group>
+          <series-title>Synthetic Integrity Central Validation Dataset</series-title>
+          <series-text>Research Article;</series-text>
+        </article-categories>
+        <title-group>
+          <article-title>Ki-67 change after short-course endocrine therapy in HER2-low hormone receptor-positive breast cancer</article-title>
+        </title-group>
+        <contrib-group>
+          <contrib id="C0025_1" contrib-type="presenter">
+            <name>
+              <surname>Okafor</surname>
+              <given-names>Naomi</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0025_1"/>
+          </contrib>
+          <contrib id="C0025_2" contrib-type="author">
+            <name>
+              <surname>Eze</surname>
+              <given-names>Chinedu</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0025_2"/>
+          </contrib>
+          <contrib id="C0025_3" contrib-type="author">
+            <name>
+              <surname>Nwosu</surname>
+              <given-names>Amara</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0025_3"/>
+          </contrib>
+          <aff id="A0025_1">Breast Oncology Unit, West African Clinical Sciences Centre, Accra, Ghana</aff>
+          <aff id="A0025_2">Department of Medical Oncology, Riverbend University Hospital, Enugu, Nigeria</aff>
+          <aff id="A0025_3">Division of Surgical Oncology, Atlantic Coast Medical College, Lagos, Nigeria</aff>
+        </contrib-group>
+        <author-notes>
+          <fn fn-type="other">
+            <p>Synthetic dummy validation record created for internal content-integrity testing; identifiers are non-production placeholders and no external source record is associated with this abstract.</p>
+          </fn>
+        </author-notes>
+        <pub-date pub-type="ppub">
+          <day>22</day>
+          <month>7</month>
+          <year>2026</year>
+        </pub-date>
+        <fpage>SYNIC0025</fpage>
+        <lpage>SYNIC0025</lpage>
+        <permissions>
+          <copyright-statement>Synthetic validation dataset for internal integrity testing; synthetic dummy metadata.</copyright-statement>
+          <copyright-year>2026</copyright-year>
+        </permissions>
+        <abstract>
+          <p>
+            <bold>SYNIC0025</bold>
+          </p>
+          <p><bold>Background: </bold>Early suppression of tumor proliferation during endocrine therapy may provide information about endocrine sensitivity. We examined short-term change in Ki-67 among patients with hormone receptor-positive, HER2-low early breast cancer.  <bold>Methods: </bold>Pretreatment core biopsies and repeat samples obtained after 14 to 21 days of aromatase inhibitor therapy were evaluated in 86 postmenopausal patients. Ki-67 was scored centrally, and associations with baseline clinicopathologic features and residual cancer burden were explored.  <bold>Results: </bold>Median Ki-67 decreased after short-course therapy, with the largest reductions observed in tumors with strong estrogen receptor expression and lower baseline grade. Greater proportional Ki-67 suppression was associated with lower residual proliferative activity at surgery.  <bold>Conclusions: </bold>Short-term Ki-67 change may provide a practical pharmacodynamic measure of endocrine sensitivity in HER2-low, hormone receptor-positive breast cancer.</p>
+        </abstract>
+        <kwd-group kwd-group-type="subject_thes_terms">
+          <kwd>(BLS) Biology - Cancer</kwd>
+          <kwd>(HSC) Medicine - Oncology</kwd>
+          <kwd>(HSC) Medicine - Obstetrics/Gynecology</kwd>
+        </kwd-group>
+        <kwd-group kwd-group-type="subject_thes_hits">
+          <kwd>1</kwd>
+          <kwd>1</kwd>
+          <kwd>1</kwd>
+        </kwd-group>
+      </article-meta>
+    </front-stub>
+  </sub-article>
+  <sub-article article-type="meeting-abstract">
+    <front-stub>
+      <journal-meta>
+        <journal-id journal-id-type="hwp">synthetic-asco</journal-id>
+        <journal-id journal-id-type="pmc">synthetic-asco</journal-id>
+        <journal-id journal-id-type="publisher-id">SYNTHETIC-ASCO</journal-id>
+        <journal-title-group>
+          <journal-title>Synthetic ASCO Integrity Validation</journal-title>
+          <abbrev-journal-title>SYNTHETIC ASCO ABSTRACTS</abbrev-journal-title>
+        </journal-title-group>
+        <issn pub-type="ppub">0000-0000</issn>
+        <issn pub-type="epub">0000-0000</issn>
+        <publisher>
+          <publisher-name>Synthetic Validation Dataset</publisher-name>
+        </publisher>
+      </journal-meta>
+      <article-meta>
+        <article-id pub-id-type="custom" custom-type="meeting-id">SYNTH-IC-2026</article-id>
+        <article-id pub-id-type="custom" custom-type="session-id">SYNTH-VALIDATION</article-id>
+        <article-id pub-id-type="custom" custom-type="session-participation-id">990026</article-id>
+        <article-id pub-id-type="custom" custom-type="temporary-abstract-id">880026</article-id>
+        <article-id pub-id-type="custom" custom-type="abstract-id">SYNIC0026</article-id>
+        <article-id pub-id-type="custom" custom-type="source-record-id">DUMMY-0026</article-id>
+        <article-id pub-id-type="custom" custom-type="source-original-doi">10.0000/synthetic.asco.0026</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-doi">10.0000/synthetic.asco.ret.0026</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-pmid">99002600</article-id>
+        <article-id pub-id-type="doi">10.0000/synthetic.asco.0026</article-id>
+        <article-categories>
+          <subj-group subj-group-type="heading">
+            <subject>(BLS) Biology - Cancer;(HSC) Medicine - Radiology;(HSC) Medicine - Urology;</subject>
+          </subj-group>
+          <series-title>Synthetic Integrity Central Validation Dataset</series-title>
+          <series-text>Research Article;</series-text>
+        </article-categories>
+        <title-group>
+          <article-title>A contrast-enhanced CT radiomic model for predicting early recurrence after nephrectomy for clear cell renal cell carcinoma</article-title>
+        </title-group>
+        <contrib-group>
+          <contrib id="C0026_1" contrib-type="presenter">
+            <name>
+              <surname>Lund</surname>
+              <given-names>Freja</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0026_1"/>
+          </contrib>
+          <contrib id="C0026_2" contrib-type="author">
+            <name>
+              <surname>Sorensen</surname>
+              <given-names>Emil</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0026_2"/>
+          </contrib>
+          <contrib id="C0026_3" contrib-type="author">
+            <name>
+              <surname>Brandt</surname>
+              <given-names>Mikkel</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0026_3"/>
+          </contrib>
+          <aff id="A0026_1">Department of Radiology, Nordic Coast University Hospital, Aarhus, Denmark</aff>
+          <aff id="A0026_2">Urologic Cancer Centre, Fjordland Medical Institute, Odense, Denmark</aff>
+          <aff id="A0026_3">Biostatistics and Imaging Analytics Unit, Skagen Research Hospital, Aalborg, Denmark</aff>
+        </contrib-group>
+        <author-notes>
+          <fn fn-type="other">
+            <p>Synthetic dummy validation record created for internal content-integrity testing; identifiers are non-production placeholders and no external source record is associated with this abstract.</p>
+          </fn>
+        </author-notes>
+        <pub-date pub-type="ppub">
+          <day>25</day>
+          <month>8</month>
+          <year>2026</year>
+        </pub-date>
+        <fpage>SYNIC0026</fpage>
+        <lpage>SYNIC0026</lpage>
+        <permissions>
+          <copyright-statement>Synthetic validation dataset for internal integrity testing; synthetic dummy metadata.</copyright-statement>
+          <copyright-year>2026</copyright-year>
+        </permissions>
+        <abstract>
+          <p>
+            <bold>SYNIC0026</bold>
+          </p>
+          <p><bold>Background: </bold>This prospective cohort enrolled patients with localized clear cell renal cell carcinoma to evaluate whether pretreatment CT radiomic features could identify individuals at risk of early postoperative recurrence.  <bold>Methods: </bold>We retrospectively assembled a cohort of consecutive patients who underwent nephrectomy between 2019 and 2024 and had preoperative contrast-enhanced CT available for analysis. Tumors were segmented in the corticomedullary and nephrographic phases, and reproducible radiomic features were used to train a penalized logistic regression model.  <bold>Results: </bold>The final model combined six radiomic features with tumor stage and achieved an area under the receiver operating characteristic curve of 0.78 in the held-out validation set. Calibration was acceptable, and the combined model outperformed clinical stage alone.  <bold>Conclusions: </bold>CT-derived radiomic features showed potential for identifying patients at increased risk of early recurrence after nephrectomy, although external validation is needed.</p>
+        </abstract>
+        <kwd-group kwd-group-type="subject_thes_terms">
+          <kwd>(BLS) Biology - Cancer</kwd>
+          <kwd>(HSC) Medicine - Radiology</kwd>
+          <kwd>(HSC) Medicine - Urology</kwd>
+        </kwd-group>
+        <kwd-group kwd-group-type="subject_thes_hits">
+          <kwd>1</kwd>
+          <kwd>1</kwd>
+          <kwd>1</kwd>
+        </kwd-group>
+      </article-meta>
+    </front-stub>
+  </sub-article>
+  <sub-article article-type="meeting-abstract">
+    <front-stub>
+      <journal-meta>
+        <journal-id journal-id-type="hwp">synthetic-asco</journal-id>
+        <journal-id journal-id-type="pmc">synthetic-asco</journal-id>
+        <journal-id journal-id-type="publisher-id">SYNTHETIC-ASCO</journal-id>
+        <journal-title-group>
+          <journal-title>Synthetic ASCO Integrity Validation</journal-title>
+          <abbrev-journal-title>SYNTHETIC ASCO ABSTRACTS</abbrev-journal-title>
+        </journal-title-group>
+        <issn pub-type="ppub">0000-0000</issn>
+        <issn pub-type="epub">0000-0000</issn>
+        <publisher>
+          <publisher-name>Synthetic Validation Dataset</publisher-name>
+        </publisher>
+      </journal-meta>
+      <article-meta>
+        <article-id pub-id-type="custom" custom-type="meeting-id">SYNTH-IC-2026</article-id>
+        <article-id pub-id-type="custom" custom-type="session-id">SYNTH-VALIDATION</article-id>
+        <article-id pub-id-type="custom" custom-type="session-participation-id">990027</article-id>
+        <article-id pub-id-type="custom" custom-type="temporary-abstract-id">880027</article-id>
+        <article-id pub-id-type="custom" custom-type="abstract-id">SYNIC0027</article-id>
+        <article-id pub-id-type="custom" custom-type="source-record-id">DUMMY-0027</article-id>
+        <article-id pub-id-type="custom" custom-type="source-original-doi">10.0000/synthetic.asco.0027</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-doi">10.0000/synthetic.asco.ret.0027</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-pmid">99002700</article-id>
+        <article-id pub-id-type="doi">10.0000/synthetic.asco.0027</article-id>
+        <article-categories>
+          <subj-group subj-group-type="heading">
+            <subject>(BLS) Biology - Cancer;(BLS) Biology - Cellular;(HSC) Medicine - Oncology;</subject>
+          </subj-group>
+          <series-title>Synthetic Integrity Central Validation Dataset</series-title>
+          <series-text>Research Article;</series-text>
+        </article-categories>
+        <title-group>
+          <article-title>Patient-derived organoid drug sensitivity mirrors clinical response in advanced pancreatic ductal adenocarcinoma</article-title>
+        </title-group>
+        <contrib-group>
+          <contrib id="C0027_1" contrib-type="presenter">
+            <name>
+              <surname>Benali</surname>
+              <given-names>Sara</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0027_1"/>
+          </contrib>
+          <contrib id="C0027_2" contrib-type="author">
+            <name>
+              <surname>Cherif</surname>
+              <given-names>Youssef</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0027_2"/>
+          </contrib>
+          <contrib id="C0027_3" contrib-type="author">
+            <name>
+              <surname>Khelifi</surname>
+              <given-names>Ines</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0027_3"/>
+          </contrib>
+          <aff id="A0027_1">Precision Oncology Laboratory, Maghreb Institute for Cancer Research, Tunis, Tunisia</aff>
+          <aff id="A0027_2">Department of Gastrointestinal Oncology, Atlas University Hospital, Rabat, Morocco</aff>
+          <aff id="A0027_3">Translational Medicine Unit, Mediterranean Clinical Centre, Oran, Algeria</aff>
+        </contrib-group>
+        <author-notes>
+          <fn fn-type="other">
+            <p>Synthetic dummy validation record created for internal content-integrity testing; identifiers are non-production placeholders and no external source record is associated with this abstract.</p>
+          </fn>
+        </author-notes>
+        <pub-date pub-type="ppub">
+          <day>1</day>
+          <month>9</month>
+          <year>2026</year>
+        </pub-date>
+        <fpage>SYNIC0027</fpage>
+        <lpage>SYNIC0027</lpage>
+        <permissions>
+          <copyright-statement>Synthetic validation dataset for internal integrity testing; synthetic dummy metadata.</copyright-statement>
+          <copyright-year>2026</copyright-year>
+        </permissions>
+        <abstract>
+          <p>
+            <bold>SYNIC0027</bold>
+          </p>
+          <p><bold>Background: </bold>Patient-derived organoids may offer a functional platform for estimating treatment sensitivity in pancreatic ductal adenocarcinoma. We compared ex vivo drug response with subsequent clinical response in patients receiving systemic therapy.  <bold>Methods: </bold>Organoids were established from image-guided biopsies or surgical specimens and exposed to clinically relevant concentrations of common chemotherapy regimens. Drug sensitivity scores were generated without knowledge of patient outcome and compared with radiographic response and time to treatment failure.  <bold>Results: </bold>Organoids were successfully generated for 39 of 50 enrolled patients. Concordance between the most active ex vivo regimen and clinical disease control was observed in the majority of evaluable cases, and lower organoid viability after drug exposure was associated with longer time to treatment failure.  <bold>Conclusions: </bold>Functional testing in patient-derived pancreatic cancer organoids showed clinically relevant associations and warrants evaluation in prospective treatment-selection studies.</p>
+        </abstract>
+        <kwd-group kwd-group-type="subject_thes_terms">
+          <kwd>(BLS) Biology - Cancer</kwd>
+          <kwd>(BLS) Biology - Cellular</kwd>
+          <kwd>(HSC) Medicine - Oncology</kwd>
+        </kwd-group>
+        <kwd-group kwd-group-type="subject_thes_hits">
+          <kwd>1</kwd>
+          <kwd>1</kwd>
+          <kwd>1</kwd>
+        </kwd-group>
+      </article-meta>
+    </front-stub>
+  </sub-article>
+  <sub-article article-type="meeting-abstract">
+    <front-stub>
+      <journal-meta>
+        <journal-id journal-id-type="hwp">synthetic-asco</journal-id>
+        <journal-id journal-id-type="pmc">synthetic-asco</journal-id>
+        <journal-id journal-id-type="publisher-id">SYNTHETIC-ASCO</journal-id>
+        <journal-title-group>
+          <journal-title>Synthetic ASCO Integrity Validation</journal-title>
+          <abbrev-journal-title>SYNTHETIC ASCO ABSTRACTS</abbrev-journal-title>
+        </journal-title-group>
+        <issn pub-type="ppub">0000-0000</issn>
+        <issn pub-type="epub">0000-0000</issn>
+        <publisher>
+          <publisher-name>Synthetic Validation Dataset</publisher-name>
+        </publisher>
+      </journal-meta>
+      <article-meta>
+        <article-id pub-id-type="custom" custom-type="meeting-id">SYNTH-IC-2026</article-id>
+        <article-id pub-id-type="custom" custom-type="session-id">SYNTH-VALIDATION</article-id>
+        <article-id pub-id-type="custom" custom-type="session-participation-id">990028</article-id>
+        <article-id pub-id-type="custom" custom-type="temporary-abstract-id">880028</article-id>
+        <article-id pub-id-type="custom" custom-type="abstract-id">SYNIC0028</article-id>
+        <article-id pub-id-type="custom" custom-type="source-record-id">DUMMY-0028</article-id>
+        <article-id pub-id-type="custom" custom-type="source-original-doi">10.0000/synthetic.asco.0028</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-doi">10.0000/synthetic.asco.ret.0028</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-pmid">99002800</article-id>
+        <article-id pub-id-type="doi">10.0000/synthetic.asco.0028</article-id>
+        <article-categories>
+          <subj-group subj-group-type="heading">
+            <subject>(BLS) Biology - Cancer;(BLS) Genetics;(HSC) Medicine - Obstetrics/Gynecology;</subject>
+          </subj-group>
+          <series-title>Synthetic Integrity Central Validation Dataset</series-title>
+          <series-text>Research Article;</series-text>
+        </article-categories>
+        <title-group>
+          <article-title>An interferon-response gene panel for recurrence risk stratification in early-stage endometrial cancer</article-title>
+        </title-group>
+        <contrib-group>
+          <contrib id="C0028_1" contrib-type="presenter">
+            <name>
+              <surname>Kowalska</surname>
+              <given-names>Renata</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0028_1"/>
+          </contrib>
+          <contrib id="C0028_2" contrib-type="author">
+            <name>
+              <surname>Zielinski</surname>
+              <given-names>Piotr</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0028_2"/>
+          </contrib>
+          <contrib id="C0028_3" contrib-type="author">
+            <name>
+              <surname>Nowicka</surname>
+              <given-names>Marta</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0028_3"/>
+          </contrib>
+          <aff id="A0028_1">Department of Gynecologic Oncology, Baltic Academic Medical Centre, Gdansk, Poland</aff>
+          <aff id="A0028_2">Molecular Pathology Laboratory, Vistula Biomedical Institute, Warsaw, Poland</aff>
+          <aff id="A0028_3">Division of Cancer Epidemiology, Silesian University Hospital, Katowice, Poland</aff>
+        </contrib-group>
+        <author-notes>
+          <fn fn-type="other">
+            <p>Synthetic dummy validation record created for internal content-integrity testing; identifiers are non-production placeholders and no external source record is associated with this abstract.</p>
+          </fn>
+        </author-notes>
+        <pub-date pub-type="ppub">
+          <day>4</day>
+          <month>10</month>
+          <year>2026</year>
+        </pub-date>
+        <fpage>SYNIC0028</fpage>
+        <lpage>SYNIC0028</lpage>
+        <permissions>
+          <copyright-statement>Synthetic validation dataset for internal integrity testing; synthetic dummy metadata.</copyright-statement>
+          <copyright-year>2026</copyright-year>
+        </permissions>
+        <abstract>
+          <p>
+            <bold>SYNIC0028</bold>
+          </p>
+          <p><bold>Background: </bold>Improved molecular markers are needed to refine recurrence risk in early-stage endometrial cancer. We evaluated a focused interferon-response gene panel in surgically treated patients with stage I-II disease.  <bold>Methods: </bold>RNA was extracted from formalin-fixed tumor samples from 132 patients. Expression of 12 prespecified immune-response genes was measured using a multiplex assay, and a composite score was developed in a training subset and evaluated in an independent validation subset.  <bold>Results: </bold>A higher composite interferon-response score was associated with lower recurrence risk after adjustment for stage, grade, histologic subtype, and lymphovascular invasion. The score improved discrimination modestly when added to clinicopathologic variables.  <bold>Conclusions: </bold>A compact interferon-response expression panel may contribute additional prognostic information in early-stage endometrial cancer and should be tested in external cohorts.</p>
+        </abstract>
+        <kwd-group kwd-group-type="subject_thes_terms">
+          <kwd>(BLS) Biology - Cancer</kwd>
+          <kwd>(BLS) Genetics</kwd>
+          <kwd>(HSC) Medicine - Obstetrics/Gynecology</kwd>
+        </kwd-group>
+        <kwd-group kwd-group-type="subject_thes_hits">
+          <kwd>1</kwd>
+          <kwd>1</kwd>
+          <kwd>1</kwd>
+        </kwd-group>
+      </article-meta>
+    </front-stub>
+  </sub-article>
+  <sub-article article-type="meeting-abstract">
+    <front-stub>
+      <journal-meta>
+        <journal-id journal-id-type="hwp">synthetic-asco</journal-id>
+        <journal-id journal-id-type="pmc">synthetic-asco</journal-id>
+        <journal-id journal-id-type="publisher-id">SYNTHETIC-ASCO</journal-id>
+        <journal-title-group>
+          <journal-title>Synthetic ASCO Integrity Validation</journal-title>
+          <abbrev-journal-title>SYNTHETIC ASCO ABSTRACTS</abbrev-journal-title>
+        </journal-title-group>
+        <issn pub-type="ppub">0000-0000</issn>
+        <issn pub-type="epub">0000-0000</issn>
+        <publisher>
+          <publisher-name>Synthetic Validation Dataset</publisher-name>
+        </publisher>
+      </journal-meta>
+      <article-meta>
+        <article-id pub-id-type="custom" custom-type="meeting-id">SYNTH-IC-2026</article-id>
+        <article-id pub-id-type="custom" custom-type="session-id">SYNTH-VALIDATION</article-id>
+        <article-id pub-id-type="custom" custom-type="session-participation-id">990029</article-id>
+        <article-id pub-id-type="custom" custom-type="temporary-abstract-id">880029</article-id>
+        <article-id pub-id-type="custom" custom-type="abstract-id">SYNIC0029</article-id>
+        <article-id pub-id-type="custom" custom-type="source-record-id">DUMMY-0029</article-id>
+        <article-id pub-id-type="custom" custom-type="source-original-doi">10.0000/synthetic.asco.0029</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-doi">10.0000/synthetic.asco.ret.0029</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-pmid">99002900</article-id>
+        <article-id pub-id-type="doi">10.0000/synthetic.asco.0029</article-id>
+        <article-categories>
+          <subj-group subj-group-type="heading">
+            <subject>(BLS) Biology - Cancer;(HSC) Medicine - Oncology;</subject>
+          </subj-group>
+          <series-title>Synthetic Integrity Central Validation Dataset</series-title>
+          <series-text>Research Article;</series-text>
+        </article-categories>
+        <title-group>
+          <article-title>Maintenance capecitabine after first-line chemotherapy in metastatic nasopharyngeal carcinoma: A multicenter cohort study</article-title>
+        </title-group>
+        <contrib-group>
+          <contrib id="C0029_1" contrib-type="presenter">
+            <name>
+              <surname>Ribeiro</surname>
+              <given-names>Ana</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0029_1"/>
+          </contrib>
+          <contrib id="C0029_2" contrib-type="author">
+            <name>
+              <surname>Faria</surname>
+              <given-names>Tiago</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0029_2"/>
+          </contrib>
+          <contrib id="C0029_3" contrib-type="author">
+            <name>
+              <surname>Lopes</surname>
+              <given-names>Beatriz</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0029_3"/>
+          </contrib>
+          <aff id="A0029_1">Head and Neck Oncology Unit, Lusitania Cancer Centre, Porto, Portugal</aff>
+          <aff id="A0029_2">Department of Medical Oncology, Tagus University Hospital, Lisbon, Portugal</aff>
+          <aff id="A0029_3">Clinical Outcomes Group, Atlantic Biomedical School, Coimbra, Portugal</aff>
+        </contrib-group>
+        <author-notes>
+          <fn fn-type="other">
+            <p>Synthetic dummy validation record created for internal content-integrity testing; identifiers are non-production placeholders and no external source record is associated with this abstract.</p>
+          </fn>
+        </author-notes>
+        <pub-date pub-type="ppub">
+          <day>7</day>
+          <month>11</month>
+          <year>2026</year>
+        </pub-date>
+        <fpage>SYNIC0029</fpage>
+        <lpage>SYNIC0029</lpage>
+        <permissions>
+          <copyright-statement>Synthetic validation dataset for internal integrity testing; synthetic dummy metadata.</copyright-statement>
+          <copyright-year>2026</copyright-year>
+        </permissions>
+        <abstract>
+          <p>
+            <bold>SYNIC0029</bold>
+          </p>
+          <p><bold>Background: </bold>The role of maintenance chemotherapy after initial disease control in metastatic nasopharyngeal carcinoma remains uncertain. We evaluated outcomes among patients who received capecitabine maintenance after platinum-based first-line treatment.  <bold>Methods: </bold>Clinical records from three oncology centers were reviewed for patients who achieved complete response, partial response, or stable disease after first-line chemotherapy. Progression-free survival and overall survival were estimated from the start of maintenance treatment, and treatment-related adverse events were summarized descriptively.  <bold>Results: </bold>Seventy-one patients were included. The median follow-up was 22 months, with an observed range of 24 to 36 months. Median progression-free survival from maintenance initiation was 11.4 months, and the most frequent grade 3 adverse event was hand-foot syndrome.  <bold>Conclusions: </bold>Capecitabine maintenance was feasible in this multicenter cohort and was associated with durable disease control in a subset of patients. Comparative prospective studies are needed.</p>
+        </abstract>
+        <kwd-group kwd-group-type="subject_thes_terms">
+          <kwd>(BLS) Biology - Cancer</kwd>
+          <kwd>(HSC) Medicine - Oncology</kwd>
+        </kwd-group>
+        <kwd-group kwd-group-type="subject_thes_hits">
+          <kwd>1</kwd>
+          <kwd>1</kwd>
+        </kwd-group>
+      </article-meta>
+    </front-stub>
+  </sub-article>
+  <sub-article article-type="meeting-abstract">
+    <front-stub>
+      <journal-meta>
+        <journal-id journal-id-type="hwp">synthetic-asco</journal-id>
+        <journal-id journal-id-type="pmc">synthetic-asco</journal-id>
+        <journal-id journal-id-type="publisher-id">SYNTHETIC-ASCO</journal-id>
+        <journal-title-group>
+          <journal-title>Synthetic ASCO Integrity Validation</journal-title>
+          <abbrev-journal-title>SYNTHETIC ASCO ABSTRACTS</abbrev-journal-title>
+        </journal-title-group>
+        <issn pub-type="ppub">0000-0000</issn>
+        <issn pub-type="epub">0000-0000</issn>
+        <publisher>
+          <publisher-name>Synthetic Validation Dataset</publisher-name>
+        </publisher>
+      </journal-meta>
+      <article-meta>
+        <article-id pub-id-type="custom" custom-type="meeting-id">SYNTH-IC-2026</article-id>
+        <article-id pub-id-type="custom" custom-type="session-id">SYNTH-VALIDATION</article-id>
+        <article-id pub-id-type="custom" custom-type="session-participation-id">990030</article-id>
+        <article-id pub-id-type="custom" custom-type="temporary-abstract-id">880030</article-id>
+        <article-id pub-id-type="custom" custom-type="abstract-id">SYNIC0030</article-id>
+        <article-id pub-id-type="custom" custom-type="source-record-id">DUMMY-0030</article-id>
+        <article-id pub-id-type="custom" custom-type="source-original-doi">10.0000/synthetic.asco.0030</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-doi">10.0000/synthetic.asco.ret.0030</article-id>
+        <article-id pub-id-type="custom" custom-type="retraction-pmid">99003000</article-id>
+        <article-id pub-id-type="doi">10.0000/synthetic.asco.0030</article-id>
+        <article-categories>
+          <subj-group subj-group-type="heading">
+            <subject>(BLS) Biochemistry;(BLS) Biology - Cancer;(HSC) Medicine - Gastroenterology;</subject>
+          </subj-group>
+          <series-title>Synthetic Integrity Central Validation Dataset</series-title>
+          <series-text>Research Article;</series-text>
+        </article-categories>
+        <title-group>
+          <article-title>Extracellular vesicle protein signatures for early detection of gastric cancer</article-title>
+        </title-group>
+        <contrib-group>
+          <contrib id="C0030_1" contrib-type="presenter">
+            <name>
+              <surname>Seo</surname>
+              <given-names>Minseo</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0030_1"/>
+          </contrib>
+          <contrib id="C0030_2" contrib-type="author">
+            <name>
+              <surname>Park</surname>
+              <given-names>Joonho</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0030_2"/>
+          </contrib>
+          <contrib id="C0030_3" contrib-type="author">
+            <name>
+              <surname>Choi</surname>
+              <given-names>Yuna</given-names>
+            </name>
+            <xref ref-type="aff" rid="A0030_3"/>
+          </contrib>
+          <aff id="A0030_1">Department of Gastroenterology, Hanul University Medical Center, Busan, Republic of Korea</aff>
+          <aff id="A0030_2">Proteomics Core Facility, Mirae Biomedical Research Institute, Daejeon, Republic of Korea</aff>
+          <aff id="A0030_3">Division of Gastrointestinal Surgery, Seojin Academic Hospital, Incheon, Republic of Korea</aff>
+        </contrib-group>
+        <author-notes>
+          <fn fn-type="other">
+            <p>Synthetic dummy validation record created for internal content-integrity testing; identifiers are non-production placeholders and no external source record is associated with this abstract.</p>
+          </fn>
+        </author-notes>
+        <pub-date pub-type="ppub">
+          <day>10</day>
+          <month>12</month>
+          <year>2026</year>
+        </pub-date>
+        <fpage>SYNIC0030</fpage>
+        <lpage>SYNIC0030</lpage>
+        <permissions>
+          <copyright-statement>Synthetic validation dataset for internal integrity testing; synthetic dummy metadata.</copyright-statement>
+          <copyright-year>2026</copyright-year>
+        </permissions>
+        <abstract>
+          <p>
+            <bold>SYNIC0030</bold>
+          </p>
+          <p><bold>Background: </bold>Blood-based markers could complement endoscopic evaluation for gastric cancer detection. We investigated whether proteins enriched in plasma extracellular vesicles could distinguish patients with early gastric cancer from nonmalignant controls.  <bold>Methods: </bold>Extracellular vesicles were isolated from plasma collected before treatment from 64 patients with stage I-II gastric cancer and 60 age-matched controls. Discovery proteomics identified candidate proteins, which were subsequently measured by targeted assays in a separate validation set.  <bold>Results: </bold>A three-protein extracellular vesicle panel showed higher concentrations in gastric cancer samples and achieved good discrimination in the validation set. Performance remained similar after adjustment for age, sex, and Helicobacter pylori status.  <bold>Conclusions: </bold>A small extracellular vesicle protein panel showed promise for noninvasive detection of early gastric cancer and merits validation in screening-relevant populations.</p>
+        </abstract>
+        <kwd-group kwd-group-type="subject_thes_terms">
+          <kwd>(BLS) Biochemistry</kwd>
+          <kwd>(BLS) Biology - Cancer</kwd>
+          <kwd>(HSC) Medicine - Gastroenterology</kwd>
+        </kwd-group>
+        <kwd-group kwd-group-type="subject_thes_hits">
           <kwd>1</kwd>
           <kwd>1</kwd>
           <kwd>1</kwd>
