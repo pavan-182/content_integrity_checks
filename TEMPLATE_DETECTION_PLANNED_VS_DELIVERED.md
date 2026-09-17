@@ -124,7 +124,12 @@ The final implementation follows that design conservatively:
 - deterministic spans are retained when the model is unavailable or its call fails; and
 - uncertain model labels are not guessed into unsupported output types.
 
-The local SciSpaCy and PubMedBERT gap-fillers were removed: both were too inaccurate on ASCO abstracts. Masking now calls the shared GPT-OSS client (the same one the validators use, with its disk cache) once per record on title+abstract together. When `.env` has no IntelliHub credentials the pipeline records an operational issue and masking falls back to the deterministic/hybrid rule path.
+The local SciSpaCy and PubMedBERT gap-fillers were removed; their historical accuracy observations below are not Phase 1 GPT-OSS evaluation results.
+Masking now receives an explicit run-owned GPT-OSS extractor and processes title plus abstract in sentence-aligned chunks, potentially making several calls per record.
+Its cache and counter are isolated per run, and deterministic spans always take precedence.
+Without configured credentials the normal pipeline records an operational issue and falls back to deterministic rules.
+Use `--offline` for an intentional rules-only run without a configuration failure.
+Current output and execution contracts are documented in [README](README.md); the older CSV/workbook inventory above describes historical exports.
 
 Entity validation against the supplied 244-abstract masked reference produced:
 

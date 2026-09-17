@@ -586,12 +586,13 @@ class PipelineTests(unittest.TestCase):
             result = run_default_pipeline(input_dir=input_dir, tortured_dictionary_path=dict_path, output_dir=output_dir)
             self.assertTrue(result.output_paths["workbook"].exists())
             self.assertTrue(result.output_paths["content_integrity_json"].exists())
-            self.assertEqual(set(result.output_paths), {"content_integrity_json", "workbook"})
+            self.assertEqual(set(result.output_paths), {"content_integrity_json", "workbook", "run_metrics", "run_summary"})
             self.assertEqual(result.output_paths["workbook"].name, "Editor_Triage_Workbook.xlsx")
             self.assertEqual(legacy_csv.read_text(encoding="utf-8"), "user-owned")
             self.assertEqual(
                 {path.name for path in output_dir.iterdir()},
-                {"content_integrity_results.json", "Editor_Triage_Workbook.xlsx", "integrity_findings.csv"},
+                # No checkpoint or staging directory survives a successful run.
+                {"content_integrity_results.json", "Editor_Triage_Workbook.xlsx", "run_metrics.json", "run_summary.json", "integrity_findings.csv"},
             )
             with result.output_paths["content_integrity_json"].open(encoding="utf-8") as handle:
                 data = json.load(handle)
@@ -1243,10 +1244,14 @@ class PipelineTests(unittest.TestCase):
 
     def test_pipeline_validation_flag_populates_finding_metadata(self) -> None:
         class StubClient:
+            model_name = "gpt-oss-20b"
+
             def __init__(self) -> None:
                 self.max_tokens_requested: int | None = None
 
             def complete(self, *, system: str, user: str, max_tokens: int = 150, temperature: float = 0.0) -> str:
+                if "entity_extraction_gpt_oss" in system:
+                    return '{"entities": []}'
                 self.max_tokens_requested = max_tokens
                 payload = {
                     "status": "rejected",

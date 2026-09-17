@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import re
+from bisect import bisect_right
 from collections.abc import Iterable, Sequence
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 from typing import TYPE_CHECKING
@@ -12,9 +14,7 @@ if TYPE_CHECKING:
     from .models import ParsedRecord
 
 WHITESPACE_RE = re.compile(r"\s+")
-NON_ALNUM_RE = re.compile(r"[^0-9A-Za-z]+")
 TOKEN_RE = re.compile(r"[0-9A-Za-z]+")
-_SENTENCE_SEGMENTER = pysbd.Segmenter(language="en", clean=False)
 
 
 def normalize_whitespace(text: str | None) -> str:
@@ -28,7 +28,42 @@ def lowercase_normalize(text: str | None) -> str:
 
 
 def split_sentences(text: str) -> list[str]:
-    return [piece.strip() for piece in _SENTENCE_SEGMENTER.segment(normalize_whitespace(text)) if piece.strip()]
+    return list(_split_sentences(normalize_whitespace(text)))
+
+
+# Segmentation is a pure function of the text and dominated template preprocessing when repeated
+# per entity and per detector, so results are memoized (bounded; thread-safe for correctness).
+# The bound must hold one batch's section texts: 3,000 synthetic records needed 14,394 entries,
+# and an 8,192-entry cache made each per-record detector re-segment most of them (design checks
+# took 83 s instead of 17 s). 65,536 entries covers 6,000 records for about 10 MB.
+SENTENCE_CACHE_SIZE = 65536
+
+
+@lru_cache(maxsize=SENTENCE_CACHE_SIZE)
+def _split_sentences(normalized: str) -> tuple[str, ...]:
+    # PySBD stores original_text on the instance, so a shared segmenter races across runs.
+    segmenter = pysbd.Segmenter(language="en", clean=False)
+    return tuple(piece.strip() for piece in segmenter.segment(normalized) if piece.strip())
+
+
+@lru_cache(maxsize=SENTENCE_CACHE_SIZE)
+def sentence_starts(text: str) -> tuple[int, ...]:
+    """Start offsets of `split_sentences(text)` pieces within `normalize_whitespace(text)`."""
+    normalized = normalize_whitespace(text)
+    starts: list[int] = []
+    cursor = 0
+    for sentence in _split_sentences(normalized):
+        # PySBD with clean=False preserves characters, so every piece is found in order.
+        cursor = max(normalized.find(sentence, cursor), cursor)
+        starts.append(cursor)
+        cursor += len(sentence)
+    return tuple(starts)
+
+
+def sentence_index_at(text: str, offset: int) -> int:
+    """0-based index into `split_sentences(text)` of the sentence containing `text[offset]`."""
+    position = len(WHITESPACE_RE.sub(" ", text[:offset]).lstrip())
+    return max(bisect_right(sentence_starts(text), position) - 1, 0)
 
 
 def text_tokens(text: str | None) -> list[str]:

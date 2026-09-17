@@ -175,7 +175,12 @@ class OperationalIssue:
     source_file: str = ""
     status: str = "failed"
     retry_count: int = 0
+    # True when rerunning the stage may succeed (transient gateway or registry failure).
     recoverable: bool = True
+    # Stable category: a gateway category (rate_limit, server_error, timeout, connection,
+    # authentication, invalid_request, configuration, invalid_response, circuit_open), or
+    # invalid_input, duplicate_identifier, validation_failed, registry_lookup_failed, processing_error.
+    error_category: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

@@ -1,0 +1,27 @@
+{
+  "synthetic-1": {
+    "abstract_id": "SYNTHETIC-1",
+    "title": "Synthetic report fixture",
+    "corresponding_author": "Synthetic Author",
+    "checks": [
+      {
+        "check_name": "content_integrity_summary",
+        "result": {
+          "level": "HIGH",
+          "comment": "Known phrase requires review.",
+          "supporting_data": [{ "overall_content_risk": "HIGH", "review_required": true }]
+        }
+      },
+      {
+        "check_name": "tortured_phrases",
+        "result": {
+          "level": "HIGH",
+          "comment": "nervous network in a synthetic sentence",
+          "supporting_data": [{ "matched_phrase": "nervous network", "evidence_snippet": "nervous network in a synthetic sentence" }]
+        }
+      },
+      { "check_name": "llm_response_trace", "result": { "level": "LOW", "comment": "", "supporting_data": [] } },
+      { "check_name": "template_detection", "result": { "level": "LOW", "comment": "", "supporting_data": [] } }
+    ]
+  }
+}

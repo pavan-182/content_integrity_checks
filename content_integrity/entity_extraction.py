@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import re
+from collections import OrderedDict
+from concurrent.futures import Future
 from dataclasses import asdict, dataclass, replace
-from functools import lru_cache
+from threading import Lock
 from typing import Any
 
 from .template_matching_common import (
@@ -16,7 +18,7 @@ from .template_matching_common import (
     TRIAL_PATTERN,
     URL_PATTERN,
 )
-from .utils import normalize_for_matching, normalize_whitespace, split_sentences
+from .utils import normalize_for_matching, normalize_whitespace, sentence_index_at, split_sentences
 
 
 VOCABULARY_VERSION = "asco-hybrid-v1"
@@ -62,9 +64,6 @@ LLM_SYSTEM_PROMPT = (
     'Reply with strict JSON only: {"entities": [{"text": "...", "type": "..."}]} '
     "with no commentary, no markdown and no code fence."
 )
-# ponytail: ~6-8 sequential gateway calls per record (one per chunk, plus splits). Add bounded
-# concurrency the way the other detectors do if wall-clock, not the rate limit, starts to hurt.
-_llm_client: Any | None = None
 DISEASE_RE = re.compile(r"\b(?:(?:non-small[- ]cell|small[- ]cell)\s+lung|breast|lung|colorectal|colon|rectal|prostate|ovarian|pancreatic|gastric|endometrial|cervical|renal(?: cell)?|hepatocellular|urothelial|thyroid|head and neck) (?:cancer|carcinoma)\b|\b(?:melanoma|mesothelioma|glioblastoma|multiple myeloma|hodgkin lymphoma|non-hodgkin lymphoma|acute myeloid leukemia|chronic lymphocytic leukemia)\b", re.I)
 MIRNA_RE = re.compile(r"\b(?:(?:hsa|mmu)-)?(?:miR|microRNA)[ -]?\d+[a-z]?(?:-\d+[a-z]?)?\b", re.I)
 LNCRNA_RE = re.compile(r"\b(?:LINC\d+|SNHG\d+|MALAT1|HOTAIR|NEAT1|XIST|[A-Z]{2,}\d+-AS\d+)\b")
@@ -83,8 +82,6 @@ CONTEXTUAL_BIOMARKER_RE = re.compile(
 REGISTRY_RE = re.compile(r"\b(?:ClinicalTrials\.gov|PubMed|GenBank|GEO|TCGA|SEER)\b", re.I)
 POPULATION_RE = re.compile(r"\b(?:postmenopausal women|pre?menopausal women|older adults|pediatric patients|patients aged \d+(?:-\d+)? years?)\b", re.I)
 TREATMENT_CLASS_RE = re.compile(r"\b(?:chemotherapy|immunotherapy|endocrine therapy|targeted therapy|radiotherapy|anti-HER2 therapy|checkpoint inhibitor(?: therapy)?)\b", re.I)
-# ponytail: process-local counter; move into run context if concurrent pipelines are introduced.
-_model_inference_count = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,16 +102,69 @@ class TypedEntity:
 
 
 def _sentence_index(text: str, offset: int) -> int:
-    # Must derive from the same split as entity_substitutions._entities() uses to build its
-    # sentence list, or the index looked up there can land in the wrong sentence.
-    return len(split_sentences(text[:offset]))
+    # Must derive from the same full-text split entity_substitutions._entities() indexes into.
+    # Segmenting each prefix instead cost one PySBD run per entity and, for an entity inside a
+    # sentence, counted that partial sentence too - pointing at the following sentence.
+    return sentence_index_at(text, offset)
 
 
-def set_entity_llm_client(client: Any | None) -> None:
-    """Install the shared GPT-OSS client used for entity extraction (None = rules only)."""
-    global _llm_client
-    _llm_client = client
-    _llm_entity_spans.cache_clear()
+class EntityExtractor:
+    """One run's client, bounded span cache, and inference-attempt count.
+
+    Create a new instance for each run; never change its client's configuration mid-run.
+    Safe for concurrent callers: the lock guards only the cache and counter, never a gateway
+    call, and a request for text already being extracted waits for that result instead of
+    issuing duplicate inference. Gateway concurrency is bounded by the client itself.
+    """
+
+    CACHE_SIZE = 512
+
+    def __init__(self, client: Any) -> None:
+        self.client = client
+        self.inference_count = 0
+        self._lock = Lock()
+        self._cache: OrderedDict[str, tuple[tuple[str, str], ...]] = OrderedDict()
+        self._pending: dict[str, Future] = {}
+
+    def spans(self, text: str) -> tuple[tuple[str, str], ...]:
+        with self._lock:
+            if text in self._cache:
+                self._cache.move_to_end(text)
+                return self._cache[text]
+            pending = self._pending.get(text)
+            owner = pending is None
+            if owner:
+                pending = self._pending[text] = Future()
+        if not owner:
+            return pending.result()
+        try:
+            result = self._spans(text)
+        except BaseException as exc:
+            with self._lock:
+                del self._pending[text]
+            pending.set_exception(exc)
+            raise
+        with self._lock:
+            self._cache[text] = result
+            if len(self._cache) > self.CACHE_SIZE:
+                self._cache.popitem(last=False)
+            del self._pending[text]
+        pending.set_result(result)
+        return result
+
+    def _count_inference(self) -> None:
+        with self._lock:
+            self.inference_count += 1
+
+    def _spans(self, text: str) -> tuple[tuple[str, str], ...]:
+        if not text.strip():
+            return ()
+        return tuple(dict.fromkeys(
+            (value, entity_type)
+            for chunk in _chunk_text(text, LLM_MAX_CHUNK_CHARS)
+            for value, entity_type in _chunk_entities(self, chunk)
+            if value in text
+        ))
 
 
 def _chunk_text(text: str, size: int) -> list[str]:
@@ -134,18 +184,19 @@ def _chunk_text(text: str, size: int) -> list[str]:
 
 def _split_in_half(chunk: str) -> tuple[str, str]:
     middle = len(chunk) // 2
-    cut = chunk.rfind(" ", 0, middle) or middle
+    cut = chunk.rfind(" ", 0, middle)
+    if cut <= 0:
+        cut = middle
     return chunk[:cut].strip(), chunk[cut:].strip()
 
 
-def _chunk_entities(client: Any, chunk: str) -> list[tuple[str, str]]:
+def _chunk_entities(extractor: EntityExtractor, chunk: str) -> list[tuple[str, str]]:
     from .validators.context_validator import TruncatedResponseError, _parse_validator_payload
 
-    global _model_inference_count
-    _model_inference_count += 1
+    extractor._count_inference()
     try:
-        payload = _parse_validator_payload(client.complete(
-            system=LLM_SYSTEM_PROMPT,
+        payload = _parse_validator_payload(extractor.client.complete(
+            system=f"{LLM_SYSTEM_PROMPT}\nPrompt version: {ENTITY_PROMPT_VERSION}",
             user=chunk,
             max_tokens=LLM_MAX_OUTPUT_TOKENS,
             temperature=0.0,
@@ -157,7 +208,7 @@ def _chunk_entities(client: Any, chunk: str) -> list[tuple[str, str]]:
         if len(chunk) <= LLM_MIN_CHUNK_CHARS:
             raise
         left, right = _split_in_half(chunk)
-        return _chunk_entities(client, left) + _chunk_entities(client, right)
+        return _chunk_entities(extractor, left) + _chunk_entities(extractor, right)
     items = payload.get("entities")
     if not isinstance(items, list):
         raise RuntimeError("Entity extraction response did not contain an 'entities' list")
@@ -174,28 +225,7 @@ def _chunk_entities(client: Any, chunk: str) -> list[tuple[str, str]]:
     return spans
 
 
-@lru_cache(maxsize=512)
-def _llm_entity_spans(text: str) -> tuple[tuple[str, str], ...]:
-    """Return verified (surface form, entity type) pairs for `text` from the GPT-OSS model.
-
-    Cached per text because the same title/abstract is masked from several call sites; the
-    client's own disk cache makes repeat runs free as well. A surface form is kept only if it
-    is found verbatim in `text` - a chunk-local paraphrase or a hallucinated span would
-    otherwise mask characters that are not there.
-    """
-    client = _llm_client
-    if client is None or not text.strip():
-        return ()
-    spans = [
-        (value, entity_type)
-        for chunk in _chunk_text(text, LLM_MAX_CHUNK_CHARS)
-        for value, entity_type in _chunk_entities(client, chunk)
-        if value in text
-    ]
-    return tuple(dict.fromkeys(spans))
-
-
-def _llm_entities(text: str, section: str) -> list[TypedEntity]:
+def _llm_entities(text: str, section: str, extractor: EntityExtractor) -> list[TypedEntity]:
     entities = [
         TypedEntity(
             text=value,
@@ -208,7 +238,7 @@ def _llm_entities(text: str, section: str) -> list[TypedEntity]:
             extraction_method="gpt_oss",
             confidence="model",
         )
-        for value, entity_type in _llm_entity_spans(text)
+        for value, entity_type in extractor.spans(text)
         for match in re.finditer(re.escape(value), text)
     ]
     return sorted(entities, key=lambda entity: (entity.start, -(entity.end - entity.start)))
@@ -284,10 +314,11 @@ def _merge_model_entities(
 
 def extract_typed_entities(
     text: str, section: str = "Abstract", *, use_model: bool = True,
+    extractor: EntityExtractor | None = None,
 ) -> list[TypedEntity]:
-    """Extract deterministic entities and fill the biomedical gaps with the GPT-OSS model."""
+    """Extract rules, then fill biomedical gaps only when an explicit extractor is supplied."""
     deterministic = extract_rule_entities(text, section)
-    model_entities = _llm_entities(text, section) if use_model else []
+    model_entities = _llm_entities(text, section, extractor) if use_model and extractor else []
     return _merge_model_entities(deterministic, model_entities)
 
 
@@ -310,8 +341,9 @@ def project_entities(
 
 def extract_record_entities(
     title: str, abstract: str, *, use_model: bool = True,
+    extractor: EntityExtractor | None = None,
 ) -> tuple[list[TypedEntity], list[TypedEntity]]:
-    """Extract title/abstract entities with at most one GPT-OSS call per record."""
+    """Extract title/abstract together, using sentence-aligned GPT-OSS chunks if supplied."""
     title_rules = extract_rule_entities(title, "Title")
     abstract_rules = extract_rule_entities(abstract, "Abstract")
     if not title and not abstract:
@@ -319,9 +351,9 @@ def extract_record_entities(
     separator = "\n\n" if title and abstract else ""
     combined = f"{title}{separator}{abstract}"
     abstract_start = len(title) + len(separator)
-    if not use_model:
+    if not use_model or extractor is None:
         return title_rules, abstract_rules
-    model_entities = _llm_entities(combined, "Record")
+    model_entities = _llm_entities(combined, "Record", extractor)
     title_model = project_entities(model_entities, title, 0, len(title), "Title")
     abstract_model = project_entities(
         model_entities, abstract, abstract_start, abstract_start + len(abstract), "Abstract"
@@ -330,15 +362,6 @@ def extract_record_entities(
         _merge_model_entities(title_rules, title_model),
         _merge_model_entities(abstract_rules, abstract_model),
     )
-
-
-def model_inference_count() -> int:
-    return _model_inference_count
-
-
-def reset_model_inference_count() -> None:
-    global _model_inference_count
-    _model_inference_count = 0
 
 
 def mask_entities(text: str, entities: list[TypedEntity] | tuple[TypedEntity, ...]) -> str:
@@ -353,8 +376,10 @@ def mask_entities(text: str, entities: list[TypedEntity] | tuple[TypedEntity, ..
     return normalize_whitespace("".join(parts))
 
 
-def mask_text(text: str, section: str = "Abstract") -> tuple[str, list[TypedEntity]]:
-    entities = extract_typed_entities(text, section)
+def mask_text(
+    text: str, section: str = "Abstract", *, extractor: EntityExtractor | None = None,
+) -> tuple[str, list[TypedEntity]]:
+    entities = extract_typed_entities(text, section, extractor=extractor)
     return mask_entities(text, entities), entities
 
 

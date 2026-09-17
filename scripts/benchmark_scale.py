@@ -1,30 +1,36 @@
-"""Measure pipeline cost at ASCO scale and record it as a comparable baseline.
+"""Run the real pipeline repeatedly on a dataset and record capacity and reliability evidence.
 
-The repository targets roughly 6,000 abstracts per run but has never been measured there,
-so nothing distinguishes "this change is slower" from "this corpus is bigger". This script
-builds a synthetic corpus of a requested size from real records, runs the real pipeline over
-it, and writes per-stage wall clock, peak RSS, and the run's own counters to JSON.
+Each run is a fresh CLI subprocess (so peak memory and CPU are that run's own, measured by the
+OS) writing to its own output directory. The report combines the pipeline's run_metrics.json
+and run_summary.json with process usage and a cross-run consistency check. It never reads or
+prints manuscript text.
+
+Model modes:
+- offline: deterministic rules only, no gateway.
+- fake-gateway: the deterministic GPT-OSS test double (scripts/fake_gpt_oss_gateway.py) over
+  loopback HTTP, with optional latency and failure injection. This proves control flow under
+  repeatable responses; it is not evidence of real GPT-OSS latency or capacity.
+
+Evidence labelling: a dataset produced by scripts/generate_load_dataset.py is labelled synthetic
+from its manifest. Any other directory must be labelled explicitly with --evidence real, and
+only for authorized abstracts.
 
 Usage:
-    python scripts/benchmark_scale.py --records 6000 --source real_asco_files
-    python scripts/benchmark_scale.py --records 500 --output /tmp/quick.json
-
-ponytail: the synthetic corpus replicates and perturbs real records, so it approximates
-corpus *shape* (length, section structure, entity density) rather than the true distribution
-of template families. It is a performance baseline, not an accuracy corpus - accuracy lives
-in scripts/run_eval.py and scripts/evaluate_template_detection.py.
+    python scripts/generate_load_dataset.py --profile scale --output-dir outputs/load_datasets/scale
+    python scripts/benchmark_scale.py --dataset outputs/load_datasets/scale --runs 3 \\
+        --model-mode fake-gateway --fake-latency-ms 20 --output outputs/benchmarks/scale-6000
+    python scripts/benchmark_scale.py --dataset real_asco_files --evidence real --runs 1 \\
+        --model-mode offline --output outputs/benchmarks/real-519
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import logging
-import random
-import re
-import resource
+import os
+import platform
+import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -32,138 +38,133 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from content_integrity.pipeline import run_default_pipeline
-from content_integrity.xml_parser import discover_xml_files, parse_xml_records
+from scripts.fake_gpt_oss_gateway import FAILURE_MODES, FakeGateway, GatewayBehaviour  # noqa: E402
 
-# Replicated copies must not be byte-identical: an exact-duplicate block collapses into one
-# hash bucket and would make candidate generation look far cheaper than it is in reality.
-WORD_RE = re.compile(r"\b[a-z]{5,}\b")
-DEFAULT_PERTURBATION = 0.15
+CONSISTENCY_KEYS = ("records", "findings", "template", "failures_by_stage_and_category")
 
 
-class _StageCollector(logging.Handler):
-    """Collect the structured stage timings that pipeline._stage/_run_detector emit."""
-
-    def __init__(self) -> None:
-        super().__init__(level=logging.INFO)
-        self.stages: dict[str, float] = {}
-
-    def emit(self, record: logging.LogRecord) -> None:
-        stage = getattr(record, "stage", None)
-        if stage is not None:
-            self.stages[stage] = round(float(getattr(record, "seconds", 0.0)), 2)
-
-
-def _perturb(text: str, rng: random.Random, rate: float) -> str:
-    def replace(match: re.Match[str]) -> str:
-        word = match.group(0)
-        if rng.random() >= rate:
-            return word
-        letters = list(word)
-        index = rng.randrange(len(letters))
-        letters[index] = rng.choice("abcdefghijklmnopqrstuvwxyz")
-        return "".join(letters)
-
-    return WORD_RE.sub(replace, text)
-
-
-def build_corpus(sources: list[Path], target: int, directory: Path, rate: float, seed: int) -> int:
-    """Replicate source XML until the corpus holds at least `target` *records*.
-
-    One XML file can carry many records (an ASCO `article_set`, or an `article` with
-    sub-articles), so the files are counted by the records they actually parse to. Sizing by
-    file count instead would silently overshoot by two orders of magnitude.
-    """
-    originals = [path for source in sources for path in discover_xml_files(source)]
-    if not originals:
-        raise SystemExit(f"No XML files found under {', '.join(str(s) for s in sources)}")
-    records_per_file = [len(parse_xml_records(path)) for path in originals]
-    rng = random.Random(seed)
-    records = 0
-    copies = 0
-    while records < target:
-        index = copies % len(originals)
-        source = originals[index]
-        text = source.read_text(encoding="utf-8", errors="replace")
-        # The first pass stays verbatim so the corpus keeps genuine duplicate structure for
-        # the detectors to find; later passes are perturbed so the whole corpus does not
-        # collapse into one exact-hash block and make blocking look free.
-        if copies >= len(originals):
-            text = _perturb(text, rng, rate)
-        (directory / f"bench_{copies:05d}_{source.stem}.xml").write_text(text, encoding="utf-8")
-        records += records_per_file[index]
-        copies += 1
-    return records
+def _run_once(command: list[str], environment: dict[str, str]) -> dict[str, object]:
+    started = time.perf_counter()
+    process = subprocess.Popen(command, env=environment, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    stderr_lines: list[str] = []
+    assert process.stderr is not None
+    for line in process.stderr:  # Stage lines carry run IDs and timings only.
+        stderr_lines.append(line.rstrip())
+    _, status, usage = os.wait4(process.pid, 0)
+    process.returncode = os.waitstatus_to_exitcode(status)
+    return {
+        "exit_code": process.returncode,
+        "process_wall_seconds": round(time.perf_counter() - started, 2),
+        # ru_maxrss is kilobytes on Linux.
+        "process_peak_rss_mb": round(usage.ru_maxrss / 1024, 1),
+        "process_cpu_seconds": round(usage.ru_utime + usage.ru_stime, 2),
+        "stderr_tail": stderr_lines[-5:],
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--records", type=int, default=6000, help="Synthetic corpus size.")
-    parser.add_argument(
-        "--source", type=Path, nargs="+", default=[ROOT / "real_asco_files"],
-        help="Directories of real XML to replicate from.",
-    )
-    parser.add_argument("--output", type=Path, default=ROOT / "tests" / "fixtures" / "scale_baseline.json")
-    parser.add_argument("--perturbation", type=float, default=DEFAULT_PERTURBATION)
-    parser.add_argument("--seed", type=int, default=0, help="Seed; fixed so runs are comparable.")
+    parser.add_argument("--dataset", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True, help="New directory outside Git for run outputs and the report.")
+    parser.add_argument("--evidence", choices=("real", "synthetic"), help="Required when the dataset has no generator manifest.")
+    parser.add_argument("--runs", type=int, default=1)
+    parser.add_argument("--model-mode", choices=("offline", "fake-gateway"), default="offline")
+    parser.add_argument("--fake-latency-ms", type=float, default=0.0)
+    parser.add_argument("--fake-failure-rate", type=float, default=0.0)
+    parser.add_argument("--fake-failure-modes", default="429,500,503")
+    parser.add_argument("--fake-max-concurrency", type=int, default=None, help="Gateway quota; requests beyond it receive 429.")
+    parser.add_argument("--llm-max-concurrency", type=int, default=4)
+    parser.add_argument("--dictionary", type=Path, default=ROOT / "🤷_tortured.csv")
     args = parser.parse_args(argv)
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
-    collector = _StageCollector()
-    logging.getLogger("content_integrity.pipeline").addHandler(collector)
+    manifest_path = args.dataset / "manifest.json"
+    manifest = json.loads(manifest_path.read_text()) if manifest_path.is_file() else None
+    evidence = "synthetic" if manifest and manifest.get("synthetic_only") else args.evidence
+    if evidence is None:
+        parser.error("--evidence is required for a dataset without a synthetic generator manifest")
+    if args.output.exists() and any(args.output.iterdir()):
+        parser.error(f"--output must be a new or empty directory: {args.output}")
+    modes = tuple(mode for mode in args.fake_failure_modes.split(",") if mode)
+    if set(modes) - set(FAILURE_MODES):
+        parser.error(f"unknown failure modes in {args.fake_failure_modes}")
 
-    with tempfile.TemporaryDirectory(prefix="asco-bench-") as workspace:
-        workspace = Path(workspace)
-        corpus = workspace / "corpus"
-        corpus.mkdir()
-        built = build_corpus(args.source, args.records, corpus, args.perturbation, args.seed)
-        logging.info("benchmark: built %d synthetic records", built)
+    args.output.mkdir(parents=True, exist_ok=True)
+    behaviour = GatewayBehaviour(args.fake_latency_ms / 1000, args.fake_failure_rate, modes, args.fake_max_concurrency)
+    gateway = FakeGateway(behaviour) if args.model_mode == "fake-gateway" else None
+    environment = {key: value for key, value in os.environ.items() if not key.startswith("INTELLIHUB_") and key != "api_key"}
+    environment["INTELLIHUB_ENV_FILE"] = "/dev/null"  # Never pick up live gateway credentials.
+    runs: list[dict[str, object]] = []
+    try:
+        if gateway:
+            gateway.__enter__()
+            environment.update(gateway.env())
+        for index in range(1, args.runs + 1):
+            run_output = args.output / f"run-{index}"
+            command = [
+                sys.executable, str(ROOT / "scripts/run_pipeline.py"), "--input-dir", str(args.dataset),
+                "--tortured-dictionary", str(args.dictionary), "--output-dir", str(run_output),
+                "--llm-max-concurrency", str(args.llm_max_concurrency),
+            ]
+            if args.model_mode == "offline":
+                command.append("--offline")
+            requests_before = gateway.counters.snapshot()["requests"] if gateway else 0
+            process = _run_once(command, environment)
+            run: dict[str, object] = {"run": index, **process}
+            if process["exit_code"] == 0:
+                metrics = json.loads((run_output / "run_metrics.json").read_text())
+                summary = json.loads((run_output / "run_summary.json").read_text())
+                run.update({
+                    "run_id": metrics["run_id"],
+                    "totals": metrics["totals"],
+                    "stages": metrics["stages"],
+                    "gateway": metrics["gateway"],
+                    "reconciled": summary["reconciled"],
+                    "failed_checks": [check["name"] for check in summary["checks"] if not check["passed"]],
+                    **{key: summary[key] for key in CONSISTENCY_KEYS},
+                    "json_sha256": summary["outputs"]["content_integrity_json"]["sha256"],
+                })
+            if gateway:
+                run["fake_gateway_requests"] = gateway.counters.snapshot()["requests"] - requests_before
+            runs.append(run)
+            print(json.dumps({key: run.get(key) for key in ("run", "exit_code", "process_wall_seconds", "process_peak_rss_mb", "reconciled")}), flush=True)
+    finally:
+        if gateway:
+            gateway.__exit__(None, None, None)
 
-        start = time.perf_counter()
-        result = run_default_pipeline(
-            input_dir=corpus,
-            tortured_dictionary_path=ROOT / "🤷_tortured.csv",
-            output_dir=workspace / "out",
-            authorship_json_path=workspace / "absent.json",
-        )
-        total = time.perf_counter() - start
-
-    metadata = dict(result.run_metadata_rows)
-    # The pipeline's own count is authoritative; build_corpus only replicates until it
-    # expects to have reached the target.
-    count = len(result.records)
+    completed = [run for run in runs if run["exit_code"] == 0]
     report = {
-        "_comment": "Performance baseline from scripts/benchmark_scale.py. Compare a change "
-                    "against this; regenerate deliberately when the corpus or hardware changes.",
-        "record_count": count,
-        "requested_records": args.records,
-        "perturbation_rate": args.perturbation,
-        "seed": args.seed,
-        "total_seconds": round(total, 1),
-        "seconds_per_record": round(total / count, 4) if count else 0.0,
-        # ru_maxrss is kilobytes on Linux.
-        "peak_rss_mb": round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1),
-        "stage_seconds": dict(sorted(collector.stages.items())),
-        "counters": {
-            key: metadata.get(key)
-            for key in (
-                "parsed_successfully",
-                "failed_files",
-                "comparable_record_count",
-                "template_candidate_pair_count",
-                "template_final_pair_count",
-                "enriched_family_count",
-                "entity_model_inference_count",
-                "operational_issue_count",
-                "llm_gateway_request_count",
-            )
+        "evidence": evidence,
+        "evidence_statement": (
+            "Synthetic engineering data: proves orchestration, runtime, memory, and failure handling at this volume; not detector accuracy."
+            if evidence == "synthetic" else
+            "Authorized real abstracts: behaviour on currently available real inputs; not the full production population."
+        ),
+        "model_mode": args.model_mode,
+        "model_statement": (
+            "Deterministic GPT-OSS test double: control flow only; not real GPT-OSS latency, throughput, or capacity."
+            if args.model_mode == "fake-gateway" else "Offline: no model calls."
+        ),
+        "dataset": {
+            "path": str(args.dataset),
+            "manifest": {key: manifest[key] for key in ("generator_version", "profile", "seed", "parameters", "expected", "dataset_sha256")} if manifest else None,
         },
+        "host": {"platform": platform.platform(), "python": platform.python_version(), "cpu_count": os.cpu_count()},
+        "configuration": {
+            "runs": args.runs, "llm_max_concurrency": args.llm_max_concurrency,
+            "fake_gateway": vars(behaviour) if gateway else None,
+        },
+        "runs": runs,
+        "all_runs_succeeded": len(completed) == len(runs),
+        "all_runs_reconciled": bool(completed) and all(run["reconciled"] for run in completed),
+        "consistent_across_runs": bool(completed) and all(
+            all(run[key] == completed[0][key] for key in CONSISTENCY_KEYS) for run in completed
+        ),
+        "identical_json_across_runs": bool(completed) and len({run["json_sha256"] for run in completed}) == 1,
     }
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps(report, indent=2))
-    print(f"\nwrote {args.output}")
-    return 0
+    (args.output / "benchmark_report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps({key: report[key] for key in ("evidence", "model_mode", "all_runs_succeeded", "all_runs_reconciled", "consistent_across_runs", "identical_json_across_runs")}, indent=2))
+    print(f"wrote {args.output / 'benchmark_report.json'}")
+    return 0 if report["all_runs_succeeded"] and report["all_runs_reconciled"] and report["consistent_across_runs"] else 1
 
 
 if __name__ == "__main__":

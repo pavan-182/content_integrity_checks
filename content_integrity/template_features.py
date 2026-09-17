@@ -6,6 +6,7 @@ import re
 from dataclasses import asdict, dataclass
 
 from .entity_extraction import (
+    EntityExtractor,
     TypedEntity,
     extract_record_entities,
     extract_rule_entities,
@@ -118,11 +119,13 @@ def _feature_section(
     )
 
 
-def build_template_features(record: ParsedRecord, *, use_model: bool = True) -> TemplateFeatures:
-    """Create the shared template representation with one model inference per record."""
+def build_template_features(
+    record: ParsedRecord, *, use_model: bool = True, extractor: EntityExtractor | None = None,
+) -> TemplateFeatures:
+    """Extract once per record in chunks, then reuse spans across template detectors."""
     abstract_text = record.abstract_text or record.title or record.raw_text
     title_entities, abstract_entities = extract_record_entities(
-        record.title, abstract_text, use_model=use_model,
+        record.title, abstract_text, use_model=use_model, extractor=extractor,
     )
     title = _feature_section(-1, "Title", record.title, title_entities)
     abstract = _feature_section(-1, "Abstract", abstract_text, abstract_entities)

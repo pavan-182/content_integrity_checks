@@ -137,6 +137,7 @@ def main(argv: list[str] | None = None) -> int:
             tortured_dictionary_path=ROOT / "🤷_tortured.csv",
             detect_nonsense_candidates=args.detect_nonsense_candidates,
             output_dir=output_dir,
+            offline=not args.detect_nonsense_candidates,
         )
 
         predicted_pairs = {

@@ -4,7 +4,7 @@ import test from "node:test";
 import { createEmptyReport, hasTemplatingSupportChecks, isQueuedByRisk, normalizeReport, validationRows } from "./report.js";
 
 test("maps the pipeline report into dashboard records", async () => {
-  const source = new URL("../../outputs/test_real/content_integrity_results.json", import.meta.url);
+  const source = new URL("./fixtures/content_integrity_results.json", import.meta.url);
   const raw = JSON.parse(await readFile(source, "utf8"));
   const report = normalizeReport(raw);
 

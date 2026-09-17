@@ -13,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DIST = Path(__file__).resolve().parent / "dist"
-INPUT = Path(os.environ.get("ASCO_PIPELINE_INPUT", ROOT / "synthetic_asco_retractionwatch_validation.xml")).resolve()
+INPUT = Path(os.environ.get("ASCO_PIPELINE_INPUT", ROOT / "metadata_files")).resolve()
 PORT = int(os.environ.get("PORT", "8000"))
 OUTPUT = ROOT / "outputs/frontend_run"
 REPORT = OUTPUT / "content_integrity_results.json"

@@ -284,7 +284,7 @@ def _candidate_tortured_rules(field_text: str, indexed_rules: dict[str, list[Tor
     keys: set[str] = set(tokens)
     if len(tokens) >= 2:
         keys.update(" ".join(tokens[index : index + 2]) for index in range(len(tokens) - 1))
-    for key in keys:
+    for key in sorted(keys):
         for rule in indexed_rules.get(key, []):
             candidates.append(rule)
     return candidates

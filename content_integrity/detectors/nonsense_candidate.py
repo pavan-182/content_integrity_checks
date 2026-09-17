@@ -27,7 +27,7 @@ from ..thresholds import (
     NONSENSE_CANDIDATE_MODEL_RESPONSE_ATTEMPTS as MODEL_RESPONSE_ATTEMPTS,
 )
 from ..utils import normalize_for_matching, normalize_whitespace, text_tokens
-from ..validators.context_validator import MODEL_ID, _parse_validator_payload
+from ..validators.context_validator import MODEL_ID, GatewayRequestError, _parse_validator_payload
 from .tortured_phrase import TorturedRule
 
 
@@ -59,6 +59,8 @@ class NonsenseRunStats:
     retry_count: int = 0
     known_fingerprint_suppressed_count: int = 0
     failed_sentence_record_ids: list[str] = field(default_factory=list)
+    # record_id -> gateway failure category (or "invalid_response" after retry and split).
+    failure_categories: dict[str, str] = field(default_factory=dict)
     route_counts: dict[str, int] = field(default_factory=dict)
     model_id: str = ""
     prompt_version: str = PROMPT_VERSION
@@ -68,6 +70,7 @@ class NonsenseRunStats:
         self.retry_count += other.retry_count
         self.known_fingerprint_suppressed_count += other.known_fingerprint_suppressed_count
         self.failed_sentence_record_ids.extend(other.failed_sentence_record_ids)
+        self.failure_categories.update(other.failure_categories)
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,7 +229,7 @@ class NonsenseCandidateDetector:
         max_concurrent_batches: int = DEFAULT_MAX_CONCURRENT_BATCHES,
     ) -> None:
         self.client = client
-        self.model_id = model_id
+        self.model_id = model_id or getattr(client, "model_id", getattr(client, "model_name", ""))
         self.rule_index = rule_index or {}
         self.sentences_per_batch = max(1, sentences_per_batch)
         self.max_concurrent_batches = max(1, max_concurrent_batches)
@@ -257,7 +260,11 @@ class NonsenseCandidateDetector:
     def _review_batch(
         self, batch: Sequence[CandidateSentence],
     ) -> tuple[list[Finding], NonsenseRunStats]:
-        """Retry, then split, then record the sentence as failed - never silently drop it."""
+        """Retry, then split, then record the sentence as failed - never silently drop it.
+
+        Gateway failures were already retried by the client, so they fail the batch without
+        splitting; only unusable model content is retried and split.
+        """
         stats = NonsenseRunStats()
         for attempt in range(MODEL_RESPONSE_ATTEMPTS):
             stats.request_count += 1
@@ -265,18 +272,23 @@ class NonsenseCandidateDetector:
                 stats.retry_count += 1
             try:
                 raw = self.client.complete(
-                    system=SYSTEM_PROMPT,
+                    system=f"{SYSTEM_PROMPT}\nPrompt version: {PROMPT_VERSION}",
                     user=_user_prompt(batch),
                     max_tokens=512 * len(batch),
                     temperature=0,
                 )
                 reviewed, suppressed = _validate_batch_response(raw, batch, self.rule_index)
+            except GatewayRequestError as exc:
+                stats.failed_sentence_record_ids.extend(candidate.record.record_id for candidate in batch)
+                stats.failure_categories.update((candidate.record.record_id, exc.category) for candidate in batch)
+                return [], stats
             except (KeyError, TypeError, ValueError, RuntimeError):
                 continue
             stats.known_fingerprint_suppressed_count = suppressed
             return [self._finding(*item) for item in reviewed], stats
         if len(batch) == 1:
             stats.failed_sentence_record_ids.append(batch[0].record.record_id)
+            stats.failure_categories[batch[0].record.record_id] = "invalid_response"
             return [], stats
         midpoint = len(batch) // 2
         findings: list[Finding] = []

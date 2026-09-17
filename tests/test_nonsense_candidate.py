@@ -31,6 +31,8 @@ class StubClient:
         self.calls = 0
 
     def complete(self, *, system: str, user: str, max_tokens: int, temperature: float) -> str:
+        if "entity_extraction_gpt_oss" in system:
+            return '{"entities": []}'
         self.calls += 1
         results = []
         for item in json.loads(user)["sentences"]:
@@ -244,7 +246,11 @@ class NonsenseCandidateTests(unittest.TestCase):
         self.assertEqual(summary["highest_severity"], "None")
         self.assertEqual(summary["overall_content_risk"], "None")
         self.assertEqual(summary["review_required"], "No")
-        self.assertNotIn("nonsense_candidate", json.dumps(report).lower())
+        self.assertFalse(any(
+            check["check_name"] == "nonsense_candidate"
+            for item in report.values() for check in item["checks"]
+        ))
+        self.assertEqual(next(iter(report.values()))["checks"][0]["result"]["supporting_data"][0]["finding_ids"], [])
         self.assertFalse(any(
             "nonsense candidate" in value or "nonsense_candidate" in value
             for value in workbook_values

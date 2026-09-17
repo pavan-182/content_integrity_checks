@@ -21,6 +21,7 @@ from ..thresholds import (
     LLM_TRACE_SEMANTIC_MODEL_RESPONSE_ATTEMPTS as MODEL_RESPONSE_ATTEMPTS,
 )
 from ..utils import normalize_whitespace
+from ..validators.context_validator import GatewayRequestError
 from .llm_trace_context import (
     TraceCandidate,
     context_for_span,
@@ -38,6 +39,8 @@ class SemanticRunStats:
     batch_count: int = 0
     batch_failure_count: int = 0
     failed_record_ids: list[str] = field(default_factory=list)
+    # record_id -> gateway failure category (or "invalid_response" after retry and split).
+    failure_categories: dict[str, str] = field(default_factory=dict)
     request_count: int = 0
     retry_count: int = 0
     max_concurrent_batches: int = 0
@@ -47,12 +50,12 @@ class SemanticRunStats:
     def merge(self, other: "SemanticRunStats") -> None:
         self.batch_failure_count += other.batch_failure_count
         self.failed_record_ids.extend(other.failed_record_ids)
+        self.failure_categories.update(other.failure_categories)
         self.request_count += other.request_count
         self.retry_count += other.retry_count
 
 
 RULES = tuple(load_llm_trace_rules())
-RULE_BY_ID = {rule.rule_id: rule for rule in RULES}
 
 
 def build_system_prompt(rules: Iterable[LLMTraceRule] = RULES) -> str:
@@ -311,7 +314,12 @@ def _analyze_batch_safely(
     max_output_tokens: int,
     stats: SemanticRunStats,
 ) -> tuple[list[TraceCandidate], list[str]]:
-    """Retry, then split, then give up on the single record - never silently drop one."""
+    """Retry, then split, then give up on the single record - never silently drop one.
+
+    Only unusable model content is retried and split. A gateway failure has already been retried
+    by the client (or rejected by its circuit), so every record in the batch fails immediately
+    with that category instead of multiplying requests against a failing service.
+    """
     model_id = getattr(client, "model_name", "gpt-oss-20b")
     for attempt in range(MODEL_RESPONSE_ATTEMPTS):
         stats.request_count += 1
@@ -319,15 +327,19 @@ def _analyze_batch_safely(
             stats.retry_count += 1
         try:
             raw = client.complete(
-                system=SYSTEM_PROMPT,
+                system=f"{SYSTEM_PROMPT}\nPrompt version: {PROMPT_VERSION}",
                 user=_user_prompt(records),
                 max_tokens=max_output_tokens,
                 temperature=0,
             )
             return validate_model_response(raw, records, batch_id, model_id), []
+        except GatewayRequestError as exc:
+            stats.failure_categories.update((record.record_id, exc.category) for record in records)
+            return [], [record.record_id for record in records]
         except (KeyError, TypeError, ValueError, RuntimeError):
             continue
     if len(records) == 1:
+        stats.failure_categories[records[0].record_id] = "invalid_response"
         return [], [records[0].record_id]
     midpoint = len(records) // 2
     left, left_failures = _analyze_batch_safely(

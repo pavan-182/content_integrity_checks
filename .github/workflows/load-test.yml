@@ -1,0 +1,59 @@
+name: Synthetic load test
+
+# Manual only: the full 6,000-record run takes tens of minutes and must not gate every commit.
+# It uses the deterministic GPT-OSS test double; it never contacts a live model gateway.
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Synthetic dataset profile
+        default: scale
+        type: choice
+        options: [scale, medium, high_similarity, long_abstract, mixed]
+      runs:
+        description: Consecutive runs
+        default: "3"
+      fake_latency_ms:
+        description: Test-double latency per request (ms)
+        default: "0"
+
+jobs:
+  load:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      # Inputs reach the shell through env, never ${{ }} interpolation, so input text cannot become shell code.
+      - name: Generate synthetic dataset
+        env:
+          PROFILE: ${{ inputs.profile }}
+        run: python scripts/generate_load_dataset.py --profile "$PROFILE" --output-dir load/dataset
+
+      - name: Run pipeline against the GPT-OSS test double
+        env:
+          RUNS: ${{ inputs.runs }}
+          FAKE_LATENCY_MS: ${{ inputs.fake_latency_ms }}
+        run: >
+          python scripts/benchmark_scale.py --dataset load/dataset --runs "$RUNS"
+          --model-mode fake-gateway --fake-latency-ms "$FAKE_LATENCY_MS"
+          --output load/benchmark
+
+      - name: Upload benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-test-${{ inputs.profile }}
+          path: |
+            load/dataset/manifest.json
+            load/benchmark/benchmark_report.json
+            load/benchmark/run-*/run_metrics.json
+            load/benchmark/run-*/run_summary.json

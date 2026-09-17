@@ -99,9 +99,19 @@ EXACT_TEXT_REUSE_MAX_RARE_PHRASE_DOCUMENT_FREQUENCY = 2
 EXACT_TEXT_REUSE_MIN_RARE_PHRASE_SENTENCE_SIMILARITY = 0.57
 
 # -- validators/context_validator.py --
+# Socket read timeout: a reasoning model may take a minute or more before its first byte.
 CONTEXT_VALIDATOR_DEFAULT_TIMEOUT_SECONDS = 120.0
+# TCP connect plus TLS handshake; an unreachable gateway is detected in seconds, not minutes.
+CONTEXT_VALIDATOR_DEFAULT_CONNECT_TIMEOUT_SECONDS = 10.0
+# Whole-body bound for one attempt, so a slowly dripping response cannot stall a worker.
+CONTEXT_VALIDATOR_DEFAULT_REQUEST_DEADLINE_SECONDS = 300.0
 CONTEXT_VALIDATOR_DEFAULT_MAX_ATTEMPTS = 3
 CONTEXT_VALIDATOR_DEFAULT_BACKOFF_SECONDS = 1.0
+CONTEXT_VALIDATOR_DEFAULT_MAX_BACKOFF_SECONDS = 30.0
+# Matches the detectors' batch ceiling: the rate-limited gateway bounds throughput by request count.
+CONTEXT_VALIDATOR_DEFAULT_MAX_CONCURRENT_REQUESTS = 4
+CONTEXT_VALIDATOR_DEFAULT_CIRCUIT_FAILURE_THRESHOLD = 5
+CONTEXT_VALIDATOR_DEFAULT_CIRCUIT_COOLDOWN_SECONDS = 60.0
 # The validator model is reasoning-heavy, so leave enough budget for the final JSON answer.
 CONTEXT_VALIDATOR_VALIDATION_MAX_TOKENS = 2048
 

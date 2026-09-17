@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import json
 import unittest
-from contextlib import contextmanager
 
 from content_integrity.entity_evaluation import evaluate_entities
 from content_integrity.entity_extraction import (
     extract_typed_entities,
     mask_text,
-    set_entity_llm_client,
+    EntityExtractor,
     validate_masking,
 )
 
@@ -21,15 +20,6 @@ class _StubClient:
         if isinstance(self.reply, Exception):
             raise self.reply
         return self.reply
-
-
-@contextmanager
-def _entity_client(client: _StubClient):
-    set_entity_llm_client(client)
-    try:
-        yield client
-    finally:
-        set_entity_llm_client(None)
 
 
 class EntityExtractionTests(unittest.TestCase):
@@ -74,17 +64,15 @@ class EntityExtractionTests(unittest.TestCase):
             {"text": "cells", "type": "organelle"},
             {"text": "Notch", "type": "pathway"},
         ]}))
-        with _entity_client(client):
-            entities = extract_typed_entities("miR-708 targets FOXP cells in cancer")
+        entities = extract_typed_entities("miR-708 targets FOXP cells in cancer", extractor=EntityExtractor(client))
         self.assertEqual(
             [(entity.text, entity.entity_type, entity.extraction_method) for entity in entities],
             [("miR-708", "mirna", "hybrid_context"), ("FOXP", "gene", "gpt_oss")],
         )
 
     def test_gpt_oss_failure_is_not_silent(self) -> None:
-        with _entity_client(_StubClient(RuntimeError("gateway unavailable"))):
-            with self.assertRaisesRegex(RuntimeError, "gateway unavailable"):
-                extract_typed_entities("FOXP expression")
+        with self.assertRaisesRegex(RuntimeError, "gateway unavailable"):
+            extract_typed_entities("FOXP expression", extractor=EntityExtractor(_StubClient(RuntimeError("gateway unavailable"))))
 
 
 if __name__ == "__main__":

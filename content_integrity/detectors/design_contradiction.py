@@ -116,7 +116,7 @@ class LLMDesignContradictionValidator:
         }
         try:
             raw = self.client.complete(
-                system=self.system_prompt,
+                system=f"{self.system_prompt}\nPrompt version: {PROMPT_VERSION}",
                 user=json.dumps(payload, ensure_ascii=False),
                 max_tokens=512,
                 temperature=0,

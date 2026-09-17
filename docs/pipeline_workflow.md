@@ -17,7 +17,9 @@ The pipeline screens a batch of Wiley/ASCO XML abstracts for four explainable co
 
 It produces record-level data, detailed evidence, risk summaries, audit metadata, and one consolidated Excel workbook for editorial review. It is a triage system: a finding means **manual review is recommended**, not that misconduct, AI authorship, or a publication decision has been established.
 
-AI-generated-text classification is intentionally outside the pipeline's scope.
+General AI-generated-text classification is not implemented in the Phase 1 baseline.
+Interpretable AI-text evidence remains a product direction; no overall AI probability or automated judgment is introduced here.
+Authorship Integrity is excluded from this phase, and an authorship report is no longer loaded by default.
 
 ## 2. End-to-end workflow
 
@@ -51,7 +53,9 @@ flowchart TD
     L --> M[Write canonical JSON and editor workbook]
 ```
 
-The default path is deterministic and local. Network access occurs only when `--validate-llm`, `--detect-nonsense-candidates`, or `--verify-trials` enables an external service.
+Use `--offline` for deterministic local execution.
+Otherwise configured GPT-OSS entity masking may call the gateway even without optional detector flags.
+Semantic discovery, validation, nonsense candidates, and trial verification have separate opt-in flags.
 
 ## 3. Inputs and configuration
 
@@ -59,16 +63,22 @@ The command-line interface accepts:
 
 | Argument | Default | Function |
 |---|---|---|
-| `--input-dir` | `/home/pavankrishna/Projets/ASCO/real_asco_files` | Root directory searched recursively for `*.xml` files |
+| `--input-dir` | `metadata_files` | Root directory searched recursively for `*.xml` files |
+| `--offline` | disabled | Disables gateway configuration and network-enabled checks |
+| `--detect-llm-semantic` | disabled | Enables semantic response-residue discovery |
+| `--authorship-json` | none | Explicit legacy workbook projection; outside Phase 1 content-integrity scope |
 | `--tortured-dictionary` | `🤷_tortured.csv` | CSV containing tortured-phrase rules and expected terms |
 | `--output-dir` | `outputs` | Destination for all generated artifacts |
 | `--validate-llm` | disabled | Enables per-finding GPT-OSS context validation |
 | `--detect-nonsense-candidates` | disabled | Enables sentence-level GPT-OSS review for dictionary misses |
 | `--verify-trials` | disabled | Verifies valid NCT identifiers against ClinicalTrials.gov; local format and placeholder checks always run |
+| `--llm-max-concurrency` | 4 | Maximum GPT-OSS requests in flight across every model stage |
+| `--discard-checkpoint` | disabled | Deletes an existing checkpoint in the output directory and starts from the beginning |
 | `--quiet` | disabled | Suppresses per-stage progress logging (parse, each detector, enriched reports, output writing) |
 
-Progress is logged to stderr as one timed line per stage, so a long run is not silent. The
-table above lists the flag that turns it off; nothing else needs configuring.
+Progress is logged to stderr as one timed line per stage, prefixed with the run ID, so a long run is not silent.
+Log lines carry IDs, stage names, error categories, and timings, never abstract text or credentials.
+Batch operation, recovery, and capacity guidance are in [the operations runbook](OPERATIONS.md).
 
 Run the default pipeline with:
 
@@ -80,12 +90,14 @@ An explicit run is:
 
 ```bash
 python scripts/run_pipeline.py \
-  --input-dir /home/pavankrishna/Projets/ASCO/real_asco_files \
+  --offline --input-dir tests/fixtures/eval_corpus \
   --tortured-dictionary '🤷_tortured.csv' \
   --output-dir outputs
 ```
 
-The optional validator reads these settings from the environment or `.env`:
+The optional validator reads these settings from the environment or `.env`.
+File values are read per client without mutating the process environment.
+Shell environment values take precedence; `INTELLIHUB_ENV_FILE` selects an alternative file.
 
 | Setting | Required | Meaning |
 |---|---:|---|
@@ -201,6 +213,7 @@ Only a model response marking the sentence not understandable creates an interna
 ### 7.4 Contradiction and trial-reference checks
 
 Numerical and study-design contradiction detectors run locally on every comparable record. Trial-reference format, placeholder, missing-ID, and unsupported-registry checks also run locally. `--verify-trials` additionally checks valid NCT identifiers against ClinicalTrials.gov using the persistent output-directory cache.
+Without it, only cached registry responses are consulted and an uncached identifier is not an operational failure; the record can still complete.
 
 ## 8. Stage 5 — Optional context validation
 
@@ -212,11 +225,22 @@ When `--validate-llm` is enabled, tortured phrases and only validation-eligible 
 - source field; and
 - detector type.
 
-The expected response is strict JSON with a status of `confirmed`, `rejected`, or `uncertain`, plus a one-sentence editorial reason. Requests use zero temperature, a 120-second timeout, and up to three attempts with exponential backoff. Unusable responses and exhausted request failures become `uncertain` rather than removing the original finding.
+The expected response is strict JSON with a status of `confirmed`, `rejected`, or `uncertain`, plus a one-sentence editorial reason.
+Requests use zero temperature, a 120-second timeout, and up to three attempts with exponential backoff.
+Unusable responses and exhausted request failures become `validation_failed` while preserving the original finding.
 
-Validation never deletes audit findings or validates template clusters. Confirmed, rejected, and uncertain LLM statuses do affect only the LLM reviewer-priority contribution: rejected findings are excluded, uncertain semantic candidates remain Low, and supporting findings never contribute independently. Tortured-phrase behavior remains annotate-only. Without validation, ambiguous LLM findings remain pending while high-precision deterministic findings use `not_required`.
+Validation never deletes audit findings or validates template clusters.
+Rejected, uncertain, and failed tortured-phrase validations remain auditable but do not contribute active findings.
+LLM trace validation separately controls its reviewer-priority contribution; supporting findings never contribute independently.
+Without validation, ambiguous LLM findings remain pending while high-precision deterministic findings use `not_required`.
 
-## 9. Stage 6 — Pair-first template detection
+## 9. Stage 6 - Pair-first template detection
+
+Shared features receive an explicit run-owned `EntityExtractor` containing the GPT-OSS client, bounded memory cache, and inference counter.
+Title and abstract are processed together in sentence-aligned chunks, and all template consumers reuse the resulting spans.
+Deterministic spans take precedence over verified model spans.
+One record's preprocessing failure records an operational issue and falls back to rules for that record.
+Sentence splitting creates a separate PySBD instance per call because its mutable text state is not safe to share.
 
 `exact_text_reuse` and `entity_normalized_template` independently produce pair evidence. Results for the same canonical pair are merged once, with ranked confidence and both detector signals retained. Exact numeric similarities remain separate.
 
@@ -224,7 +248,10 @@ Accepted high/very-high pairs, plus independently supported medium pairs, become
 
 ## 10. Stage 7 — Risk aggregation
 
-Risk is computed once per record from active rule findings, optional low-severity nonsense candidates, and one template concern regardless of how many pair signals or family memberships support it. LLM findings first collapse to one validation-aware reviewer-priority signal.
+Legacy review priority is computed once per record from active rule findings and one template concern regardless of pair count.
+Experimental nonsense candidates do not contribute to that priority.
+LLM findings first collapse to one validation-aware reviewer-priority signal.
+These existing labels are heuristics for manual triage, not AI probabilities or automated determinations.
 
 | Condition | Overall risk |
 |---|---|
@@ -240,12 +267,19 @@ Any risk other than `None` sets `review_required` to `Yes` with neutral language
 
 ## 11. Stage 8 — Outputs
 
-Every run creates only these files in the configured output directory:
+Every successful run writes the following files to the configured output directory.
+Gateway and trial caches may also be created as hidden subdirectories; a `.checkpoint` directory exists only while a run is incomplete.
+Use separate output directories for concurrent runs.
 
 | File | Contents |
 |---|---|
 | `content_integrity_results.json` | DOI-keyed, merge-ready content-integrity checks and evidence |
 | `Editor_Triage_Workbook.xlsx` | Compact editorial triage workbook matching the approved review layout |
+| `run_metrics.json` | Run ID, host, configuration, per-stage wall/CPU/peak memory, throughput, and gateway telemetry |
+| `run_summary.json` | Record status totals, reconciliation checks, failures, skipped inputs, template counts, and output hashes |
+
+Reports are written to a staging directory, read back, and reconciled before they replace earlier output.
+`run_summary.json` is renamed last and records the other files' SHA-256 hashes.
 
 The workbook contains seven sheets:
 
@@ -259,18 +293,28 @@ The workbook contains seven sheets:
 
 Each JSON submission contains `title`, `abstract_id`, and a `checks` array compatible with the authorship-integrity output. `template_detection` owns pair-scoped `exact_text_reuse`, `entity_normalized_template`, title, and section sub-checks. Numerical contradictions, design contradictions, and unverifiable-trial findings appear once in its record-scoped supporting block. They remain corroborating evidence and cannot create or promote a template pair by themselves. A family-scoped block is emitted only for verified families of at least three abstracts.
 
-The key is the normalized DOI when present, otherwise the abstract ID. Duplicate output keys fail the run rather than overwrite a submission.
+The key is the normalized DOI when present, otherwise the abstract ID.
+Records sharing a normalized DOI are keyed by abstract ID and receive a `duplicate_identifier` operational issue instead of stopping the run.
+The summary supporting record contains `processing_status`, `record_status`, `failures`, `active_finding_count`, `parse_status`, `source_file`, and `operational_issues`.
+Processing is `failed` when any reported stage failed, and `successful` otherwise; `record_status` refines this as `completed`, `completed_with_findings`, or `failed`.
+Both statuses are also in the workbook's All Abstracts sheet; exact duplicate inputs are `skipped` and listed in `run_summary.json`.
+Template coverage is marked incomplete after entity preprocessing or gateway initialization failures.
 
 ## 12. Failure handling and operational behavior
 
-- One malformed XML file does not stop the batch.
+- One malformed XML file, or one unextractable record inside a well-formed bundle, does not stop the batch.
+- XML comments, processing instructions, and unresolved entities are ignored rather than read as content.
+- A whole-batch detector that raises is rerun without the records whose own probe fails; those records get a `processing_error` issue.
+- Gateway calls use bounded concurrency, classified retries with jittered backoff, a shared rate-limit cooldown, and a circuit breaker; see the runbook for categories.
+- Interrupted runs resume from stage checkpoints; incompatible checkpoints are rejected.
 - Missing metadata is reported rather than silently discarded.
 - Duplicate IDs are resolved before detectors and reports create joins.
-- Validator response or request failures are recorded as `uncertain` per finding.
+- Validator response or request failures are recorded as `validation_failed` per finding.
 - Nonsense-review failures create no candidate finding; the feature is opt-in and candidate-only.
-- Enabling validation without an API key stops at validator initialization with a configuration error.
-- Output files are rewritten in the selected output directory on each run.
-- Detection and validation are currently sequential; no queue, database, or persistent reference corpus is involved.
+- Missing gateway configuration is recorded as an operational issue; deterministic checks continue.
+- Empty or missing input directories fail with an actionable input error before report creation.
+- Output files are replaced only after the new run's reports reconcile; otherwise earlier reports are kept.
+- Entity preprocessing, semantic batches, and nonsense batches share the client's in-flight request limit; separate pipeline runs own their clients and counters.
 
 ## 13. Auditability and reproducibility
 
@@ -301,7 +345,8 @@ The test suite covers supported XML shapes, bundled sub-articles, excluded autho
 Run it with:
 
 ```bash
-python -m unittest discover -s tests -v
+python -m pytest tests/ -q
+python scripts/run_eval.py
 ```
 
 ## 16. Module map
@@ -309,6 +354,8 @@ python -m unittest discover -s tests -v
 | Module | Responsibility |
 |---|---|
 | `content_integrity/pipeline.py` | Orchestration, aggregation, CLI configuration, and output assembly |
+| `content_integrity/checkpoint.py` | Atomic files, stage checkpoints, and checkpoint compatibility |
+| `content_integrity/reconciliation.py` | Record status accounting and JSON/workbook reconciliation from disk |
 | `content_integrity/xml_parser.py` | XML discovery, backward-compatible normalized extraction, lossless trace blocks, warnings |
 | `content_integrity/detectors/llm_trace.py` | Deterministic response-residue matching from the shared YAML catalogue |
 | `content_integrity/detectors/llm_trace_semantic.py` | Opt-in semantic variants, novel candidates, batching, and exact evidence verification |

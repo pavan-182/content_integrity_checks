@@ -64,8 +64,21 @@ TRACE_BLOCK_TAGS = {"p": "paragraph", "list-item": "list_item", "preformat": "pr
 TRIAL_ID_RE = re.compile(r"\bNCT\d{8}\b", re.IGNORECASE)
 
 
-def _local_name(tag: str) -> str:
+def _local_name(tag: object) -> str:
+    # Comments, processing instructions, and unresolved entities have a callable tag, not a name.
+    if not isinstance(tag, str):
+        return ""
     return tag.rsplit("}", 1)[-1] if "}" in tag else tag
+
+
+def _failed_record(source_file: str, record_id: str, warning_code: str, message: str) -> ParsedRecord:
+    return ParsedRecord(
+        source_file=source_file,
+        schema_type="unknown",
+        record_id=record_id,
+        parse_status="failed",
+        parse_warnings=[ParseWarning(warning_code=warning_code, warning_message=message, severity="error")],
+    )
 
 
 def _parse_tree(path: str | Path) -> etree._ElementTree:
@@ -140,7 +153,7 @@ def _text_without_excluded_blocks(node: etree._Element, excluded_sections: set[s
         if excluded_name:
             if excluded_sections is not None:
                 excluded_sections.add(excluded_name)
-        else:
+        elif isinstance(child.tag, str):  # Comments, PIs, and unresolved entities are not content.
             parts.append(_text_without_excluded_blocks(child, excluded_sections))
         parts.append(child.tail or "")
     return normalize_whitespace("".join(parts))
@@ -153,7 +166,7 @@ def _preserve_text(node: etree._Element, excluded_sections: set[str] | None = No
         if excluded_name:
             if excluded_sections is not None:
                 excluded_sections.add(excluded_name)
-        else:
+        elif isinstance(child.tag, str):  # Comments, PIs, and unresolved entities are not content.
             parts.append(_preserve_text(child, excluded_sections))
         parts.append(child.tail or "")
     text = "".join(parts).replace("\r\n", "\n").replace("\r", "\n")
@@ -676,31 +689,34 @@ def parse_xml_records(path: str | Path) -> list[ParsedRecord]:
     try:
         tree = _parse_tree(path)
     except Exception as exc:
-        return [ParsedRecord(
-            source_file=source_file,
-            schema_type="unknown",
-            record_id=path_stem(source_file),
-            parse_status="failed",
-            parse_warnings=[
-                ParseWarning(
-                    warning_code="xml_parse_failed",
-                    warning_message=f"Could not parse XML: {exc}",
-                    severity="error",
-                )
-            ],
-        )]
+        return [_failed_record(source_file, path_stem(source_file), "xml_parse_failed", f"Could not parse XML: {exc}")]
 
     root = tree.getroot()
     schema = _local_name(root.tag)
     if schema == "article":
         article_nodes = [root, *root.xpath(".//*[local-name()='sub-article']")]
-        records = [_extract_article_root(node, source_file) for node in article_nodes]
+        records = []
+        for index, node in enumerate(article_nodes):
+            try:
+                records.append(_extract_article_root(node, source_file))
+            except Exception as exc:
+                # One unextractable record in a bundle must not remove the bundle's other records.
+                records.append(_failed_record(
+                    source_file, f"{path_stem(source_file)}__record{index}", "xml_extraction_failed",
+                    f"Could not extract record {index} from well-formed XML ({type(exc).__name__}).",
+                ))
         if len(records) > 1:
             for record in records:
                 record.source_file = f"{source_file}#{record.record_id}"
         return records
     if schema == "article_set":
-        return [_extract_article_set_root(tree, source_file)]
+        try:
+            return [_extract_article_set_root(tree, source_file)]
+        except Exception as exc:
+            return [_failed_record(
+                source_file, path_stem(source_file), "xml_extraction_failed",
+                f"Could not extract the record from well-formed XML ({type(exc).__name__}).",
+            )]
 
     # Fallback for unexpected XML root types.
     record_id = path_stem(source_file)

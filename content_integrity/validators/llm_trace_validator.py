@@ -32,7 +32,7 @@ class LLMTraceValidator:
         system_prompt: str = SYSTEM_PROMPT,
     ) -> None:
         self.client = client
-        self.model_id = model_id
+        self.model_id = model_id or getattr(client, "model_id", getattr(client, "model_name", ""))
         self.prompt_version = prompt_version
         self.system_prompt = system_prompt
 
@@ -54,7 +54,7 @@ class LLMTraceValidator:
         }
         try:
             raw = self.client.complete(
-                system=self.system_prompt,
+                system=f"{self.system_prompt}\nPrompt version: {self.prompt_version}",
                 user=json.dumps(payload, ensure_ascii=False),
                 max_tokens=VALIDATION_MAX_TOKENS,
                 temperature=0,

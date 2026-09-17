@@ -552,6 +552,8 @@ class PipelineIntegrationTests(unittest.TestCase):
             model_name = "test/semantic"
 
             def complete(self, *, system: str, user: str, max_tokens: int, temperature: float) -> str:
+                if "entity_extraction_gpt_oss" in system:
+                    return '{"entities": []}'
                 payload = json.loads(user)
                 results = []
                 for record in payload["records"]:
@@ -622,6 +624,8 @@ class PipelineIntegrationTests(unittest.TestCase):
             model_name = "test/broken"
 
             def complete(self, *, system: str, user: str, max_tokens: int, temperature: float) -> str:
+                if "entity_extraction_gpt_oss" in system:
+                    return '{"entities": []}'
                 return "not a json response"
 
         with tempfile.TemporaryDirectory() as directory:

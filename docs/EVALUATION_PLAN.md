@@ -1,3 +1,16 @@
 # Synthetic Evaluation
 
-`python scripts/run_eval.py` runs the pipeline on the labelled XML under `tests/fixtures/eval_corpus`, reports record-level precision, recall, false positives, and misses for each deterministic detector, checks expected record risk, and sweeps template similarity thresholds using pairwise cluster metrics. The current corpus produces perfect pairwise metrics from `0.75` through `0.93`; `0.88` therefore remains the conservative existing default, not a claim that it is production-optimal. The opt-in `--detect-nonsense-candidates` evaluation additionally requires configured IntelliHub access; its offline contract and planted cases are covered by `tests/test_nonsense_candidate.py`. The corpus proves that known planted signals can be recovered without flagging the included clean, Markdown-lookalike, and legitimately similar examples; it does not estimate production prevalence, establish performance on unseen ASCO submissions, validate semantic generalization or GPT-OSS accuracy, or replace calibration and editorial review on a representative labelled real-world sample.
+`python scripts/run_eval.py` runs the pipeline offline on labelled XML under `tests/fixtures/eval_corpus`.
+It reports precision and recall for template pair findings, family membership, family pairwise relationships, and abstract template flags.
+It also checks family merges/splits, cluster flags, and finding-count reconciliation against `tests/fixtures/eval_baseline.json`.
+The current script does not sweep thresholds or measure every detector's precision and recall.
+Do not regenerate the baseline merely to make a failing gate pass.
+
+The opt-in `--detect-nonsense-candidates` evaluation requires configured IntelliHub access.
+Mocked planted cases are covered by `tests/test_nonsense_candidate.py`; that experimental detector remains excluded from canonical findings.
+Entity extraction can be evaluated from reviewed annotations with `scripts/evaluate_entity_extraction.py`, or deterministic masking references with `scripts/evaluate_masked_entity_rules.py`.
+`scripts/evaluate_template_detection.py` requires explicit gold/prediction files and the matching corpus manifest; those external datasets are not needed for the CI baseline.
+The obsolete PubMedBERT evaluator was removed because production uses explicit GPT-OSS extraction and deterministic rules.
+
+Synthetic success does not estimate production prevalence, validate semantic generalization or GPT-OSS accuracy, establish throughput for 6,000 records, or replace review of representative labelled abstracts.
+Scale evidence belongs to Phase 2 and comprehensive detector evaluations to Phase 3.

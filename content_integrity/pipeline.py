@@ -2,17 +2,32 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import platform
+import resource
+import shutil
 import subprocess
+import sys
 import time
+import uuid
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
 from .aggregation.risk_engine import _risk_from_signals, severity_rank
+from .checkpoint import (
+    CHECKPOINT_VERSION,
+    CheckpointStore,
+    IncompatibleCheckpointError,
+    atomic_write_json,
+    code_sha256,
+    file_sha256,
+)
 from .detectors import (
     built_in_llm_rules,
     build_tortured_rule_index,
@@ -56,9 +71,8 @@ from .enriched_reporting import (
 from .editorial_scoring import SCORING_VERSION as EDITORIAL_SCORING_VERSION
 from .entity_extraction import (
     VOCABULARY_VERSION as ENTITY_VOCABULARY_VERSION,
-    model_inference_count,
-    reset_model_inference_count,
-    set_entity_llm_client,
+    ENTITY_PROMPT_VERSION,
+    EntityExtractor,
 )
 from .family_clustering import FAMILY_VERSION as TEMPLATE_FAMILY_VERSION
 from .pair_classification import CLASSIFIER_VERSION as TEMPLATE_PAIR_CLASSIFIER_VERSION
@@ -77,10 +91,11 @@ from .reporting import (
     build_integrated_content_integrity_json,
     _load_authorship_checks,
     _normalized_doi,
-    write_json,
     write_workbook,
 )
+from .reconciliation import ReconciliationError, reconcile_outputs
 from .validators import ContextValidator, LLMTraceValidator, apply_llm_trace_validation, build_gpt_oss_client
+from .validators.context_validator import GatewayRequestError, TruncatedResponseError
 from .validators.llm_trace_validator import PROMPT_VERSION as LLM_VALIDATION_PROMPT_VERSION
 from .utils import dedupe_records, normalize_whitespace, to_pipe_string
 from .xml_parser import discover_xml_files, parse_xml_records
@@ -136,13 +151,15 @@ class PipelineConfig:
     input_dir: Path
     output_dir: Path
     tortured_dictionary_path: Path
-    authorship_json_path: Path = Path("outputs/frontend_run/final_json.json")
+    authorship_json_path: Path | None = None
     dictionary_version: str = "wiley_tortured_seed_v1"
     validate_llm: bool = False
     detect_llm_semantic: bool = False
     detect_nonsense_candidates: bool = False
     verify_trials: bool = False
     llm_max_concurrency: int = DEFAULT_MAX_CONCURRENT_BATCHES
+    offline: bool = False
+    discard_checkpoint: bool = False
 
 
 @dataclass(slots=True)
@@ -161,6 +178,9 @@ class PipelineResult:
     run_metadata_rows: list[tuple[str, Any]]
     operational_issues: list[OperationalIssue]
     output_paths: dict[str, Path]
+    run_id: str = ""
+    run_summary: dict[str, Any] = field(default_factory=dict)
+    run_metrics: dict[str, Any] = field(default_factory=dict)
 
 
 def _finding_sort_key(finding: Finding) -> tuple[str, str, str, str, int, int]:
@@ -697,56 +717,6 @@ def _findings_rows(findings: list[Finding]) -> list[dict[str, Any]]:
     return rows
 
 
-def _pair_finding_rows(pair_findings: list[PairFinding]) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for pair in pair_findings:
-        for side in (False, True):
-            rows.append(
-                {
-                    "finding_id": f"TPL-PAIR-{len(rows) + 1:05d}",
-                    "pair_id": pair.pair_id,
-                    "record_id": pair.matched_record_id if side else pair.record_id,
-                    "matched_record_id": pair.record_id if side else pair.matched_record_id,
-                    "source_file": pair.matched_source_file if side else pair.source_file,
-                    "matched_source_file": pair.source_file if side else pair.matched_source_file,
-                    "title": pair.matched_title if side else pair.title,
-                    "matched_title": pair.title if side else pair.matched_title,
-                    "detector_type": "template_pair",
-                    "check_type": pair.primary_match_type,
-                    "primary_match_type": pair.primary_match_type,
-                    "category": "template",
-                    "matched_text": pair.primary_match_type,
-                    "expected_term": "",
-                    "evidence_snippet": pair.evidence_excerpt,
-                    "evidence_excerpt": pair.evidence_excerpt,
-                    "section_or_field": "cross_document",
-                    "severity": pair.severity,
-                    "confidence": pair.confidence,
-                    "validation_status": "",
-                    "validation_reason": "",
-                    "validated_by": "",
-                    "rule_id": pair.pair_id,
-                    "template_pattern_type": pair.primary_match_type,
-                    "supporting_match_types": pair.supporting_match_types,
-                    "matched_sections": pair.matched_sections,
-                    "matched_sentence_count": pair.matched_sentence_count,
-                    "shared_text_coverage": round(pair.shared_text_coverage, 3),
-                    "original_text_similarity": round(pair.original_text_similarity, 3),
-                    "masked_skeleton_similarity": round(pair.masked_skeleton_similarity, 3),
-                    "ngram_similarity": round(pair.ngram_similarity, 3),
-                    "high_value_section_similarity": round(pair.high_value_section_similarity, 3),
-                    "weighted_section_similarity": round(pair.weighted_section_similarity, 3),
-                    "variable_substitutions": pair.variable_substitutions,
-                    "relationship_context": pair.relationship_context,
-                    "pair_classification": pair.pair_classification,
-                    "review_status": pair.review_status,
-                    "editor_label": "not_reviewed",
-                    "editor_notes": "",
-                }
-            )
-    return rows
-
-
 def _finding_row_sort_key(row: dict[str, Any]) -> tuple[str, str, str, str, int, str]:
     return (
         str(row.get("record_id", "")),
@@ -797,17 +767,85 @@ def _parse_warning_rows(records: list[ParsedRecord]) -> list[dict[str, Any]]:
     return rows
 
 
-@contextmanager
-def _stage(name: str):
-    """Time one pipeline stage. A full-corpus run is long; it must not be silent."""
-    start = time.perf_counter()
-    try:
-        yield
-    finally:
-        elapsed = time.perf_counter() - start
-        # `extra` carries the timing structurally so a benchmark can collect it with a
-        # logging handler instead of regexing the rendered message.
-        logger.info("%s: done in %.1fs", name, elapsed, extra={"stage": name, "seconds": elapsed})
+class _RunLog(logging.LoggerAdapter):
+    """Prefix every line with the run ID; lines carry IDs, stages, and categories, never text."""
+
+    def process(self, msg: Any, kwargs: Any) -> tuple[Any, Any]:
+        kwargs["extra"] = {**self.extra, **kwargs.get("extra", {})}
+        return f"run={self.extra['run_id']} {msg}", kwargs
+
+
+def _new_run_id() -> str:
+    return f"{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-{uuid.uuid4().hex[:8]}"
+
+
+def _peak_rss_mb() -> float:
+    # ru_maxrss is kilobytes on Linux, the supported deployment platform.
+    return round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)
+
+
+def _cpu_seconds() -> float:
+    usage = resource.getrusage(resource.RUSAGE_SELF)
+    return usage.ru_utime + usage.ru_stime
+
+
+class _RunMetrics:
+    def __init__(self, log: _RunLog) -> None:
+        self.log = log
+        self.stages: list[dict[str, Any]] = []
+        self.started = time.perf_counter()
+        self.cpu_started = _cpu_seconds()
+
+    @contextmanager
+    def stage(self, name: str, issues: list[OperationalIssue] | None = None):
+        """Time one stage (wall, CPU, peak RSS, new issues). A long run must not be silent."""
+        start, cpu_start = time.perf_counter(), _cpu_seconds()
+        issues_before = len(issues) if issues is not None else 0
+        try:
+            yield
+        finally:
+            elapsed = time.perf_counter() - start
+            self.stages.append({
+                "stage": name,
+                "wall_seconds": round(elapsed, 3),
+                "cpu_seconds": round(_cpu_seconds() - cpu_start, 3),
+                "peak_rss_mb": _peak_rss_mb(),
+                "operational_issues_added": (len(issues) - issues_before) if issues is not None else 0,
+            })
+            # `extra` carries the timing structurally so a benchmark can collect it with a
+            # logging handler instead of regexing the rendered message.
+            self.log.info("%s: done in %.1fs", name, elapsed, extra={"stage": name, "seconds": elapsed})
+
+    def restored(self, name: str) -> None:
+        self.stages.append({"stage": name, "restored_from_checkpoint": True})
+        self.log.info("%s: restored from checkpoint", name)
+
+
+def _safe_message(exc: BaseException) -> str:
+    # Gateway messages never contain request content. Other messages are truncated to one line;
+    # they appear only in reports (which already carry evidence text), never in log lines.
+    return (normalize_whitespace(str(exc)) or type(exc).__name__)[:200]
+
+
+def _issue_from_exception(component: str, exc: BaseException, record: ParsedRecord | None = None) -> OperationalIssue:
+    if isinstance(exc, GatewayRequestError):
+        category, retryable, retries = exc.category, exc.retryable, max(exc.attempts - 1, 0)
+    elif isinstance(exc, TruncatedResponseError):
+        category, retryable, retries = "invalid_response", False, 0
+    elif component == "gpt_oss_model":
+        category, retryable, retries = "configuration", False, 0
+    else:
+        category, retryable, retries = "processing_error", False, 0
+    return OperationalIssue(
+        component=component,
+        error_type=type(exc).__name__,
+        message=_safe_message(exc),
+        record_id=record.record_id if record else "",
+        source_file=record.source_file if record else "",
+        retry_count=retries,
+        recoverable=retryable,
+        error_category=category,
+    )
 
 
 def _run_detector(
@@ -815,30 +853,54 @@ def _run_detector(
     operation: Any,
     operational_issues: list[OperationalIssue],
     default: Any,
+    log: _RunLog,
     record: ParsedRecord | None = None,
 ) -> Any:
-    # Per-record calls pass `record`; logging those at info would emit one line per record,
-    # so only corpus-level stages are timed here.
-    start = time.perf_counter()
     try:
         return operation()
     except Exception as exc:  # Detector/model boundaries must be visible in completed reports.
-        operational_issues.append(OperationalIssue(
-            component=component,
-            error_type=type(exc).__name__,
-            message=str(exc) or type(exc).__name__,
-            record_id=record.record_id if record else "",
-            source_file=record.source_file if record else "",
-        ))
-        logger.warning("%s: failed (%s)", component, type(exc).__name__)
+        issue = _issue_from_exception(component, exc, record)
+        operational_issues.append(issue)
+        log.warning("%s: failed record=%s category=%s (%s)", component, issue.record_id or "-", issue.error_category, issue.error_type)
         return default
-    finally:
-        if record is None:
-            elapsed = time.perf_counter() - start
-            logger.info(
-                "%s: done in %.1fs", component, elapsed,
-                extra={"stage": component, "seconds": elapsed},
-            )
+
+
+def _run_corpus_detector(
+    component: str,
+    operation: Any,
+    records: list[ParsedRecord],
+    operational_issues: list[OperationalIssue],
+    default: Any,
+    log: _RunLog,
+) -> Any:
+    """Run a whole-batch detector without letting one record's failure remove it for everyone.
+
+    `operation(subset)` runs the detector over a record subset. On failure each record is probed
+    alone; records whose probe fails are excluded with their own issue and the detector reruns
+    on the rest. Only a failure that no single record reproduces is reported run-wide.
+    """
+    try:
+        return operation(records)
+    except Exception as exc:
+        failure: Exception = exc
+        log.warning("%s: failed (%s); probing records to isolate the cause", component, type(exc).__name__)
+    excluded: list[tuple[ParsedRecord, Exception]] = []
+    for record in records:
+        try:
+            operation([record])
+        except Exception as exc:
+            excluded.append((record, exc))
+    if excluded:
+        for record, exc in excluded:
+            operational_issues.append(_issue_from_exception(component, exc, record))
+            log.warning("%s: excluded record=%s (%s)", component, record.record_id, type(exc).__name__)
+        excluded_ids = {record.record_id for record, _ in excluded}
+        try:
+            return operation([record for record in records if record.record_id not in excluded_ids])
+        except Exception as exc:
+            failure = exc
+    operational_issues.append(_issue_from_exception(component, failure))
+    return default
 
 
 def _collect_operational_issues(
@@ -847,7 +909,10 @@ def _collect_operational_issues(
     trial_results: list[TrialVerificationResult],
     semantic_stats: SemanticRunStats,
     nonsense_stats: NonsenseRunStats,
+    *,
+    registry_lookup_requested: bool,
 ) -> list[OperationalIssue]:
+    source_files = {record.record_id: record.source_file for record in records}
     issues = [
         OperationalIssue(
             component="xml_parser",
@@ -856,6 +921,7 @@ def _collect_operational_issues(
             record_id=record.record_id,
             source_file=record.source_file,
             recoverable=False,
+            error_category="invalid_input",
         )
         for record in records
         if record.parse_status == "failed"
@@ -868,6 +934,7 @@ def _collect_operational_issues(
             message=finding.validation_reason or "Finding validation failed.",
             record_id=finding.record_id,
             source_file=finding.source_file,
+            error_category="validation_failed",
         )
         for finding in findings
         if finding.validation_failed
@@ -878,9 +945,8 @@ def _collect_operational_issues(
             error_type="model_failure",
             message="Semantic response-trace coverage is incomplete for this record.",
             record_id=record_id,
-            source_file=next(
-                (record.source_file for record in records if record.record_id == record_id), "",
-            ),
+            source_file=source_files.get(record_id, ""),
+            error_category=semantic_stats.failure_categories.get(record_id, "invalid_response"),
         )
         for record_id in semantic_stats.failed_record_ids
     )
@@ -890,9 +956,8 @@ def _collect_operational_issues(
             error_type="model_failure",
             message="Nonsense candidate review is incomplete for at least one sentence in this record.",
             record_id=record_id,
-            source_file=next(
-                (record.source_file for record in records if record.record_id == record_id), "",
-            ),
+            source_file=source_files.get(record_id, ""),
+            error_category=nonsense_stats.failure_categories.get(record_id, "invalid_response"),
         )
         for record_id in dict.fromkeys(nonsense_stats.failed_sentence_record_ids)
     )
@@ -903,11 +968,32 @@ def _collect_operational_issues(
             message=result.operational_error or "Registry lookup failed.",
             record_id=result.record_id,
             source_file=result.source_file,
+            error_category="registry_lookup_failed",
         )
         for result in trial_results
-        if result.operational_error
+        # Without --verify-trials only cached registry responses are consulted; a miss means the
+        # lookup was not requested, not that a check failed. Local trial checks still ran.
+        if result.operational_error and registry_lookup_requested
     )
     return issues
+
+
+def _duplicate_doi_issues(records: list[ParsedRecord]) -> list[OperationalIssue]:
+    """Records sharing a normalized DOI cannot be joined by DOI; they are keyed by abstract ID."""
+    counts = Counter(_normalized_doi(record.doi) for record in records if _normalized_doi(record.doi))
+    return [
+        OperationalIssue(
+            component="record_identity",
+            error_type="duplicate_doi",
+            message="Another retained record has the same DOI; this record is keyed by abstract ID and needs identity review.",
+            record_id=record.record_id,
+            source_file=record.source_file,
+            recoverable=False,
+            error_category="duplicate_identifier",
+        )
+        for record in records
+        if counts.get(_normalized_doi(record.doi), 0) > 1
+    ]
 
 
 def _dictionary_rows(llm_rules: list[dict[str, Any]], tortured_rules: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -917,26 +1003,82 @@ def _dictionary_rows(llm_rules: list[dict[str, Any]], tortured_rules: list[dict[
     return rows
 
 
-def run_pipeline(config: PipelineConfig) -> PipelineResult:
-    reset_model_inference_count()
-    with _stage("parse"):
-        xml_files = discover_xml_files(config.input_dir)
-        records = [record for path in xml_files for record in parse_xml_records(path)]
-        records, record_id_warnings = dedupe_records(records)
-    logger.info("parse: %d files -> %d records", len(xml_files), len(records))
-    operational_issues: list[OperationalIssue] = []
-    llm_rules = built_in_llm_rules()
-    tortured_rules = load_tortured_rules(config.tortured_dictionary_path, config.dictionary_version)
-    tortured_index = build_tortured_rule_index(tortured_rules)
-    # Entity masking now runs on GPT-OSS too, so the client is always needed; when it cannot
-    # be built the failure is recorded and every stage degrades to its deterministic path.
-    llm_client = _run_detector(
-        "gpt_oss_model",
-        lambda: build_gpt_oss_client(cache_dir=config.output_dir / ".gpt_oss_cache"),
-        operational_issues,
-        None,
-    )
-    set_entity_llm_client(llm_client)
+@dataclass
+class _RunState:
+    """Everything later stages need; pickled at checkpoint boundaries (records are re-parsed)."""
+
+    completed_stages: list[str] = field(default_factory=list)
+    run_ids: list[str] = field(default_factory=list)
+    operational_issues: list[OperationalIssue] = field(default_factory=list)
+    findings: list[Finding] = field(default_factory=list)
+    deterministic_candidate_count: int = 0
+    comparable_record_ids: list[str] = field(default_factory=list)
+    trial_results: list[TrialVerificationResult] = field(default_factory=list)
+    semantic_stats: SemanticRunStats = field(default_factory=SemanticRunStats)
+    nonsense_stats: NonsenseRunStats = field(default_factory=NonsenseRunStats)
+    entity_inference_count: int = 0
+    template_features: list[Any] = field(default_factory=list)
+    exact_template_findings: list[Any] = field(default_factory=list)
+    entity_template_findings: list[Any] = field(default_factory=list)
+    enriched_pair_rows: list[dict[str, Any]] = field(default_factory=list)
+    enriched_family_rows: list[dict[str, Any]] = field(default_factory=list)
+    enriched_abstract_rows: list[dict[str, Any]] = field(default_factory=list)
+
+
+STAGES = ("record_checks", "template_features", "template_pairs", "enriched_reports")
+OUTPUT_FILES = {
+    "content_integrity_json": "content_integrity_results.json",
+    "workbook": "Editor_Triage_Workbook.xlsx",
+    "run_metrics": "run_metrics.json",
+    "run_summary": "run_summary.json",
+}
+CHECKPOINT_DIRECTORY = ".checkpoint"
+
+
+def _records_sha256(records: list[ParsedRecord]) -> str:
+    digest = sha256()
+    for record in records:
+        digest.update(json.dumps([record.record_id, record.source_file, record.parse_status, record.title, record.abstract_text]).encode())
+    return digest.hexdigest()
+
+
+def _checkpoint_fingerprint(config: PipelineConfig, input_sha256: str, records: list[ParsedRecord], llm_client: Any | None) -> dict[str, Any]:
+    return {
+        "checkpoint_version": CHECKPOINT_VERSION,
+        "code_sha256": code_sha256(),
+        "input_manifest_sha256": input_sha256,
+        "records_sha256": _records_sha256(records),
+        "tortured_dictionary_sha256": file_sha256(config.tortured_dictionary_path),
+        "dictionary_version": config.dictionary_version,
+        "offline": config.offline,
+        "validate_llm": config.validate_llm,
+        "detect_llm_semantic": config.detect_llm_semantic,
+        "detect_nonsense_candidates": config.detect_nonsense_candidates,
+        "verify_trials": config.verify_trials,
+        # Model responses depend on the deployment and model; credentials are never recorded.
+        "gateway": f"{getattr(llm_client, 'base_url', '')}|{getattr(llm_client, 'model_name', '')}" if llm_client is not None else "none",
+    }
+
+
+def _host_environment() -> dict[str, Any]:
+    memory_kb = next(
+        (int(line.split()[1]) for line in Path("/proc/meminfo").read_text().splitlines() if line.startswith("MemTotal:")),
+        0,
+    ) if Path("/proc/meminfo").exists() else 0
+    return {
+        "platform": platform.platform(),
+        "python": platform.python_version(),
+        "cpu_count": os.cpu_count(),
+        "memory_total_mb": round(memory_kb / 1024),
+    }
+
+
+def _record_checks_stage(
+    state: _RunState, config: PipelineConfig, records: list[ParsedRecord], llm_client: Any | None,
+    llm_rules: list[Any], tortured_rules: list[Any], tortured_index: Any, metrics: _RunMetrics, log: _RunLog,
+) -> None:
+    issues = state.operational_issues
+    findings = state.findings
     nonsense_detector = (
         NonsenseCandidateDetector(
             llm_client,
@@ -946,59 +1088,55 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         if config.detect_nonsense_candidates and llm_client is not None
         else None
     )
-
-    findings: list[Finding] = []
     deterministic_candidates = []
     tortured_by_record: dict[str, list[Finding]] = {}
-    for record in records:
-        deterministic_candidates.extend(_run_detector(
-            "llm_response_trace",
-            lambda: detect_llm_trace_candidates(record, llm_rules),
-            operational_issues,
-            [],
-            record,
-        ))
-        tortured_findings = _run_detector(
-            "tortured_phrase",
-            lambda: detect_tortured_phrases(record, tortured_rules, tortured_index),
-            operational_issues,
-            [],
-            record,
-        )
-        tortured_by_record[record.record_id] = tortured_findings
-        findings.extend(tortured_findings)
+    with metrics.stage("deterministic_record_detectors", issues):
+        for record in records:
+            deterministic_candidates.extend(_run_detector(
+                "llm_response_trace",
+                lambda: detect_llm_trace_candidates(record, llm_rules),
+                issues, [], log, record,
+            ))
+            tortured_findings = _run_detector(
+                "tortured_phrase",
+                lambda: detect_tortured_phrases(record, tortured_rules, tortured_index),
+                issues, [], log, record,
+            )
+            tortured_by_record[record.record_id] = tortured_findings
+            findings.extend(tortured_findings)
+    state.deterministic_candidate_count = len(deterministic_candidates)
 
-    nonsense_stats = NonsenseRunStats()
     if nonsense_detector:
-        nonsense_findings, nonsense_stats = _run_detector(
-            "nonsense_candidate",
-            lambda: nonsense_detector.detect_records(records, tortured_by_record),
-            operational_issues,
-            ([], NonsenseRunStats()),
-        )
+        with metrics.stage("nonsense_candidates", issues):
+            nonsense_findings, state.nonsense_stats = _run_detector(
+                "nonsense_candidate",
+                lambda: nonsense_detector.detect_records(records, tortured_by_record),
+                issues, ([], NonsenseRunStats()), log,
+            )
         findings.extend(nonsense_findings)
 
     semantic_candidates = []
-    semantic_stats = SemanticRunStats()
     if config.detect_llm_semantic and llm_client is not None:
-        semantic_candidates, semantic_stats = _run_detector(
-            "llm_response_trace_semantic",
-            lambda: detect_semantic_traces(
-                llm_client, records, max_concurrent_batches=config.llm_max_concurrency,
-            ),
-            operational_issues,
-            ([], SemanticRunStats()),
-        )
+        with metrics.stage("llm_response_trace_semantic", issues):
+            semantic_candidates, state.semantic_stats = _run_detector(
+                "llm_response_trace_semantic",
+                lambda: detect_semantic_traces(
+                    llm_client, records, max_concurrent_batches=config.llm_max_concurrency,
+                ),
+                issues, ([], SemanticRunStats()), log,
+            )
     llm_candidates = fuse_llm_trace_candidates([*deterministic_candidates, *semantic_candidates])
     llm_validator = LLMTraceValidator(llm_client) if config.validate_llm and llm_client is not None else None
-    apply_llm_trace_validation(llm_candidates, llm_validator)
+    with metrics.stage("llm_response_trace_validation", issues):
+        apply_llm_trace_validation(llm_candidates, llm_validator)
     findings.extend(candidate_to_finding(candidate) for candidate in llm_candidates)
 
     def _is_comparable(record: ParsedRecord) -> bool:
         return record.parse_status != "failed" and bool(record.title.strip() or record.abstract_text.strip())
 
     comparable_records = [record for record in records if _is_comparable(record)]
-    operational_issues.extend(
+    state.comparable_record_ids = [record.record_id for record in comparable_records]
+    issues.extend(
         OperationalIssue(
             component=component,
             error_type="record_excluded_parse_failed" if record.parse_status == "failed" else "record_excluded_no_text",
@@ -1010,45 +1148,40 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
             record_id=record.record_id,
             source_file=record.source_file,
             recoverable=False,
+            error_category="invalid_input",
         )
         for record in records
         if not _is_comparable(record)
         for component in COMPARABILITY_GATED_COMPONENTS
     )
-    numerical_results = _run_detector(
-        "numerical_contradiction",
-        lambda: detect_numerical_contradictions(comparable_records),
-        operational_issues,
-        [],
-    )
+    with metrics.stage("numerical_contradiction", issues):
+        numerical_results = _run_corpus_detector(
+            "numerical_contradiction", detect_numerical_contradictions, comparable_records, issues, [], log,
+        )
     design_validator = (
         LLMDesignContradictionValidator(llm_client)
         if config.validate_llm and llm_client is not None
         else None
     )
-    design_results = _run_detector(
-        "design_contradiction",
-        lambda: detect_design_contradictions(comparable_records, validator=design_validator),
-        operational_issues,
-        [],
+    with metrics.stage("design_contradiction", issues):
+        design_results = _run_corpus_detector(
+            "design_contradiction",
+            lambda subset: detect_design_contradictions(subset, validator=design_validator),
+            comparable_records, issues, [], log,
+        )
+    registry_client = ClinicalTrialsGovClient(
+        cache_dir=config.output_dir / ".trial_registry_cache",
+        offline_cache_only=not config.verify_trials,
     )
-    trial_results = _run_detector(
-        "unverifiable_clinical_trial",
-        lambda: detect_unverifiable_trials(
-            comparable_records,
-            registry_clients={
-                CLINICAL_TRIALS_GOV: ClinicalTrialsGovClient(
-                    cache_dir=config.output_dir / ".trial_registry_cache",
-                    offline_cache_only=not config.verify_trials,
-                )
-            },
-        ),
-        operational_issues,
-        [],
-    )
+    with metrics.stage("unverifiable_clinical_trial", issues):
+        state.trial_results = _run_corpus_detector(
+            "unverifiable_clinical_trial",
+            lambda subset: detect_unverifiable_trials(subset, registry_clients={CLINICAL_TRIALS_GOV: registry_client}),
+            comparable_records, issues, [], log,
+        )
     findings.extend(
         _integrated_finding(result)
-        for result in [*numerical_results, *design_results, *trial_results]
+        for result in [*numerical_results, *design_results, *state.trial_results]
         if result.check_triggered
     )
 
@@ -1058,132 +1191,286 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
             finding.finding_id = f"FND-{index:05d}"
 
     if config.validate_llm and ordered_findings:
-        if llm_client is None:
-            for finding in ordered_findings:
-                if (
-                    finding.detector_type in {"tortured_phrase", "design_contradiction"}
-                    or (
-                        finding.detector_type == "llm_response_trace"
-                        and finding.normalized_validation_status == "pending"
-                    )
-                ):
-                    finding.validation_status = "validation_failed"
-                    finding.validation_reason = "Validation model was unavailable."
-                    finding.review_status = "validation_failed"
-        else:
-            validator = ContextValidator(client=llm_client)
-            for finding in ordered_findings:
-                if finding.detector_type == "llm_response_trace":
-                    continue
-                if finding.detector_type not in validator.applies_to:
-                    continue
-                result = validator.validate(finding)
-                finding.validation_status = result.status
-                finding.validation_reason = result.reason
-                finding.validated_by = f"{result.model_id}:{result.prompt_version}"
-                if result.confidence is not None:
-                    finding.confidence = result.confidence
+        with metrics.stage("context_validation", issues):
+            if llm_client is None:
+                for finding in ordered_findings:
+                    if (
+                        finding.detector_type in {"tortured_phrase", "design_contradiction"}
+                        or (
+                            finding.detector_type == "llm_response_trace"
+                            and finding.normalized_validation_status == "pending"
+                        )
+                    ):
+                        finding.validation_status = "validation_failed"
+                        finding.validation_reason = "Validation model was unavailable."
+                        finding.review_status = "validation_failed"
+            else:
+                validator = ContextValidator(client=llm_client)
+                for finding in ordered_findings:
+                    if finding.detector_type == "llm_response_trace":
+                        continue
+                    if finding.detector_type not in validator.applies_to:
+                        continue
+                    result = validator.validate(finding)
+                    finding.validation_status = result.status
+                    finding.validation_reason = result.reason
+                    finding.validated_by = f"{result.model_id}:{result.prompt_version}"
+                    if result.confidence is not None:
+                        finding.confidence = result.confidence
 
-    template_features = _run_detector(
-        "shared_preprocessing",
-        lambda: [build_template_features(record) for record in records],
-        operational_issues,
-        None,
-    )
-    if template_features is None:
-        template_features = [build_template_features(record, use_model=False) for record in records]
-    exact_template_findings = _run_detector(
-        "exact_text_reuse",
-        lambda: detect_exact_text_reuse(records, features=template_features),
-        operational_issues,
-        [],
-    )
-    entity_template_findings = _run_detector(
-        "entity_normalized_template",
-        lambda: detect_entity_normalized_templates(records, features=template_features),
-        operational_issues,
-        [],
-    )
-    pair_findings = merge_pair_findings(exact_template_findings, entity_template_findings)
-    template_rows = cluster_template_findings(pair_findings, records)
-    with _stage("enriched_reports"):
-        enriched_pair_rows, enriched_family_rows, enriched_abstract_rows = build_enriched_reports(
-            records, [*exact_template_findings, *entity_template_findings], template_features
+
+def _template_features_stage(
+    state: _RunState, config: PipelineConfig, records: list[ParsedRecord], extractor: EntityExtractor | None, log: _RunLog,
+) -> None:
+    def build(record: ParsedRecord) -> tuple[Any, list[OperationalIssue]]:
+        issues: list[OperationalIssue] = []
+        features = _run_detector(
+            "shared_preprocessing", lambda: build_template_features(record, extractor=extractor), issues, None, log, record,
         )
-    logger.info("enriched_reports: %d candidate pairs", len(enriched_pair_rows))
-    reviewer_pair_rows = directional_finding_rows(enriched_pair_rows)
-    field_inventory_rows, root_summary_rows = _inventory_rows(records)
-    authorship_checks_by_key = _load_authorship_checks(config.authorship_json_path)
-    abstract_summary_rows = _aggregate_findings(
-        records,
-        findings,
-        [],
-        [],
-        llm_rules,
-        enriched_pair_rows=enriched_pair_rows,
-        enriched_abstract_rows=enriched_abstract_rows,
-        authorship_checks_by_key=authorship_checks_by_key,
-    )
-    operational_issues.extend(
-        _collect_operational_issues(records, findings, trial_results, semantic_stats, nonsense_stats)
-    )
-    reporting_findings = [finding for finding in findings if finding.detector_type != "nonsense_candidate"]
-    reporting_operational_issues = [
-        issue for issue in operational_issues if issue.component != "nonsense_candidate"
-    ]
-    findings_rows = _findings_rows(findings)
-    titles_by_record = {record.record_id: record.title for record in records}
-    for row in findings_rows:
-        row["title"] = titles_by_record.get(row["record_id"], "")
-    integrity_finding_rows = sorted(
-        (row for row in findings_rows if row.get("detector_type") != "nonsense_candidate"),
-        key=_finding_row_sort_key,
-    )
-    family_rows = _family_rows(template_rows)
-    parse_warning_rows = _parse_warning_rows(records)
-    parse_warning_rows.extend(
-        {
-            "source_file": warning["source_file"],
-            "record_id": warning["record_id"],
-            "warning_code": warning["reason"],
-            "warning_message": warning["action"],
-            "field_name": "record_id",
-            "severity": "warning",
-            "evidence_snippet": "",
-            "schema_type": "",
-        }
-        for warning in record_id_warnings
-    )
-    parse_warning_rows.extend(
-        {
-            "source_file": next(
-                (record.source_file for record in records if record.record_id == record_id),
-                "",
+        if features is None:
+            # Model spans failed: keep deterministic features so the record stays comparable.
+            features = _run_detector(
+                "shared_preprocessing", lambda: build_template_features(record, use_model=False), issues, None, log, record,
+            )
+        return features, issues
+
+    if extractor is not None and config.llm_max_concurrency > 1:
+        # Threads wait on the gateway; the client bounds how many requests are actually in flight.
+        with ThreadPoolExecutor(max_workers=config.llm_max_concurrency) as pool:
+            results = list(pool.map(build, records))
+    else:
+        results = [build(record) for record in records]
+    for features, issues in results:
+        state.operational_issues.extend(issues)
+        if features is not None:
+            state.template_features.append(features)
+    state.entity_inference_count += extractor.inference_count if extractor else 0
+
+
+def run_pipeline(config: PipelineConfig, *, llm_client: Any | None = None) -> PipelineResult:
+    """Run with a fresh client (or a caller-supplied client owned exclusively by this run).
+
+    Resumes from a compatible checkpoint in the output directory (see content_integrity.checkpoint)
+    and rejects an incompatible one unless `config.discard_checkpoint` is set. Reports are staged,
+    reconciled from disk, and only then renamed over previous output; the checkpoint is removed
+    after a successful promotion.
+    """
+    if config.offline and (llm_client is not None or config.validate_llm or config.detect_llm_semantic
+                           or config.detect_nonsense_candidates or config.verify_trials):
+        raise ValueError("offline cannot be combined with a client or network-enabled checks")
+    run_id = _new_run_id()
+    log = _RunLog(logger, {"run_id": run_id})
+    metrics = _RunMetrics(log)
+    started_at = datetime.now(timezone.utc)
+    with metrics.stage("parse"):
+        if not config.input_dir.is_dir():
+            raise ValueError(f"Input directory does not exist or is not a directory: {config.input_dir}")
+        xml_files = discover_xml_files(config.input_dir)
+        if not xml_files:
+            raise ValueError(f"Input directory contains no XML files: {config.input_dir}")
+        parsed_records = [record for path in xml_files for record in parse_xml_records(path)]
+        input_record_count = len(parsed_records)
+        records, record_id_warnings = dedupe_records(parsed_records)
+        input_sha256 = _input_manifest_checksum(xml_files, config.input_dir)
+    log.info("parse: %d files -> %d input records -> %d retained records", len(xml_files), input_record_count, len(records))
+    llm_rules = built_in_llm_rules()
+    tortured_rules = load_tortured_rules(config.tortured_dictionary_path, config.dictionary_version)
+    tortured_index = build_tortured_rule_index(tortured_rules)
+    client_issues: list[OperationalIssue] = []
+    # Normal runs use GPT-OSS for entity masking; offline runs explicitly use rules only.
+    # Configuration failures remain visible while deterministic stages continue.
+    if llm_client is None and not config.offline:
+        llm_client = _run_detector(
+            "gpt_oss_model",
+            lambda: build_gpt_oss_client(
+                cache_dir=config.output_dir / ".gpt_oss_cache",
+                max_concurrent_requests=config.llm_max_concurrency,
             ),
-            "record_id": record_id,
-            "warning_code": "llm_semantic_batch_failed",
-            "warning_message": "Semantic response-trace coverage is incomplete for this record.",
-            "field_name": "abstract_text",
-            "severity": "warning",
-            "evidence_snippet": "",
-            "schema_type": "",
-        }
-        for record_id in semantic_stats.failed_record_ids
-    )
-    dictionary_rows = _dictionary_rows([rule.to_dict() for rule in llm_rules], [rule.to_dict() for rule in tortured_rules])
+            client_issues, None, log,
+        )
+    extractor = EntityExtractor(llm_client) if llm_client is not None else None
+
+    checkpoint = CheckpointStore(config.output_dir / CHECKPOINT_DIRECTORY)
+    fingerprint = _checkpoint_fingerprint(config, input_sha256, records, llm_client)
+    if config.discard_checkpoint and checkpoint.exists():
+        log.info("checkpoint: discarded on request")
+        checkpoint.discard()
+    loaded = checkpoint.load(fingerprint)
+    state: _RunState = loaded[0] if loaded else _RunState()
+    if loaded:
+        log.info("checkpoint: resuming after %s from run(s) %s", ", ".join(state.completed_stages), ", ".join(state.run_ids))
+    resumed_from = list(state.run_ids)
+    state.run_ids.append(run_id)
+
+    def complete_stage(name: str) -> None:
+        state.completed_stages.append(name)
+        with metrics.stage(f"checkpoint_{name}"):
+            index = checkpoint.save(state, fingerprint, completed_stages=state.completed_stages, run_ids=state.run_ids)
+        metrics.stages[-1]["checkpoint_bytes"] = index["state_bytes"]
+
+    if "record_checks" in state.completed_stages:
+        metrics.restored("record_checks")
+    else:
+        _record_checks_stage(state, config, records, llm_client, llm_rules, tortured_rules, tortured_index, metrics, log)
+        complete_stage("record_checks")
+
+    if "template_features" in state.completed_stages:
+        metrics.restored("template_features")
+    else:
+        with metrics.stage("template_features", state.operational_issues):
+            _template_features_stage(state, config, records, extractor, log)
+        complete_stage("template_features")
+
+    feature_by_id = {features.record_id: features for features in state.template_features}
+    template_records = [record for record in records if record.record_id in feature_by_id]
+
+    def subset_features(subset: list[ParsedRecord]) -> list[Any]:
+        return [feature_by_id[record.record_id] for record in subset]
+
+    if "template_pairs" in state.completed_stages:
+        metrics.restored("template_pairs")
+    else:
+        with metrics.stage("exact_text_reuse", state.operational_issues):
+            state.exact_template_findings = _run_corpus_detector(
+                "exact_text_reuse",
+                lambda subset: detect_exact_text_reuse(subset, features=subset_features(subset)),
+                template_records, state.operational_issues, [], log,
+            )
+        with metrics.stage("entity_normalized_template", state.operational_issues):
+            state.entity_template_findings = _run_corpus_detector(
+                "entity_normalized_template",
+                lambda subset: detect_entity_normalized_templates(subset, features=subset_features(subset)),
+                template_records, state.operational_issues, [], log,
+            )
+        complete_stage("template_pairs")
+
+    if "enriched_reports" in state.completed_stages:
+        metrics.restored("enriched_reports")
+    else:
+        detector_pairs = [*state.exact_template_findings, *state.entity_template_findings]
+
+        def enriched(subset: list[ParsedRecord]) -> tuple[list, list, list]:
+            ids = {record.record_id for record in subset}
+            return build_enriched_reports(
+                subset,
+                [item for item in detector_pairs if item.record_id in ids and item.matched_record_id in ids],
+                subset_features(subset),
+            )
+
+        with metrics.stage("enriched_reports", state.operational_issues):
+            state.enriched_pair_rows, state.enriched_family_rows, abstract_rows = _run_corpus_detector(
+                "enriched_reports", enriched, template_records, state.operational_issues, ([], [], []), log,
+            )
+            # Records without template features still need an (empty) template row downstream.
+            covered = {str(row["record_id"]) for row in abstract_rows}
+            state.enriched_abstract_rows = [
+                *abstract_rows,
+                *(
+                    {"report_version": REPORT_VERSION, "record_id": record.record_id, "source_file": record.source_file,
+                     "title": record.title, "candidate_pair_count": 0, "finding_pair_count": 0,
+                     "highest_review_priority": "None", "strongest_matched_record_id": "", "family_id": "",
+                     "family_size": 0, "family_edge_score": 0.0, "family_member_status": "",
+                     "reporting_note": "Template detection did not run for this record."}
+                    for record in records if record.record_id not in covered
+                ),
+            ]
+        log.info("enriched_reports: %d candidate pairs", len(state.enriched_pair_rows))
+        complete_stage("enriched_reports")
+
+    with metrics.stage("aggregation"):
+        findings = state.findings
+        pair_findings = merge_pair_findings(state.exact_template_findings, state.entity_template_findings)
+        template_rows = cluster_template_findings(pair_findings, records)
+        enriched_pair_rows = state.enriched_pair_rows
+        reviewer_pair_rows = directional_finding_rows(enriched_pair_rows)
+        field_inventory_rows, root_summary_rows = _inventory_rows(records)
+        authorship_checks_by_key = _load_authorship_checks(config.authorship_json_path)
+        abstract_summary_rows = _aggregate_findings(
+            records,
+            findings,
+            [],
+            [],
+            llm_rules,
+            enriched_pair_rows=enriched_pair_rows,
+            enriched_abstract_rows=state.enriched_abstract_rows,
+            authorship_checks_by_key=authorship_checks_by_key,
+        )
+        operational_issues = [
+            *client_issues,
+            *state.operational_issues,
+            *_duplicate_doi_issues(records),
+            *_collect_operational_issues(
+                records, findings, state.trial_results, state.semantic_stats, state.nonsense_stats,
+                registry_lookup_requested=config.verify_trials,
+            ),
+        ]
+        reporting_findings = [finding for finding in findings if finding.detector_type != "nonsense_candidate"]
+        reporting_operational_issues = [
+            issue for issue in operational_issues if issue.component != "nonsense_candidate"
+        ]
+        findings_rows = _findings_rows(findings)
+        titles_by_record = {record.record_id: record.title for record in records}
+        for row in findings_rows:
+            row["title"] = titles_by_record.get(row["record_id"], "")
+        integrity_finding_rows = sorted(
+            (row for row in findings_rows if row.get("detector_type") != "nonsense_candidate"),
+            key=_finding_row_sort_key,
+        )
+        family_rows = _family_rows(template_rows)
+        parse_warning_rows = _parse_warning_rows(records)
+        source_files = {record.record_id: record.source_file for record in records}
+        parse_warning_rows.extend(
+            {
+                "source_file": warning["source_file"],
+                "record_id": warning["record_id"],
+                "warning_code": warning["reason"],
+                "warning_message": warning["action"],
+                "field_name": "record_id",
+                "severity": "warning",
+                "evidence_snippet": "",
+                "schema_type": "",
+            }
+            for warning in record_id_warnings
+        )
+        parse_warning_rows.extend(
+            {
+                "source_file": source_files.get(record_id, ""),
+                "record_id": record_id,
+                "warning_code": "llm_semantic_batch_failed",
+                "warning_message": "Semantic response-trace coverage is incomplete for this record.",
+                "field_name": "abstract_text",
+                "severity": "warning",
+                "evidence_snippet": "",
+                "schema_type": "",
+            }
+            for record_id in state.semantic_stats.failed_record_ids
+        )
+        dictionary_rows = _dictionary_rows([rule.to_dict() for rule in llm_rules], [rule.to_dict() for rule in tortured_rules])
+    semantic_stats = state.semantic_stats
+    comparable_record_count = len(state.comparable_record_ids)
     now = datetime.now(timezone.utc)
     commit_sha, worktree_dirty = _git_revision()
     catalogue_version, catalogue_checksum = catalogue_metadata()
     llm_findings = [finding for finding in findings if finding.detector_type == "llm_response_trace"]
     llm_call_stats = getattr(llm_client, "call_stats", None)
+    skipped = [
+        {"record_id": warning["record_id"], "source_file": warning["source_file"], "reason": warning["reason"]}
+        for warning in record_id_warnings
+        if warning["reason"] == "ingestion_duplicate"
+    ]
     run_metadata_rows: list[tuple[str, Any]] = [
+        ("run_id", run_id),
+        ("resumed_from_run_ids", " | ".join(resumed_from)),
         ("run_date_utc", now.isoformat()),
         ("code_commit_sha", commit_sha),
         ("code_worktree_dirty", worktree_dirty),
         ("input_folder", str(config.input_dir)),
-        ("input_manifest_sha256", _input_manifest_checksum(xml_files, config.input_dir)),
+        ("input_manifest_sha256", input_sha256),
         ("output_folder", str(config.output_dir)),
         ("total_files", len(xml_files)),
+        ("total_input_records", input_record_count),
+        ("total_records", len(records)),
+        ("ingestion_duplicate_count", sum(warning["reason"] == "ingestion_duplicate" for warning in record_id_warnings)),
         ("parsed_successfully", sum(1 for record in records if record.parse_status == "parsed")),
         ("parsed_with_warnings", sum(1 for record in records if record.parse_status == "parsed_with_warnings")),
         ("failed_files", sum(1 for record in records if record.parse_status == "failed")),
@@ -1203,7 +1490,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         ("llm_semantic_retry_count", semantic_stats.retry_count),
         ("llm_semantic_failed_record_count", len(semantic_stats.failed_record_ids)),
         ("llm_semantic_max_concurrent_batches", semantic_stats.max_concurrent_batches),
-        ("llm_deterministic_finding_count", len(deterministic_candidates)),
+        ("llm_deterministic_finding_count", state.deterministic_candidate_count),
         ("llm_semantic_variant_count", sum(finding.check_type == "semantic_variant" for finding in llm_findings)),
         ("llm_novel_candidate_count", sum(finding.check_type == "novel_pattern_candidate" for finding in llm_findings)),
         ("llm_validation_enabled", config.validate_llm),
@@ -1234,11 +1521,13 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         ("enriched_pair_count", len(enriched_pair_rows)),
         ("template_candidate_pair_count", len(enriched_pair_rows)),
         ("template_final_pair_count", len(reviewer_pair_rows) // 2),
-        ("entity_model_inference_count", model_inference_count()),
+        ("entity_model_inference_count", state.entity_inference_count),
+        ("entity_model_id", getattr(llm_client, "model_name", "")),
+        ("entity_prompt_version", ENTITY_PROMPT_VERSION),
         ("template_finding_pair_count", len(reviewer_pair_rows) // 2),
         ("template_finding_directional_row_count", len(reviewer_pair_rows)),
         ("template_insufficient_evidence_count", sum(row["review_priority"] == "None" for row in enriched_pair_rows)),
-        ("enriched_family_count", len(enriched_family_rows)),
+        ("enriched_family_count", len(state.enriched_family_rows)),
         ("template_feature_version", TEMPLATE_FEATURE_VERSION),
         ("template_pair_classifier_version", TEMPLATE_PAIR_CLASSIFIER_VERSION),
         ("template_signal_validation_version", TEMPLATE_SIGNAL_VALIDATION_VERSION),
@@ -1248,12 +1537,13 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         ("threshold_config_module", "content_integrity.thresholds"),
         ("design_contradiction_rule_table_version", DESIGN_CONTRADICTION_RULE_TABLE_VERSION),
         ("design_contradiction_prompt_version", DESIGN_CONTRADICTION_PROMPT_VERSION),
-        ("comparable_record_count", len(comparable_records)),
-        ("records_excluded_from_numerical_design_trial_checks", len(records) - len(comparable_records)),
+        ("comparable_record_count", comparable_record_count),
+        ("records_excluded_from_numerical_design_trial_checks", len(records) - comparable_record_count),
         ("llm_gateway_request_count", llm_call_stats.request_count if llm_call_stats else 0),
         ("llm_gateway_success_count", llm_call_stats.success_count if llm_call_stats else 0),
         ("llm_gateway_failure_count", llm_call_stats.failure_count if llm_call_stats else 0),
         ("llm_gateway_retry_count", llm_call_stats.retry_count if llm_call_stats else 0),
+        ("llm_gateway_cache_hit_count", llm_call_stats.cache_hits if llm_call_stats else 0),
         ("llm_gateway_total_latency_seconds", round(llm_call_stats.total_latency_seconds, 3) if llm_call_stats else 0.0),
         (
             "llm_gateway_avg_latency_seconds",
@@ -1269,33 +1559,133 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
 
     output_dir = config.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_paths: dict[str, Path] = {}
-    with _stage("write_outputs"):
-        canonical_report = build_content_integrity_frontend_json(
-            records=records,
-            findings=reporting_findings,
-            enriched_pair_rows=enriched_pair_rows,
-            enriched_abstract_rows=enriched_abstract_rows,
-            abstract_summary_rows=abstract_summary_rows,
-            operational_issues=reporting_operational_issues,
-            generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            git_revision=commit_sha,
-            run_metadata=dict(run_metadata_rows),
-            template_family_rows=enriched_family_rows,
-        )
-        output_paths["content_integrity_json"] = write_json(
-            output_dir / "content_integrity_results.json",
-            build_integrated_content_integrity_json(canonical_report),
-        )
-        output_paths["workbook"] = write_workbook(
-            output_dir / "Editor_Triage_Workbook.xlsx",
-            abstract_summary_rows=abstract_summary_rows,
-            findings_rows=integrity_finding_rows,
-            pair_rows=reviewer_pair_rows,
-            operational_issue_rows=[issue.to_dict() for issue in reporting_operational_issues],
-            run_metadata_rows=run_metadata_rows,
-            authorship_checks_by_key=authorship_checks_by_key,
-        )
+    for stale in output_dir.glob(".staging-*"):
+        # Staging from an interrupted run was never promoted; one writer per output directory.
+        shutil.rmtree(stale, ignore_errors=True)
+    staging = output_dir / f".staging-{run_id}"
+    staging.mkdir()
+    staged = {name: staging / filename for name, filename in OUTPUT_FILES.items()}
+    try:
+        with metrics.stage("write_outputs"):
+            canonical_report = build_content_integrity_frontend_json(
+                records=records,
+                findings=reporting_findings,
+                enriched_pair_rows=enriched_pair_rows,
+                enriched_abstract_rows=state.enriched_abstract_rows,
+                abstract_summary_rows=abstract_summary_rows,
+                operational_issues=reporting_operational_issues,
+                generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                git_revision=commit_sha,
+                run_metadata=dict(run_metadata_rows),
+                template_family_rows=state.enriched_family_rows,
+            )
+            reviewable_pair_count = len(canonical_report["template_pairs"])
+            atomic_write_json(staged["content_integrity_json"], build_integrated_content_integrity_json(canonical_report))
+            del canonical_report
+            write_workbook(
+                staged["workbook"],
+                abstract_summary_rows=abstract_summary_rows,
+                findings_rows=integrity_finding_rows,
+                pair_rows=reviewer_pair_rows,
+                operational_issue_rows=[issue.to_dict() for issue in reporting_operational_issues],
+                run_metadata_rows=run_metadata_rows,
+                authorship_checks_by_key=authorship_checks_by_key,
+            )
+        with metrics.stage("reconciliation"):
+            reconciliation = reconcile_outputs(
+                record_ids=[record.record_id for record in records],
+                input_record_count=input_record_count,
+                skipped=skipped,
+                reportable_findings=reporting_findings,
+                reviewable_pair_count=reviewable_pair_count,
+                json_path=staged["content_integrity_json"],
+                workbook_path=staged["workbook"],
+            )
+        wall_seconds = time.perf_counter() - metrics.started
+        cpu_seconds = _cpu_seconds() - metrics.cpu_started
+        run_metrics = {
+            "run_id": run_id,
+            "resumed_from_run_ids": resumed_from,
+            "started_at": started_at.isoformat(),
+            "finished_at": datetime.now(timezone.utc).isoformat(),
+            "host": _host_environment(),
+            "code_commit_sha": commit_sha,
+            "code_worktree_dirty": worktree_dirty,
+            "model_mode": "offline" if config.offline else ("gateway" if llm_client is not None else "gateway_unavailable"),
+            "configuration": {
+                "offline": config.offline,
+                "validate_llm": config.validate_llm,
+                "detect_llm_semantic": config.detect_llm_semantic,
+                "detect_nonsense_candidates": config.detect_nonsense_candidates,
+                "verify_trials": config.verify_trials,
+                "llm_max_concurrency": config.llm_max_concurrency,
+                "gateway_limits": {
+                    name: getattr(llm_client, name)
+                    for name in ("max_concurrent_requests", "connect_timeout_seconds", "timeout_seconds",
+                                 "request_deadline_seconds", "max_attempts", "backoff_seconds", "max_backoff_seconds",
+                                 "circuit_failure_threshold", "circuit_cooldown_seconds")
+                    if hasattr(llm_client, name)
+                },
+            },
+            "totals": {
+                "input_records": input_record_count,
+                "retained_records": len(records),
+                "wall_seconds": round(wall_seconds, 3),
+                "cpu_seconds": round(cpu_seconds, 3),
+                "average_cpu_cores_used": round(cpu_seconds / wall_seconds, 2) if wall_seconds else 0.0,
+                "records_per_minute": round(len(records) / wall_seconds * 60, 1) if wall_seconds else 0.0,
+                "peak_rss_mb": _peak_rss_mb(),
+                "template_candidate_pairs": len(enriched_pair_rows),
+                "template_prioritized_pairs": len(reviewer_pair_rows) // 2,
+                "template_reviewable_pairs": reviewable_pair_count,
+                "template_families": len(state.enriched_family_rows),
+                "operational_issues": len(reporting_operational_issues),
+            },
+            "stages": metrics.stages,
+            # Covers this invocation only; a resumed run reuses cached responses without calls.
+            "gateway": llm_call_stats.summary() if llm_call_stats else None,
+            "entity_model_inference_count": state.entity_inference_count,
+            "estimated_cost": "not available: no gateway pricing configured",
+        }
+        atomic_write_json(staged["run_metrics"], run_metrics)
+        run_summary = {
+            "run_id": run_id,
+            "status": "succeeded" if reconciliation["reconciled"] else "reconciliation_failed",
+            "finished_at": run_metrics["finished_at"],
+            **reconciliation,
+            "template": {
+                "candidate_pairs": len(enriched_pair_rows),
+                "prioritized_pairs": len(reviewer_pair_rows) // 2,
+                "reviewable_pairs": reviewable_pair_count,
+                "families": len(state.enriched_family_rows),
+                "family_members": sum(int(row.get("family_size") or 0) for row in state.enriched_family_rows),
+            },
+            "outputs": {
+                name: {"file": OUTPUT_FILES[name], "sha256": file_sha256(staged[name]), "bytes": staged[name].stat().st_size}
+                for name in ("content_integrity_json", "workbook", "run_metrics")
+            },
+        }
+        atomic_write_json(staged["run_summary"], run_summary)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    if not reconciliation["reconciled"]:
+        failed = [check["name"] for check in reconciliation["checks"] if not check["passed"]]
+        log.error("reconciliation failed (%s); previous outputs were kept and staging retained at %s", ", ".join(failed), staging)
+        raise ReconciliationError(f"Reports did not reconcile ({', '.join(failed)}); inspect {staging}")
+    # run_summary.json is renamed last and records the other files' hashes, so an interruption
+    # between renames is detectable as a summary/file hash mismatch.
+    output_paths = {name: output_dir / filename for name, filename in OUTPUT_FILES.items()}
+    for name in OUTPUT_FILES:
+        os.replace(staged[name], output_paths[name])
+    shutil.rmtree(staging, ignore_errors=True)
+    checkpoint.discard()
+    records_summary = reconciliation["records"]
+    log.info(
+        "run complete: %d input records (%d completed, %d with findings, %d failed, %d skipped) in %.1fs",
+        records_summary["total_input"], records_summary["completed"], records_summary["completed_with_findings"],
+        records_summary["failed"], records_summary["skipped"], wall_seconds,
+    )
     return PipelineResult(
         xml_files=xml_files,
         records=records,
@@ -1311,30 +1701,37 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         run_metadata_rows=run_metadata_rows,
         operational_issues=operational_issues,
         output_paths=output_paths,
+        run_id=run_id,
+        run_summary=run_summary,
+        run_metrics=run_metrics,
     )
 
 
 def run_default_pipeline(
-    input_dir: str | Path = "/home/pavankrishna/Projets/ASCO/real_asco_files",
+    input_dir: str | Path = "metadata_files",
     tortured_dictionary_path: str | Path = "🤷_tortured.csv",
     output_dir: str | Path = "outputs",
-    authorship_json_path: str | Path = "outputs/frontend_run/final_json.json",
+    authorship_json_path: str | Path | None = None,
     validate_llm: bool = False,
     detect_llm_semantic: bool = False,
     detect_nonsense_candidates: bool = False,
     verify_trials: bool = False,
     llm_max_concurrency: int = DEFAULT_MAX_CONCURRENT_BATCHES,
+    offline: bool = False,
+    discard_checkpoint: bool = False,
 ) -> PipelineResult:
     config = PipelineConfig(
         input_dir=Path(input_dir),
         output_dir=Path(output_dir),
         tortured_dictionary_path=Path(tortured_dictionary_path),
-        authorship_json_path=Path(authorship_json_path),
+        authorship_json_path=Path(authorship_json_path) if authorship_json_path is not None else None,
         validate_llm=validate_llm,
         detect_llm_semantic=detect_llm_semantic,
         detect_nonsense_candidates=detect_nonsense_candidates,
         verify_trials=verify_trials,
         llm_max_concurrency=llm_max_concurrency,
+        offline=offline,
+        discard_checkpoint=discard_checkpoint,
     )
     return run_pipeline(config)
 
@@ -1343,12 +1740,13 @@ def main(argv: list[str] | None = None) -> int:
     import argparse
 
     parser = argparse.ArgumentParser(description="Run the ASCO content integrity screening POC.")
-    parser.add_argument("--input-dir", default="/home/pavankrishna/Projets/ASCO/real_asco_files", help="Folder containing Wiley XML files.")
+    parser.add_argument("--input-dir", default="metadata_files", help="Folder containing Wiley XML files.")
+    parser.add_argument("--offline", action="store_true", help="Run deterministic checks without network or gateway configuration.")
     parser.add_argument("--tortured-dictionary", default="🤷_tortured.csv", help="Tortured phrase dictionary CSV.")
     parser.add_argument("--output-dir", default="outputs", help="Directory for generated reports.")
     parser.add_argument(
         "--authorship-json",
-        default="outputs/frontend_run/final_json.json",
+        default=None,
         help="Frontend authorship JSON used for workbook projection.",
     )
     parser.add_argument(
@@ -1375,7 +1773,12 @@ def main(argv: list[str] | None = None) -> int:
         "--llm-max-concurrency",
         type=int,
         default=DEFAULT_MAX_CONCURRENT_BATCHES,
-        help="Maximum semantic LLM batches in flight at once.",
+        help="Maximum GPT-OSS requests in flight at once, shared by every model stage.",
+    )
+    parser.add_argument(
+        "--discard-checkpoint",
+        action="store_true",
+        help="Delete an existing checkpoint in the output directory and start from the beginning.",
     )
     parser.add_argument(
         "--quiet",
@@ -1383,6 +1786,8 @@ def main(argv: list[str] | None = None) -> int:
         help="Suppress per-stage progress logging.",
     )
     args = parser.parse_args(argv)
+    if args.llm_max_concurrency < 1:
+        parser.error("--llm-max-concurrency must be at least 1")
 
     # Only the CLI configures logging; importing the pipeline as a library must not.
     logging.basicConfig(
@@ -1391,16 +1796,25 @@ def main(argv: list[str] | None = None) -> int:
         datefmt="%H:%M:%S",
     )
 
-    result = run_default_pipeline(
-        input_dir=args.input_dir,
-        tortured_dictionary_path=args.tortured_dictionary,
-        output_dir=args.output_dir,
-        authorship_json_path=args.authorship_json,
-        validate_llm=args.validate_llm,
-        detect_llm_semantic=args.detect_llm_semantic,
-        detect_nonsense_candidates=args.detect_nonsense_candidates,
-        verify_trials=args.verify_trials,
-        llm_max_concurrency=args.llm_max_concurrency,
-    )
+    try:
+        result = run_default_pipeline(
+            input_dir=args.input_dir,
+            tortured_dictionary_path=args.tortured_dictionary,
+            output_dir=args.output_dir,
+            authorship_json_path=args.authorship_json,
+            validate_llm=args.validate_llm,
+            detect_llm_semantic=args.detect_llm_semantic,
+            detect_nonsense_candidates=args.detect_nonsense_candidates,
+            verify_trials=args.verify_trials,
+            llm_max_concurrency=args.llm_max_concurrency,
+            offline=args.offline,
+            discard_checkpoint=args.discard_checkpoint,
+        )
+    except IncompatibleCheckpointError as exc:
+        print(f"error: {exc} (use --discard-checkpoint)", file=sys.stderr)
+        return 2
+    except ReconciliationError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 3
     print(json.dumps({key: str(value) for key, value in result.output_paths.items()}, ensure_ascii=False, indent=2))
     return 0

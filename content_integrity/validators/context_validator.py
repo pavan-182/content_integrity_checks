@@ -1,23 +1,36 @@
 from __future__ import annotations
 
 import hashlib
+import http.client
 import json
 import logging
+import math
 import os
+import random
 import re
+import socket
 import ssl
 import tempfile
 import time
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from urllib.parse import urlsplit
+from collections import Counter
+from dataclasses import dataclass, field
 from pathlib import Path
+from threading import BoundedSemaphore, Lock
 from typing import Any
 
 from ..models import Finding, ValidationResult
 from ..thresholds import (
     CONTEXT_VALIDATOR_DEFAULT_BACKOFF_SECONDS as DEFAULT_BACKOFF_SECONDS,
+    CONTEXT_VALIDATOR_DEFAULT_CIRCUIT_COOLDOWN_SECONDS as DEFAULT_CIRCUIT_COOLDOWN_SECONDS,
+    CONTEXT_VALIDATOR_DEFAULT_CIRCUIT_FAILURE_THRESHOLD as DEFAULT_CIRCUIT_FAILURE_THRESHOLD,
+    CONTEXT_VALIDATOR_DEFAULT_CONNECT_TIMEOUT_SECONDS as DEFAULT_CONNECT_TIMEOUT_SECONDS,
     CONTEXT_VALIDATOR_DEFAULT_MAX_ATTEMPTS as DEFAULT_MAX_ATTEMPTS,
+    CONTEXT_VALIDATOR_DEFAULT_MAX_BACKOFF_SECONDS as DEFAULT_MAX_BACKOFF_SECONDS,
+    CONTEXT_VALIDATOR_DEFAULT_MAX_CONCURRENT_REQUESTS as DEFAULT_MAX_CONCURRENT_REQUESTS,
+    CONTEXT_VALIDATOR_DEFAULT_REQUEST_DEADLINE_SECONDS as DEFAULT_REQUEST_DEADLINE_SECONDS,
     CONTEXT_VALIDATOR_DEFAULT_TIMEOUT_SECONDS as DEFAULT_TIMEOUT_SECONDS,
     CONTEXT_VALIDATOR_VALIDATION_MAX_TOKENS as VALIDATION_MAX_TOKENS,
 )
@@ -59,10 +72,12 @@ def _normalize_env_value(value: str) -> str:
     return cleaned.strip()
 
 
-def _load_dotenv_file(path: str | Path) -> None:
+def _load_dotenv_file(path: str | Path) -> dict[str, str]:
+    """Read this run's file without modifying the process environment."""
     resolved = Path(path)
     if not resolved.exists():
-        return
+        return {}
+    values = {}
     for raw_line in resolved.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
@@ -73,26 +88,27 @@ def _load_dotenv_file(path: str | Path) -> None:
             continue
         key, value = line.split("=", 1)
         key = key.strip()
-        if not key or key in os.environ:
+        if not key:
             continue
-        os.environ[key] = _normalize_env_value(value)
+        values[key] = _normalize_env_value(value)
+    return values
 
 
 # Gateway identity is deployment-specific: keep it in .env, never in the source tree.
-_load_dotenv_file(os.getenv("INTELLIHUB_ENV_FILE", ".env"))
-DEFAULT_BASE_URL = os.getenv("INTELLIHUB_BASE_URL", "").strip().rstrip("/")
-DEFAULT_MODEL_NAME = os.getenv("INTELLIHUB_MODEL", "").strip()
-MODEL_ID = os.getenv("INTELLIHUB_MODEL_ID", "").strip() or DEFAULT_MODEL_NAME.rsplit("/", 1)[-1]
+DEFAULT_BASE_URL = ""
+DEFAULT_MODEL_NAME = ""
+MODEL_ID = ""
 
 
-def _load_validator_settings(env_file: str | Path = ".env") -> dict[str, str]:
-    _load_dotenv_file(env_file)
+def _load_validator_settings(env_file: str | Path | None = None) -> dict[str, str]:
+    values = {**_load_dotenv_file(env_file if env_file is not None else os.getenv("INTELLIHUB_ENV_FILE", ".env")), **os.environ}
     settings = {
-        "api_key": os.getenv("INTELLIHUB_API_KEY") or os.getenv("api_key", ""),
-        "base_url": os.getenv("INTELLIHUB_BASE_URL", "").strip().rstrip("/"),
-        "model_name": os.getenv("INTELLIHUB_MODEL", "").strip(),
-        "verify_ssl": os.getenv("INTELLIHUB_VERIFY_SSL", "true").lower(),
-        "ca_bundle": os.getenv("INTELLIHUB_CA_BUNDLE", "").strip(),
+        "api_key": values.get("INTELLIHUB_API_KEY") or values.get("api_key", ""),
+        "base_url": values.get("INTELLIHUB_BASE_URL", "").strip().rstrip("/"),
+        "model_name": values.get("INTELLIHUB_MODEL", "").strip(),
+        "model_id": values.get("INTELLIHUB_MODEL_ID", "").strip(),
+        "verify_ssl": values.get("INTELLIHUB_VERIFY_SSL", "true").lower(),
+        "ca_bundle": values.get("INTELLIHUB_CA_BUNDLE", "").strip(),
     }
     return settings
 
@@ -173,12 +189,51 @@ def _parse_validator_payload(raw: str) -> dict[str, Any]:
     return parsed
 
 
+class GatewayRequestError(RuntimeError):
+    """A gateway call that did not produce a usable response, with its failure category.
+
+    Subclasses RuntimeError so existing call sites that treat any request failure as an
+    infrastructure error keep working; callers that must not multiply load (for example batch
+    splitting) check `category`/`retryable` instead. Messages never contain request content.
+    """
+
+    def __init__(self, category: str, message: str, *, retryable: bool, attempts: int = 0, status: int | None = None) -> None:
+        super().__init__(message)
+        self.category = category
+        self.retryable = retryable
+        self.attempts = attempts
+        self.status = status
+
+
+# Failure categories. Only TRANSIENT_CATEGORIES are retried inside the client.
+RATE_LIMIT = "rate_limit"
+SERVER_ERROR = "server_error"
+TIMEOUT = "timeout"
+CONNECTION = "connection"
+AUTHENTICATION = "authentication"
+INVALID_REQUEST = "invalid_request"
+CONFIGURATION = "configuration"
+INVALID_RESPONSE = "invalid_response"
+CIRCUIT_OPEN = "circuit_open"
+TRANSIENT_CATEGORIES = frozenset({RATE_LIMIT, SERVER_ERROR, TIMEOUT, CONNECTION, INVALID_RESPONSE})
+
+
+def _percentile(values: list[float], fraction: float) -> float:
+    """Nearest-rank percentile; 0.0 for no samples."""
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    return ordered[min(len(ordered) - 1, max(0, math.ceil(fraction * len(ordered)) - 1))]
+
+
 @dataclass
 class CallStats:
-    """Aggregate success/latency telemetry for every GPT-OSS call, across every call site.
+    """Aggregate telemetry for every GPT-OSS call, across every call site.
 
     All detectors share one IntelliHubGPTOSSClient instance per run, so instrumenting
     _request() here is the single point that observes every gateway call in the pipeline.
+    request_count counts logical live requests (cache hits excluded); attempt latencies measure
+    the service, request latencies include retries and backoff.
     """
 
     request_count: int = 0
@@ -187,51 +242,225 @@ class CallStats:
     retry_count: int = 0
     total_latency_seconds: float = 0.0
     max_latency_seconds: float = 0.0
+    cache_hits: int = 0
+    cache_misses: int = 0
+    cache_write_failures: int = 0
+    backoff_seconds: float = 0.0
+    circuit_open_events: int = 0
+    circuit_rejections: int = 0
+    max_in_flight: int = 0
+    max_waiting: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    attempt_errors: Counter = field(default_factory=Counter)
+    request_failures: Counter = field(default_factory=Counter)
+    attempt_latencies: list[float] = field(default_factory=list)
+    request_latencies: list[float] = field(default_factory=list)
+
+    def summary(self) -> dict[str, Any]:
+        return {
+            "request_count": self.request_count,
+            "success_count": self.success_count,
+            "failure_count": self.failure_count,
+            "retry_count": self.retry_count,
+            "attempt_count": len(self.attempt_latencies),
+            "attempt_errors_by_category": dict(sorted(self.attempt_errors.items())),
+            "request_failures_by_category": dict(sorted(self.request_failures.items())),
+            "attempt_latency_seconds": {
+                name: round(_percentile(self.attempt_latencies, fraction), 3)
+                for name, fraction in (("p50", 0.50), ("p95", 0.95), ("p99", 0.99), ("max", 1.0))
+            },
+            "request_latency_seconds": {
+                name: round(_percentile(self.request_latencies, fraction), 3)
+                for name, fraction in (("p50", 0.50), ("p95", 0.95), ("p99", 0.99), ("max", 1.0))
+            },
+            "backoff_seconds": round(self.backoff_seconds, 3),
+            "cache_hits": self.cache_hits,
+            "cache_misses": self.cache_misses,
+            "cache_write_failures": self.cache_write_failures,
+            "circuit_open_events": self.circuit_open_events,
+            "circuit_rejections": self.circuit_rejections,
+            "max_in_flight_requests": self.max_in_flight,
+            "max_waiting_requests": self.max_waiting,
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+        }
+
+
+class _ConnectTimeoutMixin:
+    """Bound TCP connect and TLS handshake by the opener timeout, then allow slow model replies."""
+
+    read_timeout: float
+
+    def connect(self) -> None:
+        super().connect()  # type: ignore[misc]
+        self.sock.settimeout(self.read_timeout)  # type: ignore[attr-defined]
+
+
+class _HTTPConnection(_ConnectTimeoutMixin, http.client.HTTPConnection):
+    pass
+
+
+class _HTTPSConnection(_ConnectTimeoutMixin, http.client.HTTPSConnection):
+    pass
+
+
+class _HTTPHandler(urllib.request.HTTPHandler):
+    def __init__(self, read_timeout: float) -> None:
+        super().__init__()
+        self._read_timeout = read_timeout
+
+    def http_open(self, req: urllib.request.Request) -> Any:
+        return self.do_open(self._connection, req)
+
+    def _connection(self, host: str, **kwargs: Any) -> _HTTPConnection:
+        connection = _HTTPConnection(host, **kwargs)
+        connection.read_timeout = self._read_timeout
+        return connection
+
+
+class _HTTPSHandler(urllib.request.HTTPSHandler):
+    def __init__(self, context: ssl.SSLContext | None, read_timeout: float) -> None:
+        super().__init__(context=context)
+        self._read_timeout = read_timeout
+
+    def https_open(self, req: urllib.request.Request) -> Any:
+        return self.do_open(self._connection, req, context=self._context)
+
+    def _connection(self, host: str, **kwargs: Any) -> _HTTPSConnection:
+        connection = _HTTPSConnection(host, **kwargs)
+        connection.read_timeout = self._read_timeout
+        return connection
+
+
+def _retry_after_seconds(headers: Any) -> float | None:
+    value = headers.get("Retry-After") if headers is not None else None
+    try:
+        return max(0.0, float(value)) if value is not None else None
+    except (TypeError, ValueError):
+        return None  # HTTP-date form is not used by the gateway; fall back to backoff.
+
+
+def _classify(exc: BaseException) -> tuple[str, int | None, float | None]:
+    """Map a transport exception to (category, HTTP status, Retry-After seconds)."""
+    if isinstance(exc, urllib.error.HTTPError):
+        retry_after = _retry_after_seconds(exc.headers)
+        if exc.code == 429:
+            return RATE_LIMIT, exc.code, retry_after
+        if exc.code >= 500:
+            return SERVER_ERROR, exc.code, retry_after
+        if exc.code in {401, 403}:
+            return AUTHENTICATION, exc.code, None
+        return INVALID_REQUEST, exc.code, None
+    if isinstance(exc, (TimeoutError, socket.timeout)):
+        return TIMEOUT, None, None
+    if isinstance(exc, urllib.error.URLError):
+        if isinstance(exc.reason, ssl.SSLCertVerificationError):
+            return CONFIGURATION, None, None
+        return (TIMEOUT if isinstance(exc.reason, (TimeoutError, socket.timeout)) else CONNECTION), None, None
+    if isinstance(exc, ssl.SSLCertVerificationError):
+        return CONFIGURATION, None, None
+    if isinstance(exc, (ConnectionError, http.client.HTTPException, OSError)):
+        return CONNECTION, None, None
+    return INVALID_RESPONSE, None, None
 
 
 class IntelliHubGPTOSSClient:
+    """One run's gateway client: bounded concurrency, classified retries, cache, telemetry.
+
+    Contract:
+    - At most `max_concurrent_requests` attempts are in flight across all threads; extra callers
+      block (backpressure) instead of queueing unbounded requests.
+    - Connect/TLS setup is bounded by `connect_timeout_seconds`, each socket read by
+      `timeout_seconds`, and one attempt's whole body by `request_deadline_seconds`.
+    - Rate limits, 5xx, timeouts, connection failures, and unusable envelopes are retried up to
+      `max_attempts` with full-jitter exponential backoff (honouring Retry-After). A 429 or 503
+      pauses every thread until the cooldown passes.
+    - Authentication failures are not retried and disable the client for the rest of the run;
+      other 4xx responses fail immediately.
+    - After `circuit_failure_threshold` consecutive exhausted requests the circuit opens for
+      `circuit_cooldown_seconds`, failing fast; the next request after the cooldown probes it.
+    """
+
     def __init__(
         self,
         *,
         api_key: str,
         base_url: str = DEFAULT_BASE_URL,
         model_name: str = DEFAULT_MODEL_NAME,
+        model_id: str = "",
         verify_ssl: str = "true",
         ca_bundle: str = "",
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+        connect_timeout_seconds: float = DEFAULT_CONNECT_TIMEOUT_SECONDS,
+        request_deadline_seconds: float = DEFAULT_REQUEST_DEADLINE_SECONDS,
         max_attempts: int = DEFAULT_MAX_ATTEMPTS,
         backoff_seconds: float = DEFAULT_BACKOFF_SECONDS,
+        max_backoff_seconds: float = DEFAULT_MAX_BACKOFF_SECONDS,
+        max_concurrent_requests: int = DEFAULT_MAX_CONCURRENT_REQUESTS,
+        circuit_failure_threshold: int = DEFAULT_CIRCUIT_FAILURE_THRESHOLD,
+        circuit_cooldown_seconds: float = DEFAULT_CIRCUIT_COOLDOWN_SECONDS,
         cache_dir: str | Path | None = None,
         max_cache_age_seconds: float | None = None,
     ) -> None:
         if not api_key:
             raise ValueError("api_key must not be empty")
-        if timeout_seconds <= 0:
-            raise ValueError("timeout_seconds must be positive")
+        url = urlsplit(base_url)
+        if url.scheme not in {"http", "https"} or not url.netloc or url.username or url.password or url.query or url.fragment:
+            raise ValueError("base_url must be an absolute HTTP(S) URL without credentials, query, or fragment")
+        if not model_name.strip():
+            raise ValueError("model_name must not be empty")
+        if min(timeout_seconds, connect_timeout_seconds, request_deadline_seconds) <= 0:
+            raise ValueError("timeouts must be positive")
         if max_attempts < 1:
             raise ValueError("max_attempts must be at least 1")
-        if backoff_seconds < 0:
-            raise ValueError("backoff_seconds cannot be negative")
+        if backoff_seconds < 0 or max_backoff_seconds < 0 or circuit_cooldown_seconds < 0:
+            raise ValueError("backoff and cooldown seconds cannot be negative")
+        if max_concurrent_requests < 1 or circuit_failure_threshold < 1:
+            raise ValueError("max_concurrent_requests and circuit_failure_threshold must be at least 1")
         if max_cache_age_seconds is not None and max_cache_age_seconds < 0:
             raise ValueError("max_cache_age_seconds must be non-negative")
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model_name = model_name
+        self.model_id = model_id or model_name.rsplit("/", 1)[-1]
         self.verify_ssl = verify_ssl
         self.ca_bundle = ca_bundle
         self.timeout_seconds = timeout_seconds
+        self.connect_timeout_seconds = connect_timeout_seconds
+        self.request_deadline_seconds = request_deadline_seconds
         self.max_attempts = max_attempts
         self.backoff_seconds = backoff_seconds
+        self.max_backoff_seconds = max_backoff_seconds
+        self.max_concurrent_requests = max_concurrent_requests
+        self.circuit_failure_threshold = circuit_failure_threshold
+        self.circuit_cooldown_seconds = circuit_cooldown_seconds
         self.cache_dir = Path(cache_dir) if cache_dir is not None else None
         self.max_cache_age_seconds = max_cache_age_seconds
         self.call_stats = CallStats()
+        self._stats_lock = Lock()
+        self._slots = BoundedSemaphore(max_concurrent_requests)
+        self._in_flight = 0
+        self._waiting = 0
+        self._cooldown_until = 0.0
+        self._consecutive_failures = 0
+        self._circuit_open_until = 0.0
+        self._disabled: GatewayRequestError | None = None
+        self._jitter = random.Random()
+        self._opener = urllib.request.build_opener(
+            _HTTPHandler(timeout_seconds),
+            _HTTPSHandler(_ssl_context(verify_ssl, ca_bundle), timeout_seconds),
+        )
 
-    @staticmethod
-    def _cache_key(endpoint: str, payload: dict[str, Any]) -> str:
-        # Content-addressed on everything that determines the response (endpoint + full
-        # payload: model, messages, max_tokens, temperature), so any change to the request
-        # is a cache miss - no stale or cross-contaminated hits.
-        canonical = json.dumps({"endpoint": endpoint, "payload": payload}, ensure_ascii=False, sort_keys=True)
+    def _cache_key(self, endpoint: str, payload: dict[str, Any]) -> str:
+        # Include deployment/credential scope and full request configuration, so caches
+        # shared by independent clients cannot reuse an incompatible response.
+        canonical = json.dumps({
+            "base_url": self.base_url,
+            "credential_scope": hashlib.sha256(self.api_key.encode()).hexdigest(),
+            "endpoint": endpoint,
+            "payload": payload,
+        }, ensure_ascii=False, sort_keys=True)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     def _cache_path(self, cache_key: str) -> Path | None:
@@ -250,8 +479,11 @@ class IntelliHubGPTOSSClient:
             ):
                 return None
             parsed = json.loads(path.read_text(encoding="utf-8"))
-            return parsed if isinstance(parsed, dict) else None
-        except (OSError, ValueError, json.JSONDecodeError):
+            if not isinstance(parsed, dict):
+                return None
+            _extract_response_content(parsed)
+            return parsed
+        except (OSError, ValueError, RuntimeError):
             return None
 
     def _write_cache(self, cache_key: str, response: dict[str, Any]) -> None:
@@ -269,7 +501,9 @@ class IntelliHubGPTOSSClient:
                 temporary_name = handle.name
             os.replace(temporary_name, path)
         except (OSError, TypeError, ValueError):
-            return
+            # The cache is an optimisation; a failed write costs a repeat call, never a result.
+            with self._stats_lock:
+                self.call_stats.cache_write_failures += 1
         finally:
             try:
                 if temporary_name and os.path.exists(temporary_name):
@@ -277,16 +511,83 @@ class IntelliHubGPTOSSClient:
             except OSError:
                 pass
 
+    def _open(self, request: urllib.request.Request) -> Any:
+        """Transport seam: return a readable response or raise a urllib/socket error."""
+        return self._opener.open(request, timeout=self.connect_timeout_seconds)
+
+    def _read_body(self, response: Any) -> bytes:
+        deadline = time.monotonic() + self.request_deadline_seconds
+        chunks: list[bytes] = []
+        while chunk := response.read(65536):
+            chunks.append(chunk)
+            if time.monotonic() > deadline:
+                raise TimeoutError("gateway response exceeded the request deadline")
+        return b"".join(chunks)
+
+    def _before_attempt(self) -> None:
+        """Fail fast when disabled or the circuit is open; otherwise wait out any shared cooldown."""
+        while True:
+            with self._stats_lock:
+                if self._disabled is not None:
+                    raise GatewayRequestError(self._disabled.category, "Gateway client disabled after a permanent failure", retryable=False)
+                now = time.monotonic()
+                if now < self._circuit_open_until:
+                    self.call_stats.circuit_rejections += 1
+                    raise GatewayRequestError(CIRCUIT_OPEN, "Gateway circuit is open after repeated failures", retryable=True)
+                wait = self._cooldown_until - now
+            if wait <= 0:
+                return
+            time.sleep(wait)
+
+    def _backoff(self, attempt: int, category: str, retry_after: float | None) -> None:
+        delay = self._jitter.uniform(0, min(self.max_backoff_seconds, self.backoff_seconds * (2 ** (attempt - 1))))
+        if retry_after is not None:
+            delay = max(delay, min(retry_after, self.max_backoff_seconds))
+        with self._stats_lock:
+            self.call_stats.backoff_seconds += delay
+            if category == RATE_LIMIT or (category == SERVER_ERROR and retry_after is not None):
+                # Shared cooldown: every thread pauses, so a throttled gateway sees less traffic.
+                self._cooldown_until = max(self._cooldown_until, time.monotonic() + delay)
+                return
+        time.sleep(delay)
+
+    def _attempt(self, url: str, body: bytes, headers: dict[str, str]) -> dict[str, Any]:
+        with self._stats_lock:
+            self._waiting += 1
+            self.call_stats.max_waiting = max(self.call_stats.max_waiting, self._waiting)
+        self._slots.acquire()
+        with self._stats_lock:
+            self._waiting -= 1
+            self._in_flight += 1
+            self.call_stats.max_in_flight = max(self.call_stats.max_in_flight, self._in_flight)
+        start = time.perf_counter()
+        try:
+            request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+            with self._open(request) as response:
+                raw = self._read_body(response).decode("utf-8")
+            parsed = json.loads(raw)
+            if not isinstance(parsed, dict):
+                raise RuntimeError("Validator response was not a JSON object")
+            _extract_response_content(parsed)
+            return parsed
+        finally:
+            elapsed = time.perf_counter() - start
+            self._slots.release()
+            with self._stats_lock:
+                self._in_flight -= 1
+                self.call_stats.attempt_latencies.append(elapsed)
+
     def _request(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
-        # Caching is off by default (cache_dir=None); when off, skip cache lookups
-        # entirely so behavior is unchanged from before caching existed.
+        # Caching is off by default (cache_dir=None); when off, skip cache lookups entirely.
         cache_key = self._cache_key(endpoint, payload) if self.cache_dir is not None else None
         if cache_key is not None:
             cached = self._read_cache(cache_key)
-            if cached is not None:
-                # Cache hit: no network call, so it doesn't touch CallStats (which
-                # tracks live gateway request/success/failure/retry/latency).
-                return cached
+            with self._stats_lock:
+                if cached is not None:
+                    # Cache hit: no network call, so live request/latency counters are untouched.
+                    self.call_stats.cache_hits += 1
+                    return cached
+                self.call_stats.cache_misses += 1
 
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -294,47 +595,68 @@ class IntelliHubGPTOSSClient:
             "Content-Type": "application/json",
             "x-litellm-api-key": self.api_key,
         }
-        context = _ssl_context(self.verify_ssl, self.ca_bundle)
-        last_error: Exception | None = None
         start = time.perf_counter()
-        self.call_stats.request_count += 1
-        attempts_used = 0
+        attempts = 0
+        failure: GatewayRequestError | None = None
         try:
             for attempt in range(1, self.max_attempts + 1):
-                attempts_used = attempt
                 try:
-                    request = urllib.request.Request(url, data=body, headers=headers, method="POST")
-                    with urllib.request.urlopen(request, timeout=self.timeout_seconds, context=context) as response:
-                        raw = response.read().decode("utf-8")
-                    parsed = json.loads(raw)
-                    if not isinstance(parsed, dict):
-                        raise RuntimeError("Validator response was not a JSON object")
-                    self.call_stats.success_count += 1
-                    if cache_key is not None:
-                        self._write_cache(cache_key, parsed)
-                    return parsed
-                except urllib.error.HTTPError as exc:
-                    last_error = exc
-                    retryable = exc.code == 429 or exc.code >= 500
+                    self._before_attempt()
+                except GatewayRequestError as exc:
+                    failure = exc
+                    raise
+                attempts = attempt
+                try:
+                    parsed = self._attempt(url, body, headers)
+                except TruncatedResponseError:
+                    # Retrying the same input spends the same budget; callers shrink the input.
+                    failure = GatewayRequestError(INVALID_RESPONSE, "Gateway response was truncated", retryable=False, attempts=attempt)
+                    raise
+                except Exception as exc:  # Classified below; unknown errors become invalid responses.
+                    category, status, retry_after = _classify(exc)
+                    with self._stats_lock:
+                        self.call_stats.attempt_errors[category] += 1
+                    retryable = category in TRANSIENT_CATEGORIES
                     if not retryable or attempt == self.max_attempts:
-                        raise RuntimeError(f"Validator request failed with HTTP {exc.code}") from exc
-                except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, RuntimeError) as exc:
-                    last_error = exc
-                    if attempt == self.max_attempts:
-                        raise RuntimeError("Validator request failed") from exc
-                if attempt < self.max_attempts:
-                    time.sleep(self.backoff_seconds * (2 ** (attempt - 1)))
-            if last_error is not None:
-                raise RuntimeError("Validator request failed") from last_error
-            raise RuntimeError("Validator request failed")
-        except Exception:
-            self.call_stats.failure_count += 1
-            raise
+                        failure = GatewayRequestError(
+                            category,
+                            f"Gateway request failed ({category}{f', HTTP {status}' if status else ''}) after {attempt} attempt(s)",
+                            retryable=retryable, attempts=attempt, status=status,
+                        )
+                        raise failure from exc
+                    self._backoff(attempt, category, retry_after)
+                    continue
+                usage = parsed.get("usage") if isinstance(parsed.get("usage"), dict) else {}
+                with self._stats_lock:
+                    self.call_stats.prompt_tokens += int(usage.get("prompt_tokens") or 0)
+                    self.call_stats.completion_tokens += int(usage.get("completion_tokens") or 0)
+                if cache_key is not None:
+                    self._write_cache(cache_key, parsed)
+                return parsed
+            raise AssertionError("unreachable: the final attempt returns or raises")
         finally:
-            self.call_stats.retry_count += max(attempts_used - 1, 0)
             elapsed = time.perf_counter() - start
-            self.call_stats.total_latency_seconds += elapsed
-            self.call_stats.max_latency_seconds = max(self.call_stats.max_latency_seconds, elapsed)
+            with self._stats_lock:
+                if failure is not None:
+                    self.call_stats.request_failures[failure.category] += 1
+                if attempts:
+                    # Fail-fast rejections (open circuit, disabled client) never reached the network.
+                    self.call_stats.request_count += 1
+                    self.call_stats.success_count += int(failure is None)
+                    self.call_stats.failure_count += int(failure is not None)
+                    self.call_stats.retry_count += attempts - 1
+                    self.call_stats.total_latency_seconds += elapsed
+                    self.call_stats.max_latency_seconds = max(self.call_stats.max_latency_seconds, elapsed)
+                    self.call_stats.request_latencies.append(elapsed)
+                    if failure is None:
+                        self._consecutive_failures = 0
+                    elif failure.category == AUTHENTICATION:
+                        self._disabled = failure
+                    elif failure.retryable:
+                        self._consecutive_failures += 1
+                        if self._consecutive_failures >= self.circuit_failure_threshold and time.monotonic() >= self._circuit_open_until:
+                            self._circuit_open_until = time.monotonic() + self.circuit_cooldown_seconds
+                            self.call_stats.circuit_open_events += 1
 
     def complete(
         self,
@@ -358,8 +680,9 @@ class IntelliHubGPTOSSClient:
 
 
 def build_gpt_oss_client(
-    env_file: str | Path = ".env",
+    env_file: str | Path | None = None,
     cache_dir: str | Path | None = None,
+    max_concurrent_requests: int = DEFAULT_MAX_CONCURRENT_REQUESTS,
 ) -> IntelliHubGPTOSSClient:
     settings = _load_validator_settings(env_file)
     api_key = settings["api_key"]
@@ -382,9 +705,11 @@ def build_gpt_oss_client(
         api_key=api_key,
         base_url=settings["base_url"],
         model_name=settings["model_name"],
+        model_id=settings["model_id"],
         verify_ssl=settings["verify_ssl"],
         ca_bundle=settings["ca_bundle"],
         cache_dir=cache_dir,
+        max_concurrent_requests=max_concurrent_requests,
     )
 
 
@@ -400,7 +725,7 @@ class ContextValidator:
         system_prompt: str = SYSTEM_PROMPT,
     ) -> None:
         self.client = client
-        self.model_id = model_id
+        self.model_id = model_id or getattr(client, "model_id", getattr(client, "model_name", ""))
         self.prompt_version = prompt_version
         self.system_prompt = system_prompt
 
@@ -418,7 +743,7 @@ class ContextValidator:
 
         try:
             raw = self.client.complete(
-                system=self.system_prompt,
+                system=f"{self.system_prompt}\nPrompt version: {self.prompt_version}",
                 user=json.dumps(user_payload, ensure_ascii=False),
                 max_tokens=VALIDATION_MAX_TOKENS,
                 temperature=0,

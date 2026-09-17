@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from content_integrity.models import Finding, ParsedRecord
-from content_integrity.pipeline import _aggregate_findings, _family_rows, _pair_finding_rows
+from content_integrity.pipeline import _aggregate_findings, _family_rows
 from content_integrity.reporting import PAIR_COLUMNS, write_csv
 from content_integrity.template_clustering import (
     PairFinding,
@@ -226,7 +226,7 @@ class TemplateArchitectureTests(unittest.TestCase):
             empty = write_csv(Path(directory) / "empty.csv", [], PAIR_COLUMNS)
             populated = write_csv(
                 Path(directory) / "populated.csv",
-                _pair_finding_rows([pair("A", "B")]),
+                [{"record_id": "A", "matched_record_id": "B"}],
                 PAIR_COLUMNS,
             )
             with empty.open(newline="", encoding="utf-8") as handle:

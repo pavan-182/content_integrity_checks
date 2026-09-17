@@ -87,7 +87,7 @@ class ReportingReconciliationTests(unittest.TestCase):
     def test_workbook_has_reference_triage_structure(self) -> None:
         self.assertEqual(self.workbook.sheetnames, EXPECTED_SHEETS)
         self.assertEqual(self.result.output_paths["workbook"].name, "Editor_Triage_Workbook.xlsx")
-        self.assertEqual(set(self.result.output_paths), {"content_integrity_json", "workbook"})
+        self.assertEqual(set(self.result.output_paths), {"content_integrity_json", "workbook", "run_metrics", "run_summary"})
 
     def test_all_abstracts_reconciles_risk_and_review(self) -> None:
         excel = {row["Abstract ID"]: row for row in _rows(self.workbook["All Abstracts"])}
@@ -186,6 +186,8 @@ class RejectedFindingReconciliationTests(unittest.TestCase):
     def test_rejected_finding_is_inactive_in_json_and_unflagged_in_workbook(self) -> None:
         class RejectingClient:
             def complete(self, **_kwargs) -> str:
+                if "entity_extraction_gpt_oss" in _kwargs["system"]:
+                    return '{"entities": []}'
                 return json.dumps({"status": "rejected", "confidence": 0.05, "reason": "Legitimate terminology."})
 
         with tempfile.TemporaryDirectory() as directory:

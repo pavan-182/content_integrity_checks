@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
@@ -11,12 +11,13 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 
 from .aggregation.risk_engine import severity_rank
+from .models import Finding
 from .utils import ensure_parent_dir, normalize_whitespace, to_pipe_string
 
 
 # Bump when the top-level JSON contract (build_content_integrity_frontend_json)
 # gains/removes/renames a field in a way a machine consumer must react to.
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
 
 HEADER_FILL = PatternFill("solid", fgColor="1F4E78")
 HEADER_FONT = Font(color="FFFFFF", bold=True)
@@ -132,13 +133,33 @@ def _write_table(
     return row_idx, col_idx + len(columns) - 1
 
 
-def write_jsonl(path: str | Path, rows: Iterable[dict[str, Any]]) -> Path:
-    resolved = ensure_parent_dir(path)
-    with resolved.open("w", encoding="utf-8") as handle:
-        for row in rows:
-            handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
-            handle.write("\n")
-    return resolved
+RECORD_STATUSES = ("completed", "completed_with_findings", "failed", "skipped")
+
+
+def record_status(issues: Sequence[dict[str, Any]], review_required: bool) -> str:
+    """Terminal status of a retained record; `skipped` applies only to inputs not retained.
+
+    failed: any operational issue applies to the record (its own or run-wide), so at least one
+    check is incomplete. completed_with_findings: every check ran and editor review is required.
+    completed: every check ran and nothing requires review. Status is operational, not a verdict.
+    """
+    if issues:
+        return "failed"
+    return "completed_with_findings" if review_required else "completed"
+
+
+def failure_details(issues: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Safe per-failure diagnostics: stage, category, message, retry count, and retry possibility."""
+    return [
+        {
+            "stage": issue.get("component", ""),
+            "error_category": issue.get("error_category") or issue.get("error_type", ""),
+            "message": issue.get("message", ""),
+            "retry_count": issue.get("retry_count", 0),
+            "retryable": bool(issue.get("recoverable", True)),
+        }
+        for issue in issues
+    ]
 
 
 def write_json(path: str | Path, data: Any) -> Path:
@@ -453,6 +474,12 @@ def build_content_integrity_frontend_json(
             "finding_ids": [finding.finding_id for finding in all_findings_by_record.get(record_id, [])],
             "template_pair_ids": [pair["pair_id"] for pair in ordered_template_pairs],
             "operational_issues": record_operational_issues,
+            "processing_status": "failed" if record_operational_issues else "successful",
+            "record_status": record_status(record_operational_issues, review_required),
+            "failures": failure_details(record_operational_issues),
+            "active_finding_count": result.get("active_finding_count", 0),
+            "parse_status": record.parse_status,
+            "source_file": record.source_file,
             "checks": {
                 "tortured_phrases": {
                     "flagged": flagged_tortured,
@@ -565,7 +592,7 @@ def build_content_integrity_frontend_json(
                     "flagged": flagged_templating,
                     "match_count": len(ordered_template_pairs),
                     "review_candidate": False,
-                    "operational_failure": _component_failed("exact_text_reuse", "entity_normalized_template"),
+                    "operational_failure": _component_failed("exact_text_reuse", "entity_normalized_template", "enriched_reports", "shared_preprocessing", "gpt_oss_model", "xml_parser"),
                     "evidence": _build_templating_evidence([
                         {
                             "matched_abstract_id": pair["right_record_id"] if str(pair["left_record_id"]) == record_id else pair["left_record_id"],
@@ -871,8 +898,12 @@ def build_integrated_content_integrity_json(canonical_report: dict[str, Any]) ->
         for finding in canonical_report.get("findings", [])
         if finding.get("detector_type") == "nonsense_candidate"
     }
+    doi_counts = Counter(_normalized_doi(abstract.get("doi")) for abstract in canonical_report["abstracts"])
     for abstract in canonical_report["abstracts"]:
-        key = _normalized_doi(abstract.get("doi")) or str(abstract["abstract_id"])
+        doi = _normalized_doi(abstract.get("doi"))
+        # A DOI shared by several retained records cannot identify one of them; those records are
+        # keyed by their unique abstract ID and carry a duplicate_doi operational issue instead.
+        key = doi if doi and doi_counts[doi] == 1 else str(abstract["abstract_id"])
         if key in output:
             raise ValueError(f"Duplicate content-integrity integration key: {key}")
 
@@ -992,6 +1023,12 @@ def build_integrated_content_integrity_json(canonical_report: dict[str, Any]) ->
             ],
             "template_pair_ids": abstract["template_pair_ids"],
             "operational_issues": abstract["operational_issues"],
+            "processing_status": abstract["processing_status"],
+            "record_status": abstract["record_status"],
+            "failures": abstract["failures"],
+            "active_finding_count": abstract["active_finding_count"],
+            "parse_status": abstract["parse_status"],
+            "source_file": abstract["source_file"],
         }
         output[key] = {
             "title": abstract["title"],
@@ -1149,6 +1186,8 @@ def write_workbook(
             **values,
             **{label: authorship_value(row, check_name) for check_name, label in AUTHORSHIP_CHECKS},
             "Operational Issues": "Y" if record_issues else "N",
+            "Processing Status": "failed" if record_issues else "successful",
+            "Record Status": record_status(record_issues, row.get("review_required") == "Yes"),
             "Finding Count": row.get("active_finding_count", 0),
             "Review Required": row.get("review_required", "No"),
         }
@@ -1246,7 +1285,7 @@ def write_workbook(
         "Abstract ID", "Title (short)", "Corresponding Author", "Overall Risk", "Why Flagged (plain English)",
         *(label for _, _, label in TRIAGE_CHECKS),
         *(label for _, label in AUTHORSHIP_CHECKS),
-        "Operational Issues", "Finding Count", "Review Required", "High Risk Rank", "Medium Risk Rank", "Low Risk Rank",
+        "Operational Issues", "Processing Status", "Record Status", "Finding Count", "Review Required", "High Risk Rank", "Medium Risk Rank", "Low Risk Rank",
     ]
     ws = workbook.create_sheet("All Abstracts")
     style_table(ws, master_rows, master_columns)
@@ -1273,7 +1312,7 @@ def write_workbook(
         "2. Check Detail contains the submitted evidence and validation state behind each check.",
         "3. 'Review' means an inactive candidate requires judgement; it is not confirmed risk evidence.",
         "4. Authorship checks come from final_json.json; their displayed value is result.level and their evidence is the check comment.",
-        "5. Operational issues mean a check did not complete; they are not scientific findings.",
+        "5. Processing Status is failed when any reported check did not complete; successful does not mean scientifically valid. Record Status refines it: completed, completed_with_findings (review required), or failed.",
         "6. The companion content_integrity_results.json remains the complete machine-readable report.",
         "",
         "Run metadata",
